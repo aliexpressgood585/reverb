@@ -97,11 +97,14 @@ void surface(float id, vec3 P, float t, inout vec3 N, out vec3 albedo, out float
     // --- poured concrete ----------------------------------------------------
     float grain = fbm(uv * 3.6);
     float coarse = fbm(uv * 0.42 + 4.0);
-    float ridge = abs(fbm(uv * 0.85 + 7.0) - 0.5) * 2.0;
-    float crack = smoothstep(0.14, 0.0, ridge);
+    // Cracks want to be hairlines. A wide threshold on a low frequency turns
+    // poured concrete into marble.
+    float ridge = abs(fbm(uv * 2.1 + 7.0) - 0.5) * 2.0;
+    float crack = smoothstep(0.045, 0.0, ridge);
+    float hair = smoothstep(0.03, 0.0, abs(fbm(uv * 5.5 + 31.0) - 0.5) * 2.0);
     float stain = smoothstep(0.62, 0.30, fbm(uv * 0.22 + 19.0));
     albedo = vec3(0.30 + grain * 0.30 + coarse * 0.26);
-    albedo *= 1.0 - crack * 0.75;
+    albedo *= 1.0 - crack * 0.8 - hair * 0.35;
     albedo *= 1.0 - stain * 0.45;
     N = normalize(N + planarPerturb(N, vec2((grain - 0.5) * 0.14, (coarse - 0.5) * 0.14)));
     gloss = 0.06;

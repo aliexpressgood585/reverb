@@ -155,10 +155,10 @@ await hold(['forward'], false);
 await shot('09-tunnel');
 
 // 10 — THE DEEP: nothing to stop the wave
-await enter(4, { x: 0, z: -20, yaw: Math.PI, pitch: -0.02 });
+await enter(4, { x: 0, z: -16, yaw: Math.PI, pitch: -0.20 });
 await step(12);
 await page.evaluate(() => window.REVERB.player.fire());
-await step(16);
+await step(26);
 await shot('10-the-deep');
 
 // 11 — sneaking: almost nothing, on purpose
@@ -170,22 +170,33 @@ await hold(['forward', 'sneak'], false);
 await shot('11-sneaking');
 
 // 12 — MAINTENANCE, caught on a machine cycle
-await enter(3, { x: -15, z: -6, yaw: Math.PI * 0.5, pitch: -0.05 });
-await step(90);
+await enter(3, { x: -13.4, z: -4.0, yaw: 0, pitch: -0.06 });
+await page.evaluate(() => {
+  // Line the plant up so the still lands inside a cycle rather than between
+  // two, and face the machine that is about to fire.
+  const g = window.REVERB;
+  g.machinePhase = g.machinePhase.map(() => 0.02);
+  const m = g.level.def.machines[0];
+  const p = g.player.position;
+  g.player.yaw = Math.atan2(-(m.x - p.x), -(m.z - p.z));
+});
+await step(26);
 await shot('12-maintenance');
 
 // 13 — a Sentinel at close range: the picture you get right before it is over
-await enter(2, { x: 0.4, z: -18, yaw: Math.PI, pitch: 0.02 });
+await enter(2, { x: 0.9, z: -19, yaw: Math.PI, pitch: 0.06 });
 await page.evaluate(() => {
   const g = window.REVERB;
   const e = g.enemies[0];
-  e.position.set(-1.2, 0, -13.0);
+  e.position.set(-0.9, 0, -14.2);
   e.state = 'HUNT';
   e.memory = 9;
-  e.target.set(-1.2, 0, -22);
+  e.target.set(-0.9, 0, -24);
   e.stepTimer = 0.02;
+  const p = g.player.position;
+  g.player.yaw = Math.atan2(-(e.position.x - p.x), -(e.position.z - p.z));
 });
-await step(26);
+await step(20);
 await shot('13-sentinel');
 
 const diag = await page.evaluate(() => ({

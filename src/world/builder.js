@@ -19,7 +19,6 @@ export class LevelBuilder {
     this.quads = [];
     this.floors = [];
     this.walls = [];
-    this.props = [];
   }
 
   /** p0..p3 wind counter-clockwise when viewed from the front face. */
@@ -89,17 +88,6 @@ export class LevelBuilder {
     this.wall(x1, z1, x0, z1, y0, y1, surface);
     this.wall(x0, z1, x0, z0, y0, y1, surface);
     this.floor(x0, z0, x1, z1, y1, surface);
-  }
-
-  /** Convenience: a rectangular room with a wall on each named side. */
-  room(x0, z0, x1, z1, y, h, floorSurf = SURF.CONCRETE, sides = 'nsew', wallSurf) {
-    const ws = wallSurf ?? SURF.TILE;
-    this.floor(x0, z0, x1, z1, y, floorSurf);
-    this.ceiling(x0, z0, x1, z1, y + h, SURF.CONCRETE);
-    if (sides.includes('n')) this.wall(x0, z0, x1, z0, y, y + h, ws);
-    if (sides.includes('s')) this.wall(x0, z1, x1, z1, y, y + h, ws);
-    if (sides.includes('w')) this.wall(x0, z0, x0, z1, y, y + h, ws);
-    if (sides.includes('e')) this.wall(x1, z0, x1, z1, y, y + h, ws);
   }
 
   // ---------------------------------------------------------------- packing

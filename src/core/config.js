@@ -32,7 +32,6 @@ export const COLOR = {
 // These are tuned so a shell visibly sweeps the geometry.
 export const SPEED = {
   STEP: 11.0,
-  SOFT: 9.0,
   DRIP: 8.0,
   STONE: 13.0,
   SHOT: 30.0,

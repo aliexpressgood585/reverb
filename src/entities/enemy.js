@@ -255,8 +255,11 @@ export class Enemy {
     rig.legR.rotation.x = -sw * 0.75 * amp;
     rig.armL.rotation.x = -sw * 0.5 * amp - 0.12;
     rig.armR.rotation.x = sw * 0.5 * amp - 0.12;
-    rig.foreL.rotation.x = 0.25 + Math.abs(sw) * 0.2;
-    rig.foreR.rotation.x = 0.25 + Math.abs(sw) * 0.2;
+    // Arms hang nearly straight. The bend is what would make them look human.
+    rig.foreL.rotation.x = 0.07 + Math.abs(sw) * 0.14;
+    rig.foreR.rotation.x = 0.07 + Math.abs(sw) * 0.14;
+    const wantLean = this.state === 'HUNT' ? 0.20 : moving ? 0.09 : 0.03;
+    rig.lean.rotation.x += (wantLean - rig.lean.rotation.x) * Math.min(1, dt * 4);
     this.group.position.y += Math.abs(sw) * 0.035 * (moving ? 1 : 0);
 
     this.material.uniforms.uGlow.value = this.glow;

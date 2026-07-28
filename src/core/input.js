@@ -10,7 +10,6 @@ const MAP = {
   KeyP: 'photo',
   KeyM: 'mute',
   KeyR: 'restart',
-  Escape: 'pause',
   Enter: 'confirm',
 };
 

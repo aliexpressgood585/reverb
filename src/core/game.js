@@ -87,10 +87,8 @@ export class Game {
     this.fade = 0;
     this.fadeTarget = 0;
     this.photoMode = false;
-    this.paused = false;
     this._tmpA = new THREE.Vector3();
     this._tmpB = new THREE.Vector3();
-    this._ray = new THREE.Raycaster();
     this._pendingCapture = null;
 
     addEventListener('resize', () => this._resize());
@@ -168,6 +166,7 @@ export class Game {
     this.screens.showLevelIntro(def);
   }
 
+  /** Begin a fresh run from the first level. */
   startRun() {
     this.sound.init();
     this.loadLevel(0);
@@ -233,10 +232,6 @@ export class Game {
       if (!hit) break;
     }
     return { x: px, z: pz };
-  }
-
-  lineOfPassage(a, b) {
-    return this.sound.transmission(a, b);
   }
 
   // ------------------------------------------------------------------ actions
@@ -474,8 +469,7 @@ export class Game {
         if (input.consume('confirm') || input.consume('forward') || input.mouse.fired) {
           input.takeMouse();
           this.screens.hide();
-          this.sound.init();
-          this.loadLevel(0);
+          this.startRun();
           input.requestLock();
         }
         break;

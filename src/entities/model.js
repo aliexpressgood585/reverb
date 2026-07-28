@@ -25,7 +25,11 @@ const PROFILE = {
 
 export function buildBody(material, type = 'stalker') {
   const p = PROFILE[type] ?? PROFILE.stalker;
+  const outer = new THREE.Group();
+  // An inner pivot so the whole body can lean forward independently of which
+  // way it is facing. A thing that hunts you leans into it.
   const root = new THREE.Group();
+  outer.add(root);
   const s = p.scale;
 
   const hipY = 1.02 * s;
@@ -67,8 +71,11 @@ export function buildBody(material, type = 'stalker') {
     earR.rotation.z = -0.45;
   }
 
-  root.userData.rig = { legL, legR, armL, armR, foreL, foreR, height: headY + p.head * s };
-  return root;
+  outer.userData.rig = {
+    lean: root, legL, legR, armL, armR, foreL, foreR,
+    height: headY + p.head * s,
+  };
+  return outer;
 }
 
 /** The stone you throw. Small, dull, and the most important object in the game. */

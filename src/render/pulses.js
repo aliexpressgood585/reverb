@@ -49,7 +49,6 @@ export class PulseField {
     };
 
     this.count = 0;
-    this._acquireCursor = 0;
   }
 
   /** Find a free slot, or steal the weakest/oldest one if the pool is full. */
@@ -146,25 +145,6 @@ export class PulseField {
     }
     this.count = highest;
     this.uniforms.uPulseCount.value = highest;
-  }
-
-  /** Cheap CPU query: total pulse energy reaching a point. Used by the AI. */
-  energyAt(v) {
-    let sum = 0;
-    for (let i = 0; i < MAX_PULSES; i++) {
-      const s = this.slots[i];
-      if (!s.alive) continue;
-      const dx = v.x - this.pos[i * 3];
-      const dy = v.y - this.pos[i * 3 + 1];
-      const dz = v.z - this.pos[i * 3 + 2];
-      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      const r = this.data[i * 4];
-      const th = this.data[i * 4 + 2];
-      if (Math.abs(d - r) > th) continue;
-      const q = d / s.ref;
-      sum += this.data[i * 4 + 1] / (1 + q * q);
-    }
-    return sum;
   }
 
   clear() {
