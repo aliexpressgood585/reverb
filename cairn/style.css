@@ -1,0 +1,117 @@
+/* CAIRN — the whole interface. Two numbers and three sentences that leave. */
+
+:root {
+  --white: #dce3e8;
+  --stone: #6e7a84;
+  --warm: #e8894a;
+  --void: #05070a;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--void);
+  color: var(--white);
+  font: 400 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.18em;
+  -webkit-font-smoothing: antialiased;
+  /* A climbing game is one long drag. The browser must not read it as a pull
+     to refresh, a text selection, or a pinch. */
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---------------------------------------------------------------- the numbers */
+
+#hud {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 18px);
+  left: 0;
+  right: 0;
+  text-align: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+#height {
+  font-size: 34px;
+  font-weight: 300;
+  letter-spacing: 0.06em;
+  color: var(--white);
+  opacity: 0.92;
+  font-variant-numeric: tabular-nums;
+}
+
+#height i {
+  font-style: normal;
+  font-size: 13px;
+  opacity: 0.4;
+  margin-left: 3px;
+}
+
+#toll {
+  margin-top: 4px;
+  font-size: 10px;
+  opacity: 0.34;
+  min-height: 1.4em;
+}
+
+/* ------------------------------------------------------------------ teaching */
+
+#teach {
+  position: fixed;
+  left: 24px;
+  right: 24px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
+  text-align: center;
+  font-size: 11px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity 0.55s ease;
+}
+
+#teach.show { opacity: 0.66; }
+
+/* --------------------------------------------------------------- title card */
+
+#start {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: var(--void);
+  z-index: 3;
+  transition: opacity 0.5s ease;
+}
+
+#start.gone { opacity: 0; pointer-events: none; }
+
+#start h1 {
+  font-size: 40px;
+  font-weight: 300;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+}
+
+#start .tag { font-size: 11px; opacity: 0.5; }
+
+#start .go {
+  margin-top: 26px;
+  font-size: 11px;
+  opacity: 0.75;
+  animation: breathe 2.6s ease-in-out infinite;
+}
+
+@keyframes breathe { 0%, 100% { opacity: 0.28; } 50% { opacity: 0.85; } }
