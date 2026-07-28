@@ -90,7 +90,9 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 12px;
+  padding: 0 20px;
+  text-align: center;
   background: var(--void);
   z-index: 3;
   transition: opacity 0.5s ease;
@@ -98,14 +100,21 @@ html, body {
 
 #start.gone { opacity: 0; pointer-events: none; }
 
+#start .idx { font-size: 10px; opacity: 0.4; margin-bottom: 6px; }
+
+/* Level names run to eleven characters at wide tracking. On a 390 px phone a
+   fixed 40 px ran off both edges of the screen — the title card has to scale
+   with the viewport, not with a number chosen on a desktop. */
 #start h1 {
-  font-size: 40px;
+  font-size: clamp(20px, 7.6vw, 38px);
   font-weight: 300;
-  letter-spacing: 0.42em;
-  text-indent: 0.42em;
+  letter-spacing: 0.2em;
+  text-indent: 0.2em;
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 
-#start .tag { font-size: 11px; opacity: 0.5; }
+#start .tag { font-size: 11px; opacity: 0.5; max-width: 100%; }
 
 #start .go {
   margin-top: 26px;
