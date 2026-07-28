@@ -71,8 +71,10 @@ export class Enemy {
     const reach = evt.loudness * HEARING.radiusPerLoudness;
     if (d > reach) return;
     const t = this.world.sound.transmission(this.position, evt.position);
-    // Inverse-square, then whatever the walls left of it.
-    const strength = (evt.loudness / (1 + d * d * 0.03)) * t;
+    // Inverse-square, then whatever the walls left of it, then whatever the
+    // level itself does to sound. THE DEEP has no walls worth the name.
+    const carry = this.world.level?.def.hearing ?? 1;
+    const strength = (evt.loudness / (1 + d * d * 0.03)) * t * carry;
     if (strength < HEARING.alertThreshold) return;
 
     this.confidence = Math.min(1.6, this.confidence + strength);

@@ -45,6 +45,7 @@ const KINDS = {
   hurt:      { color: COLOR.ENEMY, worldColor: COLD_ECHO, power: 14.0, ref: 5.0,  speed: SPEED.STEP,    life: 2.0, thick: 0.24, reveal: 0.8, loud: 2.5 },
   kill:      { color: COLOR.ENEMY, worldColor: COLD_ECHO, power: 16.0, ref: 5.5,  speed: SPEED.ENEMY,   life: 2.4, thick: 0.26, reveal: 1.0, loud: 0.0 },
   hum:       { color: COLOR.WATER, power: 4.6,  ref: 2.4,  speed: SPEED.DRIP * 0.7, life: 3.4, thick: 0.10, reveal: 0.0, loud: 0.0 },
+  turnstile: { color: COLOR.STEP,  power: 12.0, ref: 4.2,  speed: SPEED.STEP,    life: 2.2, thick: 0.20, reveal: 0.2, loud: 2.2 },
   chime:     { color: COLOR.WATER, power: 8.0,  ref: 3.2,  speed: SPEED.DRIP,    life: 3.0, thick: 0.15, reveal: 0.0, loud: 0.0 },
 };
 
@@ -60,6 +61,8 @@ export class SoundWorld {
     this.listeners = [];
     this.level = null;
     this.noiseScore = 0;
+    // Machines that are currently loud enough to hide you inside their noise.
+    this.masks = [];
     this.lastPlayerNoise = { loudness: 0, at: 0, position: new THREE.Vector3() };
     this._tmp = new THREE.Vector3();
   }
@@ -120,9 +123,13 @@ export class SoundWorld {
     });
 
     // ---- 3. what it costs you ----------------------------------------------
-    const loudness = k.loud * gain * loudMul;
-    if (o.fromPlayer && loudness > 0) {
-      this.noiseScore += loudness;
+    // The score counts every decibel you produced. What reaches a creature is
+    // another matter: stand inside a running machine's noise and most of you
+    // never arrives.
+    const raw = k.loud * gain * loudMul;
+    const loudness = raw * (o.fromPlayer ? this.maskAt(pos) : 1);
+    if (o.fromPlayer && raw > 0) {
+      this.noiseScore += raw;
       this.lastPlayerNoise.loudness = loudness;
       this.lastPlayerNoise.position.copy(pos);
       this.lastPlayerNoise.at = performance.now() / 1000;
@@ -140,6 +147,33 @@ export class SoundWorld {
     }
 
     return loudness;
+  }
+
+  /**
+   * Cover. A machine that has just fired masks anything you do inside its
+   * noise — which is the whole of MAINTENANCE, and the only place in the game
+   * where making a sound is safe. Returns 1 in the open, 0.22 under full cover.
+   */
+  maskAt(pos) {
+    const now = performance.now() / 1000;
+    let best = 1;
+    for (let i = this.masks.length - 1; i >= 0; i--) {
+      const m = this.masks[i];
+      if (m.until < now) { this.masks.splice(i, 1); continue; }
+      const d = Math.hypot(pos.x - m.x, pos.z - m.z);
+      if (d > m.radius) continue;
+      // Full cover at the machine, fading out at the edge of its noise.
+      const f = 0.22 + 0.78 * Math.pow(d / m.radius, 2);
+      if (f < best) best = f;
+    }
+    return best;
+  }
+
+  addMask(pos, radius, seconds) {
+    this.masks.push({
+      x: pos.x, z: pos.z, radius,
+      until: performance.now() / 1000 + seconds,
+    });
   }
 
   /** How much of a sound survives the walls between two points. */
@@ -160,5 +194,7 @@ export class SoundWorld {
 
   resetScore() {
     this.noiseScore = 0;
+    // Machines that are currently loud enough to hide you inside their noise.
+    this.masks = [];
   }
 }

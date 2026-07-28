@@ -44,7 +44,10 @@ const PLATFORM = {
     // pillars down the deck
     for (let z = -15; z <= 15; z += 7.5) b.block(3.4, z, 0.7, 0.7, 0, H, SURF.TILE);
 
-    // standing water — the deck drains badly
+    // standing water — the deck drains badly. The pool at z = -7 sits square
+    // on the walk north, so a player who has read nothing steps in it inside
+    // the first five seconds and hears the difference.
+    b.floor(-2.0, -8.6, 2.4, -5.2, 0.005, SURF.PUDDLE);
     b.floor(-6.4, -6.5, -3.0, -2.0, 0.005, SURF.PUDDLE);
     b.floor(-1.4, 4.0, 2.2, 8.5, 0.005, SURF.PUDDLE);
     b.floor(7.0, -4.0, 12.0, 2.0, -0.945, SURF.PUDDLE);
@@ -57,17 +60,22 @@ const PLATFORM = {
     b.block(-5.4, 2, 1.5, 0.5, 0, 0.5, SURF.METAL);
   },
   drips: [
-    { x: -1.0, z: -12.0, y: 4.1, every: [2.4, 4.0], gain: 0.9 },
+    // The opening line of the game, three metres in front of your face and
+    // timed to land before you have decided to move.
+    { x: 0.6, z: -14.4, y: 4.1, every: [3.6, 6.2], gain: 1.15, first: 0.85 },
+    { x: -1.0, z: -12.0, y: 4.1, every: [2.4, 4.0], gain: 0.9, first: 2.6 },
+    { x: 1.2, z: -5.0, y: 4.1, every: [2.8, 4.4], gain: 1.0, first: 5.0 },
     { x: 0.5, z: 0.0, y: 4.1, every: [3.0, 5.2], gain: 1.0 },
     { x: -2.0, z: 11.0, y: 4.1, every: [2.2, 3.6], gain: 1.1 },
     { x: -2.4, z: 19.0, y: 3.0, every: [2.0, 3.2], gain: 1.2 },
   ],
   machines: [],
   enemies: [
-    { type: 'stalker', x: 9.5, z: 8, route: [[9.5, 12], [9.5, -14], [10.5, -6]] },
+    { type: 'stalker', x: 9.5, z: -1, route: [[9.5, -13], [10.5, -17], [9.5, 6], [10.0, 13]] },
   ],
   trains: { every: [38, 70], gain: 0.85 },
   par: [11, 24, 44],
+  signature: 'the track bed — a metre-deep pit of ballast you can drop into and cannot leave quietly',
   hint: 'WALK. LISTEN. THE DRIPS GO NORTH.',
 };
 
@@ -80,7 +88,9 @@ const TURNSTILES = {
   spawn: { x: 0, z: -15, yaw: Math.PI },
   exit: { x: 0, z: 21.4, r: 1.8 },
   build(b) {
-    const H = 3.6;
+    // Deliberately the lowest ceiling in the game. TURNSTILES is wide and
+    // squashed; MAINTENANCE is cramped and cellular; they must not feel alike.
+    const H = 2.75;
     b.floor(-16, -18, 16, 22, 0, SURF.PUDDLE);
     b.ceiling(-16, -18, 16, 22, H, SURF.CONCRETE);
     b.wall(-16, -18, 16, -18, 0, H, SURF.TILE);
@@ -129,8 +139,14 @@ const TURNSTILES = {
     { type: 'screamer', x: 0, z: 8, route: [[-8, 14], [8, 14], [8, 6], [-8, 6]] },
   ],
   trains: { every: [45, 85], gain: 0.7 },
-  par: [14, 30, 55],
+  par: [16, 34, 60],
+  signature: 'the gates themselves — every rank costs you a ratchet and a clang, and there is no way round',
   hint: 'THE CARPET IS DRY. THE CARPET IS QUIET.',
+  triggers: [
+    { x0: -16, z0: -7.0, x1: 16, z1: -5.0, kind: 'turnstile', gain: 1.0, cooldown: 5, line: 'THE GATE DOES NOT CARE HOW QUIET YOU ARE' },
+    { x0: -16, z0: 1.0, x1: 16, z1: 3.0, kind: 'turnstile', gain: 1.0, cooldown: 5 },
+    { x0: -16, z0: 9.0, x1: 16, z1: 11.0, kind: 'turnstile', gain: 1.0, cooldown: 5 },
+  ],
 };
 
 // -------------------------------------------------------------- 3. THE TUNNEL
@@ -184,6 +200,7 @@ const TUNNEL = {
   ],
   trains: { every: [30, 55], gain: 1.15 },
   par: [38, 64, 100],
+  signature: 'the alcoves — five carpeted holes in the wall, the only silent ground in eighty metres',
   hint: 'BALLAST IS THE LOUDEST GROUND IN THE STATION.',
 };
 
@@ -196,10 +213,12 @@ const MAINTENANCE = {
   spawn: { x: -18, z: -14, yaw: 0 },
   exit: { x: 19, z: 15, r: 2.2 },
   build(b) {
-    const H = 3.2;
+    // The tightest headroom in the station, and the most walls per square
+    // metre. You are inside the machinery here, not in a hall.
+    const H = 2.5;
     const wall = (x0, z0, x1, z1) => b.wall(x0, z0, x1, z1, 0, H, SURF.METAL);
 
-    b.floor(-22, -18, 24, 20, 0, SURF.CONCRETE);
+    b.floor(-22, -18, 24, 20, 0, SURF.METAL);
     b.ceiling(-22, -18, 24, 20, H, SURF.METAL);
     wall(-22, -18, 24, -18);
     wall(-22, 20, 24, 20);
@@ -218,7 +237,7 @@ const MAINTENANCE = {
       [-21, 2, -6, 19], [-4, 2, 10, 19], [12, 2, 23, 19],
     ];
     for (const [x0, z0, x1, z1] of rooms) {
-      b.floor(x0, z0, x1, z1, 0.004, SURF.CONCRETE);
+      b.floor(x0, z0, x1, z1, 0.004, SURF.METAL);
     }
     // dividers between the plant rooms
     wall(-8, -17, -8, -3); wall(8, -17, 8, -3);
@@ -245,11 +264,11 @@ const MAINTENANCE = {
     { x: 14, z: -14, y: 3.1, every: [2.0, 3.4], gain: 0.9 },
   ],
   machines: [
-    { x: -15, z: -11, y: 1.6, period: 4.4, phase: 0.0, gain: 1.0 },
-    { x: 1, z: -11, y: 1.6, period: 5.6, phase: 1.9, gain: 1.05 },
-    { x: 17, z: -11, y: 1.6, period: 3.6, phase: 0.7, gain: 0.9 },
-    { x: -14, z: 11, y: 1.9, period: 6.8, phase: 3.1, gain: 1.15 },
-    { x: 3, z: 11, y: 1.9, period: 5.0, phase: 2.4, gain: 1.0 },
+    { x: -15, z: -11, y: 1.6, period: 4.4, phase: 0.0, gain: 1.0, cover: 13, coverFor: 1.7 },
+    { x: 1, z: -11, y: 1.6, period: 5.6, phase: 1.9, gain: 1.05, cover: 14, coverFor: 1.9 },
+    { x: 17, z: -11, y: 1.6, period: 3.6, phase: 0.7, gain: 0.9, cover: 12, coverFor: 1.4 },
+    { x: -14, z: 11, y: 1.9, period: 6.8, phase: 3.1, gain: 1.15, cover: 15, coverFor: 2.2 },
+    { x: 3, z: 11, y: 1.9, period: 5.0, phase: 2.4, gain: 1.0, cover: 13, coverFor: 1.8 },
   ],
   enemies: [
     { type: 'stalker', x: -14, z: -8, route: [[-14, -14], [-2, -14], [-2, -6], [-14, -6]] },
@@ -258,7 +277,8 @@ const MAINTENANCE = {
     { type: 'sentinel', x: 0, z: -1, facing: Math.PI * 0.5 },
   ],
   trains: { every: [50, 90], gain: 0.6 },
-  par: [15, 32, 58],
+  par: [21, 42, 72],
+  signature: 'noise cover — while a machine is running, what you do inside its racket barely reaches anything',
   hint: 'THE PLANT IS ON A CLOCK. YOU ARE NOT.',
 };
 
@@ -312,6 +332,10 @@ const DEEP = {
   ],
   trains: { every: [28, 48], gain: 1.5 },
   par: [20, 42, 74],
+  // No partitions means no occlusion, so a noise made anywhere is a noise made
+  // everywhere. This is the number that makes THE DEEP frightening.
+  hearing: 1.55,
+  signature: 'carry — with no walls to stop it, every sound you make reaches half again as far as anywhere else',
   hint: 'THE CAUSEWAY IS DRY. THE WATER IS NOT YOUR FRIEND.',
 };
 

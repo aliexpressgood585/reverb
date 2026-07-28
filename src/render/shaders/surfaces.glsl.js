@@ -74,12 +74,18 @@ void surface(float id, vec3 P, float t, inout vec3 N, out vec3 albedo, out float
     gloss = 0.0;
   } else if (id > S_CARPET + 0.5 && id < S_METAL + 0.5) {
     // --- brushed steel ------------------------------------------------------
-    float streak = fbm(vec2(uv.x * 1.4, uv.y * 120.0));
+    // Deck plate: a diamond tread that catches a passing wavefront, on panels
+    // with a visible seam. Bright enough to read a room by, matte enough that
+    // the whole floor does not turn into one specular sheet.
+    float streak = fbm(vec2(uv.x * 1.6, uv.y * 90.0));
+    vec2 tread = abs(fract(vec2(uv.x + uv.y, uv.x - uv.y) * 3.4) - 0.5);
+    float grip = smoothstep(0.34, 0.46, max(tread.x, tread.y));
     float panel = step(0.5, fract(uv.y * 0.55));
-    albedo = vec3(0.26, 0.285, 0.31) * (0.5 + streak * 1.0) * (0.85 + panel * 0.3);
+    albedo = vec3(0.40, 0.425, 0.45) * (0.62 + streak * 0.8) * (0.88 + panel * 0.24);
+    albedo *= 0.82 + grip * 0.45;
     float seam = smoothstep(0.02, 0.0, abs(fract(uv.y * 0.55) - 0.5) - 0.485);
     albedo *= 1.0 - seam * 0.7;
-    gloss = 0.68;
+    gloss = 0.42;
   } else if (id > S_METAL + 0.5) {
     // --- station tile -------------------------------------------------------
     vec2 tp = uv * 4.6;

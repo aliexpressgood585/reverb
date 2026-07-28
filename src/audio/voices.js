@@ -222,6 +222,18 @@ export const VOICES = {
     tone(E, dest, t, { f0: 300, f1: 30, type: 'sawtooth', gain: 0.16 * o.gain, a: 0.01, d: 0.5, r: 0.6 });
   },
 
+  turnstile(E, dest, o) {
+    const t = E.time;
+    // Three teeth of a ratchet, then the bar hitting its stop.
+    for (let i = 0; i < 3; i++) {
+      burst(E, dest, t + i * 0.042, {
+        freq: 2500 + i * 480, q: 9, gain: 0.22 * o.gain, a: 0.0008, d: 0.012, r: 0.022,
+      });
+    }
+    burst(E, dest, t + 0.14, { freq: 430, q: 1.4, gain: 0.34 * o.gain, a: 0.001, d: 0.09, r: 0.17 });
+    tone(E, dest, t + 0.14, { f0: 128, f1: 60, type: 'triangle', gain: 0.24 * o.gain, d: 0.10, r: 0.13 });
+  },
+
   hum(E, dest, o) {
     const t = E.time;
     E.humSwell(o.gain);
@@ -258,6 +270,7 @@ export const VOICES = {
  *   drip          -24
  *   chime         -26
  *   hum tick      -30
+ *   turnstile     -16    unavoidable, and it costs you
  *   sneaking      -33    still ~9 dB clear of the bed
  *   dry click     -33
  *   ambient bed   -42    the floor of the whole mix
@@ -280,6 +293,7 @@ export const TRIM = {
   chime: 0.84,
   hum: 0.37,
   dryfire: 5.60,
+  turnstile: 1.90,
 };
 
 /**

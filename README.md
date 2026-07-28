@@ -450,6 +450,51 @@ the peripheral-readability check: there is nothing else warm for it to compete
 with. A gunshot, the brightest moment in the game, measures 0.06% warm and 93%
 cold, so the flash reads as white rather than as fire.
 
+## Level variety, measured
+
+The failure mode for a five-level game is that levels 2, 4 and 5 turn out to be
+the same room with different furniture. `node scripts/level-contrast.mjs` takes
+three stills from each level — where you arrive, the middle, the way out — writes
+a contact sheet, and computes a signature for each: footprint, ceiling height,
+**openness** (median distance from a floor sample to the nearest sound-blocking
+wall), reverberation time, what you are standing on, and what is making the
+noise. It fails the run if any two levels agree on openness, ceiling *and*
+ground, because those three together are what a place feels like.
+
+The baseline had no outright collision, but two pairs were closer than they
+should have been: PLATFORM and TURNSTILES were within 17% on both ceiling and
+openness, and MAINTENANCE shared its dominant ground (concrete) with THE DEEP.
+So each level was pushed further apart, and each was given a mechanic that
+exists nowhere else:
+
+| level | shape | ground | its own mechanic |
+|---|---|---|---|
+| **PLATFORM** | 20×48, ceiling 4.2 m, openness 2.3 m | tile | the track bed — a metre-deep pit of ballast you can drop into and cannot climb out of quietly |
+| **TURNSTILES** | 32×40, ceiling **2.75 m**, openness 2.7 m | water | **the gates** — three ranks, each costing you a ratchet and a clang, with no way round |
+| **THE TUNNEL** | 12×82, ceiling 4.6 m, openness **0.8 m** | ballast | the alcoves — five carpeted holes in the wall, the only silent ground in eighty metres |
+| **MAINTENANCE** | 46×38, ceiling **2.5 m**, openness 1.5 m | **steel deck** | **noise cover** — while a machine is running, what you do inside its racket barely reaches anything |
+| **THE DEEP** | 84×84, ceiling **11 m**, openness **6.6 m** | concrete + black water | **carry** — no partitions means no occlusion, so every sound you make reaches half again as far |
+
+The three that are new mechanics rather than relabelled scenery:
+
+- **Turnstile triggers.** Zones that emit a sound when you cross them, with one
+  user in the whole game. You cannot sneak past a gate; you can only choose when
+  to pay for it. It is the level whose brief was "there is no quiet way
+  through", and now there literally is not.
+- **Machine cover.** A machine that has just fired lays down a mask around
+  itself. Anything you do inside it reaches creatures at about a fifth strength,
+  fading out to nothing at the edge of the noise. The score still counts every
+  decibel you made — cover hides you, it does not make you quiet — and the noise
+  arc shrinks while you are under it, which is the only feedback you get.
+- **Carry.** THE DEEP multiplies what reaches a creature by 1.55. The level
+  brief was "nothing here stops sound"; that is now a number rather than a
+  sentence in a design document.
+
+MAINTENANCE also moved off concrete onto steel deck plate, which is both
+visually distinct (diamond tread that catches a passing wavefront) and 1.7×
+louder underfoot — which is what makes its machine cover worth using instead of
+merely available. Its noise par moved from 15/32/58 to 21/42/72 to match.
+
 ## What was and was not verified
 
 `node scripts/capture.mjs` runs the built game in headless Chromium on a

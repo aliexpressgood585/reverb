@@ -150,7 +150,12 @@ export class Game {
       this.enemies.push(new Enemy(this, e));
     }
 
-    this.dripTimers = def.drips.map((d) => d.every[0] + Math.random() * (d.every[1] - d.every[0]));
+    // `first` lets a level place its opening drip precisely. The first sound a
+    // player ever hears is the one that teaches them the whole game, so on
+    // PLATFORM it is not left to a random number.
+    this.dripTimers = def.drips.map(
+      (d) => d.first ?? d.every[0] + Math.random() * (d.every[1] - d.every[0])
+    );
     this.machinePhase = def.machines.map((m) => m.phase);
     this.trainTimer = def.trains
       ? def.trains.every[0] * 0.5 + Math.random() * def.trains.every[0]
@@ -160,6 +165,7 @@ export class Game {
     this.levelTime = 0;
     this.settleTimer = 4 + Math.random() * 4;
     this.humTimer = 1.5 + Math.random() * 2.5;
+    this.triggerState = (def.triggers ?? []).map(() => ({ inside: false, firedAt: -99 }));
 
     this.state = 'intro';
     this.introTime = 0;
@@ -314,6 +320,9 @@ export class Game {
         this.machinePhase[i] = m.period;
         this._tmpA.set(m.x, m.y, m.z);
         this.sound.emit('machine', this._tmpA, { gain: m.gain });
+        // The cover it lays down. This is MAINTENANCE's whole mechanic: for a
+        // second and a half you can move without being heard.
+        this.sound.addMask(this._tmpA, m.cover ?? 13, m.coverFor ?? 1.6);
       }
     }
 
@@ -358,6 +367,33 @@ export class Game {
         b.min.z + Math.random() * (b.max.z - b.min.z)
       );
       this.sound.emit('chime', this._tmpA, { gain: 0.28 });
+    }
+  }
+
+  /**
+   * Zones that make a noise when you cross them. There is exactly one user —
+   * the turnstile ranks in level 2 — and it exists so that one level has a
+   * cost you cannot sneak your way out of.
+   */
+  _triggers() {
+    const list = this.level.def.triggers;
+    if (!list) return;
+    const p = this.player.position;
+    const now = this.levelTime;
+    for (let i = 0; i < list.length; i++) {
+      const t = list[i];
+      const inside = p.x >= t.x0 && p.x <= t.x1 && p.z >= t.z0 && p.z <= t.z1;
+      const st = this.triggerState[i];
+      if (inside && !st.inside && now - st.firedAt > (t.cooldown ?? 4)) {
+        st.firedAt = now;
+        this._tmpA.set(p.x, p.y + 0.9, p.z);
+        this.sound.emit(t.kind ?? 'turnstile', this._tmpA, {
+          gain: t.gain ?? 1,
+          fromPlayer: true,
+        });
+        if (t.line) this.hud.flashLine(t.line);
+      }
+      st.inside = inside;
     }
   }
 
@@ -527,6 +563,7 @@ export class Game {
 
     this.levelTime += dt;
     this.player.update(dt, input);
+    this._triggers();
     this._ambience(dt);
     this._updateStones(dt);
     for (const e of this.enemies) e.update(dt, this.player);
