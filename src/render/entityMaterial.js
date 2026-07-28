@@ -50,15 +50,17 @@ void main() {
   vec3 V = normalize(uEye - vWorld);
 
   // Silhouette-first shading: the rim carries the shape, the interior stays void.
-  float fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.4);
+  float fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 1.8);
 
   vec3 diffuse, spec;
   gatherLit(vWorld, N, V, 0.30, 1.0, diffuse, spec);
 
-  float flicker = 0.82 + 0.18 * vnoise(vec2(uTime * 7.0, vLocal.y * 3.0));
-  vec3 self = uTint * uGlow * (0.10 + fres * 1.75) * flicker;
+  float flicker = 0.80 + 0.20 * vnoise(vec2(uTime * 7.0, vLocal.y * 3.0));
+  // Almost all of the light a body gives off sits on its outline. Filling the
+  // interior turns a creature into a cardboard cut-out.
+  vec3 self = uTint * uGlow * (0.035 + fres * fres * 3.2) * flicker;
 
-  vec3 col = self + diffuse * 0.9 + spec * 0.7;
+  vec3 col = self + diffuse * 0.55 + spec * 0.45;
 
   float d = length(uEye - vWorld);
   col *= exp(-d * 0.016);

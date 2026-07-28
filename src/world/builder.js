@@ -71,10 +71,12 @@ export class LevelBuilder {
       [-nx, 0, -nz], surface
     );
 
+    // Sound goes over a bench and a turnstile stall; it does not go over a
+    // partition. Anything under 1.7 m is acoustically transparent by default.
     this.walls.push({
       x0, z0, x1, z1, y0, y1,
       solid: opts.solid !== false,
-      blocksSound: opts.blocksSound !== false,
+      blocksSound: opts.blocksSound ?? (y1 - y0 >= 1.7),
     });
   }
 

@@ -21,6 +21,7 @@ export class PulseField {
     this.pos = new Float32Array(MAX_PULSES * 3);
     this.data = new Float32Array(MAX_PULSES * 4);
     this.color = new Float32Array(MAX_PULSES * 3);
+    this.ref = new Float32Array(MAX_PULSES).fill(2);
 
     // CPU-side bookkeeping, one entry per slot.
     this.slots = [];
@@ -33,6 +34,7 @@ export class PulseField {
         power: 1,
         thickness: 0.3,
         reveal: 0,
+        ref: 2,
         maxRadius: 40,
         priority: 0,
       });
@@ -42,6 +44,7 @@ export class PulseField {
       uPulsePos: { value: this.pos },
       uPulseData: { value: this.data },
       uPulseColor: { value: this.color },
+      uPulseRef: { value: this.ref },
       uPulseCount: { value: 0 },
     };
 
@@ -78,6 +81,9 @@ export class PulseField {
    *   speed      metres per second of shell expansion
    *   life       seconds until the shell is gone
    *   thickness  half-width of the lit shell, in metres
+   *   ref        reference distance for the 1/r² falloff — this is the knob
+   *              that makes a footstep die at two metres and a gunshot fill
+   *              the room, without either of them leaving inverse-square
    *   reveal     0..1 — how much this pulse lights living things
    *   priority   eviction weight
    */
@@ -94,6 +100,8 @@ export class PulseField {
     s.life = o.life ?? 2.2;
     s.power = power;
     s.thickness = o.thickness ?? 0.28;
+    s.ref = o.ref ?? 2.0;
+    this.ref[i] = s.ref;
     s.reveal = o.reveal ?? 0;
     s.maxRadius = o.maxRadius ?? s.speed * s.life;
     s.priority = priority;
@@ -133,7 +141,7 @@ export class PulseField {
       this.data[i * 4] = radius;
       this.data[i * 4 + 1] = s.power * decay;
       // The shell smears very slightly as it travels — diffusion, not blur.
-      this.data[i * 4 + 2] = s.thickness * (1 + t * 0.55);
+      this.data[i * 4 + 2] = s.thickness * (1 + t * 0.35);
       highest = i + 1;
     }
     this.count = highest;
@@ -153,7 +161,8 @@ export class PulseField {
       const r = this.data[i * 4];
       const th = this.data[i * 4 + 2];
       if (Math.abs(d - r) > th) continue;
-      sum += this.data[i * 4 + 1] / (1 + d * d * 0.35);
+      const q = d / s.ref;
+      sum += this.data[i * 4 + 1] / (1 + q * q);
     }
     return sum;
   }

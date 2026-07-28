@@ -53,10 +53,15 @@ export class Game {
 
     this.worldMaterial = createWorldMaterial(this.shared);
     this.imprintMaterial = createImprintMaterial(this.shared);
-    this.memory = new LightMemory(this.renderer, 2048);
+    const q = new URLSearchParams(location.search);
+    this.quality = {
+      lightmap: Math.max(256, Math.min(4096, +q.get('lm') || 2048)),
+      msaa: q.get('msaa') !== null ? +q.get('msaa') : 4,
+    };
+    this.memory = new LightMemory(this.renderer, this.quality.lightmap);
     this.shared.memory.value = this.memory.texture;
 
-    const post = createComposer(this.renderer, this.scene, this.camera);
+    const post = createComposer(this.renderer, this.scene, this.camera, this.quality);
     this.composer = post.composer;
     this.bloom = post.bloom;
     this.finalPass = post.final;
@@ -416,8 +421,26 @@ export class Game {
 
   // ------------------------------------------------------------------- frame
 
+  /** Capture rig hook: run the simulation on a fixed clock so stills repeat. */
+  setFixedStep(dt) {
+    this._fixedDt = dt || null;
+    this.headless = !!dt;
+  }
+
+  /** Capture rig hook: drop straight into a level with no cards or fades. */
+  debugEnter(levelIndex, opts = {}) {
+    this.loadLevel(levelIndex);
+    this.screens.hide();
+    this.state = 'play';
+    if (opts.x !== undefined) {
+      this.player.spawn(opts.x, opts.z, opts.yaw ?? 0);
+    }
+    if (opts.pitch !== undefined) this.player.pitch = opts.pitch;
+  }
+
   frame() {
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const real = this.clock.getDelta();
+    const dt = this._fixedDt ?? Math.min(0.05, real);
     this.elapsed += dt;
     this.shared.time.value = this.elapsed;
 

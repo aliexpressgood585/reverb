@@ -28,7 +28,7 @@ export class LightMemory {
     this.scene = new THREE.Scene();
     this.camera = new THREE.Camera();
     this.mesh = null;
-    this.tau = 0.82; // seconds; ~3s until the imprint is gone
+    this.tau = 0.62; // seconds; ~2.5s until the imprint is gone
   }
 
   setLevel(geometry, material) {

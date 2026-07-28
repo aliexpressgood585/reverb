@@ -15,9 +15,9 @@ const FinalShader = {
     uTime: { value: 0 },
     uResolution: { value: new THREE.Vector2(1, 1) },
     uAberration: { value: 1.15 },
-    uGrain: { value: 0.09 },
+    uGrain: { value: 0.042 },
     uVignette: { value: 0.62 },
-    uExposure: { value: 1.35 },
+    uExposure: { value: 2.05 },
     uHurt: { value: 0.0 },
     uFade: { value: 0.0 },
   },
@@ -60,7 +60,7 @@ const FinalShader = {
 
       // Grain gated on luminance, so darkness stays #000000.
       float g = h21(vUv * uResolution + fract(uTime) * 137.0) - 0.5;
-      col += g * uGrain * smoothstep(0.0, 0.09, luma);
+      col += g * uGrain * smoothstep(0.0, 0.10, luma) * (0.35 + luma * 0.9);
 
       float vig = 1.0 - uVignette * pow(clamp(r2 * 2.1, 0.0, 1.0), 1.5);
       col *= vig;
@@ -76,23 +76,23 @@ const FinalShader = {
   `,
 };
 
-export function createComposer(renderer, scene, camera) {
+export function createComposer(renderer, scene, camera, quality = {}) {
   const size = renderer.getSize(new THREE.Vector2());
   const target = new THREE.WebGLRenderTarget(size.x, size.y, {
     type: THREE.HalfFloatType,
     format: THREE.RGBAFormat,
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
-    samples: 4,
+    samples: quality.msaa ?? 4,
   });
   const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
 
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(size.x, size.y),
-    0.78, // strength — enough to make a gunshot sear, not enough to smear
-    0.48, // radius
-    0.42  // threshold
+    0.55, // strength — enough to make a gunshot sear, not enough to smear
+    0.34, // radius
+    0.55  // threshold
   );
   composer.addPass(bloom);
 

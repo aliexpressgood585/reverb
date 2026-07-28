@@ -17,11 +17,24 @@ export class AudioEngine {
 
   init() {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') this.ctx.resume();
+      if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
       return;
     }
+    if (this.failed) return;
+    try {
+      this._build();
+    } catch (err) {
+      // No output device (headless capture, locked-down browser). The game is
+      // still fully playable-looking; it just has nothing to say.
+      this.failed = true;
+      this.ready = false;
+      console.warn('audio unavailable:', err && err.message);
+    }
+  }
+
+  _build() {
     const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
+    if (!Ctx) throw new Error('no AudioContext');
     const ctx = new Ctx({ latencyHint: 'interactive' });
     this.ctx = ctx;
 

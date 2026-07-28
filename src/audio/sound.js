@@ -18,23 +18,24 @@ import { SURF, SURFACE_ACOUSTICS } from '../world/surfaces.js';
  */
 
 const KINDS = {
-  step:      { color: COLOR.STEP,  power: 1.05, speed: SPEED.STEP,   life: 1.5, thick: 0.22, reveal: 0.0, loud: 1.0 },
-  stone:     { color: COLOR.STONE, power: 2.10, speed: SPEED.STONE,  life: 2.6, thick: 0.30, reveal: 0.0, loud: 1.6 },
-  drip:      { color: COLOR.WATER, power: 0.85, speed: SPEED.DRIP,   life: 2.4, thick: 0.17, reveal: 0.0, loud: 0.0 },
-  shot:      { color: COLOR.SHOT,  power: 9.00, speed: SPEED.SHOT,   life: 1.7, thick: 0.55, reveal: 1.0, loud: 9.0 },
-  dryfire:   { color: COLOR.STEP,  power: 0.60, speed: SPEED.STEP,   life: 1.0, thick: 0.16, reveal: 0.0, loud: 0.5 },
-  enemyStep: { color: COLOR.ENEMY, power: 0.85, speed: SPEED.ENEMY,  life: 1.6, thick: 0.22, reveal: 1.0, loud: 0.0 },
-  breath:    { color: COLOR.ENEMY, power: 0.60, speed: SPEED.ENEMY * 0.7, life: 2.4, thick: 0.30, reveal: 1.0, loud: 0.0 },
-  scream:    { color: COLOR.ENEMY, power: 5.20, speed: SPEED.SCREAM, life: 2.6, thick: 0.48, reveal: 1.0, loud: 0.0 },
-  machine:   { color: COLOR.WATER, power: 3.20, speed: SPEED.MACHINE,life: 2.8, thick: 0.42, reveal: 0.35, loud: 0.0 },
-  train:     { color: COLOR.WATER, power: 7.50, speed: SPEED.TRAIN,  life: 5.5, thick: 0.95, reveal: 0.6, loud: 0.0 },
-  heart:     { color: COLOR.STEP,  power: 0.75, speed: SPEED.HEART,  life: 1.8, thick: 0.26, reveal: 0.0, loud: 0.55 },
-  hurt:      { color: COLOR.ENEMY, power: 3.00, speed: SPEED.STEP,   life: 2.0, thick: 0.40, reveal: 0.8, loud: 2.5 },
-  kill:      { color: COLOR.ENEMY, power: 3.60, speed: SPEED.ENEMY,  life: 2.4, thick: 0.44, reveal: 1.0, loud: 0.0 },
-  door:      { color: COLOR.STEP,  power: 2.40, speed: SPEED.STEP,   life: 2.4, thick: 0.36, reveal: 0.2, loud: 1.8 },
-  chime:     { color: COLOR.WATER, power: 1.60, speed: SPEED.DRIP,   life: 3.0, thick: 0.30, reveal: 0.0, loud: 0.0 },
-  splash:    { color: COLOR.WATER, power: 1.60, speed: SPEED.STEP,   life: 1.8, thick: 0.26, reveal: 0.0, loud: 1.6 },
-  gravel:    { color: COLOR.STEP,  power: 1.45, speed: SPEED.STEP,   life: 1.7, thick: 0.24, reveal: 0.0, loud: 1.9 },
+  //            colour          power  ref   speed              life thick reveal loud
+  step:      { color: COLOR.STEP,  power: 11.0, ref: 1.8,  speed: SPEED.STEP,    life: 1.5, thick: 0.11, reveal: 0.0, loud: 1.0 },
+  splash:    { color: COLOR.WATER, power: 8.5,  ref: 2.4,  speed: SPEED.STEP,    life: 1.8, thick: 0.13, reveal: 0.0, loud: 1.6 },
+  gravel:    { color: COLOR.STEP,  power: 7.5,  ref: 2.2,  speed: SPEED.STEP,    life: 1.7, thick: 0.12, reveal: 0.0, loud: 1.9 },
+  stone:     { color: COLOR.STONE, power: 11.0, ref: 3.6,  speed: SPEED.STONE,   life: 2.6, thick: 0.16, reveal: 0.0, loud: 1.6 },
+  drip:      { color: COLOR.WATER, power: 7.5,  ref: 2.8,  speed: SPEED.DRIP,    life: 2.4, thick: 0.09, reveal: 0.0, loud: 0.0 },
+  shot:      { color: COLOR.SHOT,  power: 15.0, ref: 7.5, speed: SPEED.SHOT,    life: 1.7, thick: 0.30, reveal: 1.0, loud: 9.0 },
+  dryfire:   { color: COLOR.STEP,  power: 3.0,  ref: 1.1,  speed: SPEED.STEP,    life: 1.0, thick: 0.08, reveal: 0.0, loud: 0.5 },
+  enemyStep: { color: COLOR.ENEMY, power: 5.0,  ref: 2.4,  speed: SPEED.ENEMY,   life: 1.6, thick: 0.13, reveal: 1.0, loud: 0.0 },
+  breath:    { color: COLOR.ENEMY, power: 3.4,  ref: 2.0,  speed: SPEED.ENEMY * 0.7, life: 2.4, thick: 0.17, reveal: 1.0, loud: 0.0 },
+  scream:    { color: COLOR.ENEMY, power: 13.0, ref: 6.5,  speed: SPEED.SCREAM,  life: 2.6, thick: 0.26, reveal: 1.0, loud: 0.0 },
+  machine:   { color: COLOR.WATER, power: 12.0, ref: 5.0,  speed: SPEED.MACHINE, life: 2.8, thick: 0.22, reveal: 0.35, loud: 0.0 },
+  train:     { color: COLOR.WATER, power: 22.0, ref: 16.0, speed: SPEED.TRAIN,   life: 5.5, thick: 0.55, reveal: 0.6, loud: 0.0 },
+  heart:     { color: COLOR.STEP,  power: 4.2,  ref: 1.7,  speed: SPEED.HEART,   life: 1.8, thick: 0.14, reveal: 0.0, loud: 0.55 },
+  hurt:      { color: COLOR.ENEMY, power: 14.0, ref: 5.0,  speed: SPEED.STEP,    life: 2.0, thick: 0.24, reveal: 0.8, loud: 2.5 },
+  kill:      { color: COLOR.ENEMY, power: 16.0, ref: 5.5,  speed: SPEED.ENEMY,   life: 2.4, thick: 0.26, reveal: 1.0, loud: 0.0 },
+  door:      { color: COLOR.STEP,  power: 12.0, ref: 4.0,  speed: SPEED.STEP,    life: 2.4, thick: 0.20, reveal: 0.2, loud: 1.8 },
+  chime:     { color: COLOR.WATER, power: 8.0,  ref: 3.2,  speed: SPEED.DRIP,    life: 3.0, thick: 0.15, reveal: 0.0, loud: 0.0 },
 };
 
 const STEP_VOICE = {
@@ -103,6 +104,7 @@ export class SoundWorld {
       speed: k.speed,
       life: k.life,
       thickness: k.thick,
+      ref: k.ref,
       reveal: o.reveal ?? k.reveal,
       priority: power,
     });

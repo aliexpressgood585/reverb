@@ -13,6 +13,7 @@ export const PULSE_UNIFORMS_GLSL = /* glsl */ `
 uniform vec3  uPulsePos[MAX_PULSES];
 uniform vec4  uPulseData[MAX_PULSES];   // x radius, y intensity, z thickness, w entity-reveal
 uniform vec3  uPulseColor[MAX_PULSES];
+uniform float uPulseRef[MAX_PULSES];    // reference distance for the 1/r² falloff
 uniform int   uPulseCount;
 
 uniform sampler2D uOccTex;   // top-down occupancy grid of the level
@@ -33,27 +34,29 @@ float occlusion(vec3 P, vec3 S) {
   vec2 b = S.xz;
   vec2 d = b - a;
   float len = length(d);
-  if (len < 0.7) return 1.0;
+  if (len < 0.8) return 1.0;
 
   float blocked = 0.0;
-  const int STEPS = 16;
+  const int STEPS = 18;
   for (int i = 1; i < STEPS; i++) {
     float t = float(i) / float(STEPS);
     // Both endpoints sit on or inside solid matter (a wall lighting itself,
     // a source standing next to one) so the ends of the ray are ignored.
     float edge = min(t, 1.0 - t) * len;
-    if (edge < 0.55) continue;
+    if (edge < 0.6) continue;
     blocked += sampleOcc(a + d * t);
   }
-  return clamp(1.0 - blocked * 0.85, 0.0, 1.0);
+  return clamp(1.0 - blocked * 0.75, 0.0, 1.0);
 }
 `;
 
 /**
  * One wavefront's contribution at a point.
- * The shell is deliberately asymmetric: a razor-thin leading edge with a longer,
- * dimmer wake behind it. That asymmetry is what makes it read as a line in
- * motion rather than a glowing bubble.
+ *
+ * The shell is deliberately asymmetric — a razor-thin leading edge with a
+ * longer, dimmer wake behind it — and its brightness is a broad low body with a
+ * very hot filament riding on the crest. That combination is what makes it read
+ * as a *line travelling across the geometry* rather than a glowing bubble.
  */
 export const PULSE_LIGHT_GLSL = /* glsl */ `
 void gatherLit(vec3 P, vec3 N, vec3 V, float gloss, float revealGate,
@@ -77,30 +80,35 @@ void gatherLit(vec3 P, vec3 N, vec3 V, float gloss, float revealGate,
     float radius = uPulseData[i].x;
     float thick = uPulseData[i].z;
 
-    float front = thick * 0.34;
+    float front = thick * 0.30;
     float back  = thick * 1.70;
     float e = dist - radius;
     if (e > front || e < -back) continue;
 
     float s = e > 0.0 ? 1.0 - e / front : 1.0 + e / back;
     s = clamp(s, 0.0, 1.0);
-    // Squared body for a clean falloff, plus a hot filament at the crest.
-    float shell = s * s * 0.75 + pow(s, 14.0) * 1.25;
+    float shell = s * s * 0.32 + pow(s, 26.0) * 3.20;
 
     vec3 L = toS / max(dist, 0.0001);
-    float atten = 1.0 / (1.0 + dist * dist * 0.34);
+    float r = dist / uPulseRef[i];
+    float atten = 1.0 / (1.0 + r * r);
     float occ = occlusion(P, uPulsePos[i]);
 
-    vec3 energy = uPulseColor[i] * (shell * atten * intensity * gate * occ);
+    float falloff = atten * intensity * gate * occ;
+    vec3 energy = uPulseColor[i] * (shell * falloff);
 
-    float ndl = max(dot(N, L), 0.0);
-    ndl = 0.22 + 0.78 * ndl;   // wrapped, so grazing floors still catch the wave
+    // Soft wrap: a surface edge-on to the wave still catches it, a surface
+    // facing away from it stays black. No 'ambient floor' anywhere.
+    float ndl = clamp(dot(N, L) * 0.85 + 0.38, 0.0, 1.0);
     diffuse += energy * ndl;
 
     if (gloss > 0.001) {
       vec3 H = normalize(L + V);
-      float sh = 14.0 + gloss * 210.0;
-      spec += energy * pow(max(dot(N, H), 0.0), sh) * gloss * 1.6;
+      float sh = 20.0 + gloss * 260.0;
+      // Built from the shell body only — the filament belongs to the diffuse
+      // line, and letting it into the specular lobe turns water into lava.
+      spec += uPulseColor[i] * (s * s * 0.9 * falloff)
+            * pow(max(dot(N, H), 0.0), sh) * gloss * 0.85;
     }
   }
 }

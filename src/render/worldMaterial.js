@@ -63,7 +63,7 @@ void main() {
 
   // Air in a tunnel is not clean. Distant light loses a little of itself.
   float d = length(uEye - vWorld);
-  col *= exp(-d * 0.014);
+  col *= exp(-d * 0.010);
 
   gl_FragColor = vec4(col, 1.0);
 }
@@ -77,7 +77,7 @@ export function createWorldMaterial(shared) {
       ...shared.pulseUniforms,
       ...shared.occUniforms,
       uMemory: shared.memory,
-      uMemoryStrength: { value: 0.34 },
+      uMemoryStrength: { value: 0.032 },
       uTime: shared.time,
       uEye: shared.eye,
     },
@@ -124,6 +124,10 @@ varying vec2 vLightUv;
 
 void main() {
   vec3 lit = gatherPulses(vWorld, normalize(vNormal), 0.0);
+  // Saturating store. Memory records *that* you saw a surface, not how hard it
+  // was hit — otherwise a gunshot leaves the whole room painted white for three
+  // seconds and the imprint stops being a hint and becomes a floodlight.
+  lit = lit / (1.0 + lit);
   vec3 prev = texture2D(uPrev, vLightUv).rgb * uDecay;
   gl_FragColor = vec4(max(prev, lit), 1.0);
 }

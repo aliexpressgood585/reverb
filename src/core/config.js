@@ -5,11 +5,18 @@ export const MAX_PULSES = 32;
 
 // --- Palette (linear-ish sRGB triplets, 0..1) -------------------------------
 // Hard rule: no neon green, no synthwave magenta, no cinematic teal/orange.
-const hex = (h) => [
-  ((h >> 16) & 255) / 255,
-  ((h >> 8) & 255) / 255,
-  (h & 255) / 255,
-];
+//
+// The shader works in linear light and the final pass encodes to sRGB, so a
+// palette entry has to be de-gamma'd on the way in or it comes out washed —
+// which is exactly how a distinctive rust orange turns into beige. Each colour
+// is then normalised to a peak of 1 so `power` means the same thing whatever
+// the hue: brightness lives in the pulse, hue lives here.
+const hex = (h) => {
+  const lin = [(h >> 16) & 255, (h >> 8) & 255, h & 255]
+    .map((c) => Math.pow(c / 255, 2.2));
+  const peak = Math.max(...lin, 1e-6);
+  return lin.map((c) => c / peak);
+};
 
 export const COLOR = {
   VOID: hex(0x000000),
