@@ -53,8 +53,14 @@ export class Input {
   }
 
   requestLock() {
-    const r = this.canvas.requestPointerLock();
-    if (r && r.catch) r.catch(() => {});
+    // iOS Safari has no pointer lock at all. Calling an undefined method threw
+    // inside the frame loop, which killed the whole game the moment the intro
+    // card tried to hand over control — a frozen card, on every phone.
+    if (!this.canvas.requestPointerLock) return;
+    try {
+      const r = this.canvas.requestPointerLock();
+      if (r && r.catch) r.catch(() => {});
+    } catch (e) { /* denied or unsupported: play unlocked */ }
   }
 
   down(a) { return this.state.has(a); }
