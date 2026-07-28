@@ -14,7 +14,7 @@ const PLATFORM = {
   id: 1,
   name: 'PLATFORM',
   line: 'THE TRAIN IS NOT COMING',
-  space: { decay: 2.9, brightness: 0.42, predelay: 0.022, spread: 1.2 },
+  space: { rt60: 1.9, brightness: 0.42, predelay: 0.022, spread: 1.2 },
   spawn: { x: 0, z: -17, yaw: Math.PI },
   exit: { x: -2.0, z: 25.5, r: 2.2 },
   build(b) {
@@ -76,7 +76,7 @@ const TURNSTILES = {
   id: 2,
   name: 'TURNSTILES',
   line: 'EVERY WAY THROUGH IS WET',
-  space: { decay: 2.0, brightness: 0.55, predelay: 0.014, spread: 0.8 },
+  space: { rt60: 1.3, brightness: 0.55, predelay: 0.014, spread: 0.8 },
   spawn: { x: 0, z: -15, yaw: Math.PI },
   exit: { x: 0, z: 21.4, r: 1.8 },
   build(b) {
@@ -138,7 +138,7 @@ const TUNNEL = {
   id: 3,
   name: 'THE TUNNEL',
   line: 'THREE OF THEM ARE STANDING STILL',
-  space: { decay: 4.6, brightness: 0.3, predelay: 0.03, spread: 2.4 },
+  space: { rt60: 2.7, brightness: 0.30, predelay: 0.030, spread: 2.4 },
   spawn: { x: 0, z: -34, yaw: Math.PI },
   exit: { x: 0, z: 40, r: 2.4 },
   build(b) {
@@ -192,7 +192,7 @@ const MAINTENANCE = {
   id: 4,
   name: 'MAINTENANCE',
   line: 'MOVE WHEN THE MACHINES MOVE',
-  space: { decay: 1.5, brightness: 0.66, predelay: 0.008, spread: 0.5 },
+  space: { rt60: 0.65, brightness: 0.66, predelay: 0.008, spread: 0.5 },
   spawn: { x: -18, z: -14, yaw: 0 },
   exit: { x: 19, z: 15, r: 2.2 },
   build(b) {
@@ -267,7 +267,7 @@ const DEEP = {
   id: 5,
   name: 'THE DEEP',
   line: 'NOTHING HERE STOPS SOUND',
-  space: { decay: 6.5, brightness: 0.24, predelay: 0.045, spread: 3.4 },
+  space: { rt60: 3.2, brightness: 0.24, predelay: 0.045, spread: 3.4 },
   spawn: { x: 0, z: -36, yaw: Math.PI },
   exit: { x: 0, z: 38, r: 3.0 },
   build(b) {

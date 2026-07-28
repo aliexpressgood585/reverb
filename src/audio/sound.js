@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { AudioEngine } from './engine.js';
-import { VOICES } from './voices.js';
+import { playVoice } from './voices.js';
 import { COLOR, SPEED } from '../core/config.js';
 import { SURF, SURFACE_ACOUSTICS } from '../world/surfaces.js';
 
@@ -89,9 +89,8 @@ export class SoundWorld {
     const E = this.engine;
     if (E.ready && !E.muted) {
       const dest = E.spatial(pos, o.panner);
-      const fn = VOICES[voiceName] ?? VOICES.step;
       try {
-        fn(E, dest, { gain, acoustics });
+        playVoice(E, voiceName, dest, { gain, acoustics });
       } catch (err) { /* a dropped voice must never stall the frame */ }
       setTimeout(() => { try { dest.disconnect(); } catch (e) {} }, 8000);
     }

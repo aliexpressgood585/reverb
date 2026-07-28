@@ -1,5 +1,10 @@
 /**
  * Synthesised voices. Filtered noise, oscillators, ADSR envelopes. Nothing else.
+ *
+ * The mix lives in TRIM at the bottom of this file, and it is not guesswork:
+ * every number there was derived from `node scripts/audio-check.mjs`, which
+ * renders each voice offline through the real graph and measures it. Change a
+ * synthesis parameter and the trim needs re-measuring, not re-imagining.
  */
 
 function env(param, t, { a = 0.002, peak = 1, d = 0.1, s = 0, sustain = 0, r = 0.08 }) {
@@ -151,7 +156,11 @@ export const VOICES = {
       curve[i] = Math.tanh(x * 3.4);
     }
     shaper.curve = curve;
-    shaper.connect(dest);
+    // Output stage: the tanh normalises, so level has to be taken after it or
+    // turning the scream down just makes it a cleaner scream.
+    const out = E.ctx.createGain();
+    out.gain.value = 0.55;
+    shaper.connect(out).connect(dest);
 
     for (const [mul, gain] of [[1, 0.30], [1.5, 0.16], [2.51, 0.10]]) {
       const o1 = E.ctx.createOscillator();
@@ -213,6 +222,14 @@ export const VOICES = {
     tone(E, dest, t, { f0: 300, f1: 30, type: 'sawtooth', gain: 0.16 * o.gain, a: 0.01, d: 0.5, r: 0.6 });
   },
 
+  hum(E, dest, o) {
+    const t = E.time;
+    E.humSwell(o.gain);
+    // A ballast that has been failing for years, ticking over one more time.
+    tone(E, dest, t, { f0: 99.5, f1: 98.0, type: 'triangle', gain: 0.09 * o.gain, a: 0.35, d: 0.9, r: 1.4 });
+    burst(E, dest, t + 0.02, { freq: 2400, q: 7, gain: 0.035 * o.gain, a: 0.002, d: 0.02, r: 0.04 });
+  },
+
   chime(E, dest, o) {
     const t = E.time;
     for (const [m, g] of [[1, 0.16], [2.02, 0.08], [3.01, 0.04]]) {
@@ -220,3 +237,65 @@ export const VOICES = {
     }
   },
 };
+
+/**
+ * Measured mix. Each entry is the linear trim applied to a voice's output so
+ * that its peak lands where the design wants it, verified by the offline rig.
+ *
+ * Target hierarchy, in dBFS at the master output:
+ *
+ *   gunshot        -3    the loudest thing in the game, by design
+ *   scream         -6
+ *   train          -8
+ *   hurt / kill   -12
+ *   machine       -13
+ *   stone         -17
+ *   heart         -20
+ *   enemy step    -21
+ *   splash        -20    water is punished
+ *   walking step  -22
+ *   breath        -25
+ *   drip          -24
+ *   chime         -26
+ *   hum tick      -30
+ *   sneaking      -33    still ~9 dB clear of the bed
+ *   dry click     -33
+ *   ambient bed   -42    the floor of the whole mix
+ */
+export const TRIM = {
+  shot: 2.60,
+  scream: 0.72,
+  train: 0.84,
+  hurt: 1.53,
+  kill: 1.18,
+  machine: 1.31,
+  stone: 2.40,
+  heart: 1.19,
+  enemyStep: 2.40,
+  splash: 2.90,
+  step: 4.50,
+  gravel: 5.50,
+  breath: 1.64,
+  drip: 2.70,
+  chime: 0.84,
+  hum: 0.37,
+  dryfire: 5.60,
+};
+
+/**
+ * Play a voice with its measured trim applied. Everything that makes a sound
+ * goes through here, including the offline measurement rig, so the numbers the
+ * rig reports are the numbers the game plays.
+ */
+export function playVoice(E, name, dest, opts) {
+  const fn = VOICES[name] ?? VOICES.step;
+  const trim = TRIM[name];
+  if (!trim || trim === 1) {
+    fn(E, dest, opts);
+    return;
+  }
+  const g = E.ctx.createGain();
+  g.gain.value = trim;
+  g.connect(dest);
+  fn(E, g, opts);
+}

@@ -37,3 +37,9 @@ tick();
 
 // Headless capture rig and console poking.
 window.REVERB = game;
+
+// Offline audio measurement, loaded on demand so it never ships in the hot path.
+window.REVERB.audioProbe = async () => {
+  const m = await import('./audio/probe.js');
+  return m.runAudioProbe();
+};

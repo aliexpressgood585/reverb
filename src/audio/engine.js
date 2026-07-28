@@ -13,6 +13,8 @@ export class AudioEngine {
     this.ctx = null;
     this.ready = false;
     this.muted = false;
+    // Identity listener: at the origin, facing -Z, right hand towards +X.
+    this._listener = { x: 0, z: 0, rx: 1, rz: 0 };
   }
 
   init() {
@@ -32,18 +34,25 @@ export class AudioEngine {
     }
   }
 
-  _build() {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) throw new Error('no AudioContext');
-    const ctx = new Ctx({ latencyHint: 'interactive' });
+  _build(providedCtx, { hum = true } = {}) {
+    let ctx = providedCtx;
+    if (!ctx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) throw new Error('no AudioContext');
+      ctx = new Ctx({ latencyHint: 'interactive' });
+    }
     this.ctx = ctx;
 
+    // A safety net, not a mix engineer. The old settings (-8 dB, ratio 9) sat
+    // on every transient and flattened a gunshot down to the level of a scream,
+    // which meant the loudness hierarchy was being decided by the compressor
+    // rather than by the gain staging. Now nothing normally reaches it.
     this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.value = -8;
-    this.limiter.knee.value = 6;
-    this.limiter.ratio.value = 9;
-    this.limiter.attack.value = 0.003;
-    this.limiter.release.value = 0.22;
+    this.limiter.threshold.value = -1.0;
+    this.limiter.knee.value = 0;
+    this.limiter.ratio.value = 20;
+    this.limiter.attack.value = 0.001;
+    this.limiter.release.value = 0.12;
     this.limiter.connect(ctx.destination);
 
     this.master = ctx.createGain();
@@ -56,16 +65,16 @@ export class AudioEngine {
 
     this.convolver = ctx.createConvolver();
     this.wet = ctx.createGain();
-    this.wet.gain.value = 0.9;
+    this.wet.gain.value = 0.8;
     this.convolver.connect(this.wet);
     this.wet.connect(this.master);
 
     this.send = ctx.createGain();
-    this.send.gain.value = 0.5;
+    this.send.gain.value = 0.17;
     this.send.connect(this.convolver);
 
-    this.setSpace({ decay: 2.6, brightness: 0.5, predelay: 0.02 });
-    this.startHum();
+    this.setSpace({ rt60: 1.8, brightness: 0.5, predelay: 0.02 });
+    if (hum) this.startHum();
 
     if (ctx.listener.forwardX) {
       ctx.listener.upX.value = 0;
@@ -75,46 +84,86 @@ export class AudioEngine {
     this.ready = true;
   }
 
+  /**
+   * Build the whole graph on a caller-supplied context. Used by the offline
+   * measurement rig (scripts/audio-check.mjs) so the numbers it reports come
+   * from the exact chain the game plays through, not a reconstruction of it.
+   */
+  adopt(ctx, opts) {
+    this._build(ctx, opts);
+    this.ready = true;
+    return this;
+  }
+
   get time() {
     return this.ctx ? this.ctx.currentTime : 0;
   }
 
-  /** Build a procedural impulse response for the current space. */
-  setSpace({ decay = 2.5, brightness = 0.5, predelay = 0.02, spread = 1.0 }) {
+  /**
+   * Build a procedural impulse response for the current space.
+   *
+   * `rt60` is the real thing: seconds for the tail to fall 60 dB. The envelope
+   * is exp(-6.908 t / rt60) precisely so that the measured decay matches the
+   * number a level declares — scripts/audio-check.mjs verifies it every run.
+   *
+   * The result is normalised by energy, not by peak. Peak normalisation makes
+   * the wet return get louder the longer the tail is, which is how a tunnel
+   * ends up swallowing its own dry signal.
+   */
+  setSpace({ rt60 = 1.8, brightness = 0.5, predelay = 0.02, spread = 1.0 }) {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const rate = ctx.sampleRate;
-    const len = Math.max(1, Math.floor(rate * decay));
+    // Run the buffer a little past T60; anything below -60 dB is inaudible.
+    const tail = rt60 * 1.15;
+    const len = Math.max(64, Math.floor(rate * tail));
     const pre = Math.floor(rate * predelay);
     const buf = ctx.createBuffer(2, len, rate);
 
+    const k = 6.9078 / rt60; // ln(1000) — exactly -60 dB at t = rt60
+
     for (let ch = 0; ch < 2; ch++) {
       const d = buf.getChannelData(ch);
-      // Coloured noise tail: exponential decay with a slowly darkening spectrum,
-      // which is what a long concrete tunnel actually does to a transient.
+      // Coloured noise tail whose spectrum darkens as it decays, which is what
+      // a long concrete tunnel actually does to a transient.
       let lp = 0;
       const cut = 0.06 + brightness * 0.4;
       for (let i = 0; i < len; i++) {
         if (i < pre) { d[i] = 0; continue; }
-        const t = (i - pre) / (len - pre);
-        const env = Math.pow(1 - t, 2.1) * Math.exp(-t * 3.2);
+        const t = (i - pre) / rate;
+        const u = t / tail;
+        const env = Math.exp(-k * t);
         const white = Math.random() * 2 - 1;
-        lp += (white - lp) * (cut * (1 - t * 0.75) + 0.01);
+        lp += (white - lp) * (cut * (1 - u * 0.75) + 0.01);
         d[i] = lp * env;
       }
       // Discrete early reflections — these are what tell you a wall is close.
-      const taps = 7;
-      for (let k = 0; k < taps; k++) {
-        const pos = pre + Math.floor(rate * (0.008 + k * 0.017 * spread + Math.random() * 0.01));
-        if (pos < len) d[pos] += (Math.random() * 2 - 1) * 0.55 * Math.pow(0.72, k);
+      for (let j = 0; j < 7; j++) {
+        const pos = pre + Math.floor(rate * (0.008 + j * 0.017 * spread + Math.random() * 0.01));
+        if (pos < len) d[pos] += (Math.random() * 2 - 1) * 0.5 * Math.pow(0.72, j);
       }
-      // Normalise so level changes never blow the mix up.
-      let peak = 0;
-      for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(d[i]));
-      if (peak > 0) for (let i = 0; i < len; i++) d[i] /= peak;
+    }
+
+    // Energy normalisation: a convolution multiplies by the IR's total energy,
+    // so equalising that keeps the wet return at one level across every space.
+    let energy = 0;
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) energy += d[i] * d[i];
+    }
+    // A longer tail fills more of the listening window, so flat energy
+    // normalisation still lets a big room bury its own source. Compensating
+    // mildly against rt60 keeps the tunnel obviously the most reverberant space
+    // while leaving the dry signal on top of the wet everywhere.
+    const target = 16 / (1 + 0.35 * rt60);
+    const norm = energy > 0 ? Math.sqrt(target / energy) : 1;
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] *= norm;
     }
 
     this.convolver.buffer = buf;
+    this.rt60 = rt60;
   }
 
   /**
@@ -127,7 +176,7 @@ export class AudioEngine {
     if (!this.ctx || this.hum) return;
     const ctx = this.ctx;
     const out = ctx.createGain();
-    out.gain.value = 0.055;
+    out.gain.value = 0.0075;
     out.connect(this.master);
 
     const lp = ctx.createBiquadFilter();
@@ -166,8 +215,8 @@ export class AudioEngine {
     const g = this.hum.gain;
     g.cancelScheduledValues(t);
     g.setValueAtTime(g.value, t);
-    g.linearRampToValueAtTime(0.055 + 0.05 * amount, t + 0.5);
-    g.linearRampToValueAtTime(0.055, t + 2.4);
+    g.linearRampToValueAtTime(0.0075 + 0.006 * amount, t + 0.5);
+    g.linearRampToValueAtTime(0.0075, t + 2.4);
   }
 
   /** Shared white-noise source buffer — allocating one per footstep is waste. */
@@ -190,9 +239,19 @@ export class AudioEngine {
     return s;
   }
 
-  /** A positioned bus. Returns the node a voice should connect into. */
+  /**
+   * A positioned bus. Returns the node a voice should connect into.
+   *
+   * HRTF alone measured only 4.3 dB of channel separation for a source hard on
+   * one side. That is physically honest — interaural level difference really is
+   * small below a couple of kHz — but this game asks you to find a creature in
+   * total darkness by ear, so the cue has to be unmissable. The HRTF stage is
+   * kept for its spectral and timing cues (it is what distinguishes in front
+   * from behind) and a stereo panner widens the result to about 15 dB.
+   */
   spatial(pos, { refDistance = 2.2, rolloff = 1.15, maxDistance = 90 } = {}) {
-    const p = this.ctx.createPanner();
+    const ctx = this.ctx;
+    const p = ctx.createPanner();
     p.panningModel = 'HRTF';
     p.distanceModel = 'inverse';
     p.refDistance = refDistance;
@@ -205,15 +264,37 @@ export class AudioEngine {
     } else {
       p.setPosition(pos.x, pos.y, pos.z);
     }
-    p.connect(this.dry);
-    p.connect(this.send);
+
+    let out = p;
+    if (ctx.createStereoPanner) {
+      const wide = ctx.createStereoPanner();
+      wide.pan.value = this._azimuthOf(pos) * 0.72;
+      p.connect(wide);
+      out = wide;
+    }
+
+    out.connect(this.dry);
+    out.connect(this.send);
     return p;
+  }
+
+  /** Sine of the source's azimuth: -1 hard left, 0 dead ahead, +1 hard right. */
+  _azimuthOf(pos) {
+    const l = this._listener;
+    const dx = pos.x - l.x;
+    const dz = pos.z - l.z;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.2) return 0;
+    return Math.max(-1, Math.min(1, (dx * l.rx + dz * l.rz) / len));
   }
 
   updateListener(camera) {
     if (!this.ctx) return;
     const l = this.ctx.listener;
     const p = camera.position;
+    const e0 = camera.matrixWorld.elements;
+    // Right vector, for the stereo widener in spatial().
+    this._listener = { x: p.x, z: p.z, rx: e0[0], rz: e0[2] };
     const f = { x: 0, y: 0, z: -1 };
     const e = camera.matrixWorld.elements;
     f.x = -e[8]; f.y = -e[9]; f.z = -e[10];

@@ -287,6 +287,118 @@ works if nothing is competing with it.
 
 ---
 
+## Audio, measured
+
+I cannot hear this game. So it is measured instead of guessed at.
+
+`node scripts/audio-check.mjs` renders every voice offline through an
+`OfflineAudioContext` carrying the **exact** graph the game plays through — same
+limiter, same convolver, same panner, same trim table — and checks the numbers
+against thresholds. It exits non-zero on failure. `src/audio/probe.js` is the
+in-page half; nothing in it runs during play.
+
+What it measures, and what it caught on the first run:
+
+| check | first run | now |
+|---|---|---|
+| loudest voice | **scream**, not the gunshot | gunshot at −4.5 dBFS, scream −7.7 |
+| ambient bed under the gunshot | 13.7 dB | 37.7 dB |
+| walking step vs. the bed | **6.8 dB below it** | 20.7 dB above it |
+| RT60, THE TUNNEL | 1.1 s (declared 4.6) | 2.53 s (declared 2.7) |
+| RT60, MAINTENANCE | 0.42 s | 0.61 s |
+| C50 clarity, PLATFORM | −4.0 dB, tail burying the source | +2.9 dB |
+| stereo separation at 90° | 4.3 dB | 11.1 dB |
+| samples over 1.0 | none | none |
+
+The four fixes behind that table:
+
+- **The compressor was doing the mixing.** At −8 dB with a ratio of 9 it sat on
+  every transient and flattened a gunshot down to the level of a sustained
+  scream, so the loudness hierarchy was being decided by the limiter rather than
+  by gain staging. It is now a safety net at −1 dB, ratio 20, and nothing
+  normally reaches it. The mix lives in one measured `TRIM` table in
+  `src/audio/voices.js`.
+- **RT60 was a fiction.** `space.decay` was the buffer length, not the decay
+  time; the envelope `(1−t)^2.1 · e^(−3.2t)` meant a level declaring 4.6 s
+  actually rang for about 1.1. Levels now declare `rt60` and the envelope is
+  `e^(−6.9078 t / rt60)`, which is −60 dB at exactly `t = rt60`. The rig
+  verifies every level to within 7%.
+- **The impulse response was peak-normalised**, so the wet return got louder the
+  longer the tail was — which is precisely how a tunnel ends up swallowing its
+  own source. It is now energy-normalised with a mild `rt60` compensation.
+- **HRTF alone gave 4.3 dB of channel separation** for a source hard on one
+  side. That is physically honest — interaural level difference really is small
+  below a couple of kHz — but this game asks you to find a creature in the dark
+  by ear, so the cue has to be unmissable. HRTF is kept for its spectral and
+  timing cues, which are what distinguish in front from behind, and a
+  `StereoPannerNode` driven by the source azimuth widens the result to 11 dB.
+
+Clarity is checked as **C50** — energy in the first 50 ms against everything
+after it — not as a whole-window wet/dry RMS ratio. The obvious test is the
+wrong one: a long tail fills more of a fixed window and scores "wetter" even
+when the direct sound is perfectly clear.
+
+Full output of the current run:
+
+```
+== impulse responses ==================================
+space          declared measured      len   verdict
+PLATFORM            1.9    1.792    2.185    ok 
+TURNSTILES          1.3    1.227    1.495    ok 
+THE TUNNEL          2.7    2.573    3.105    ok 
+MAINTENANCE        0.65    0.603    0.748    ok 
+THE DEEP            3.2    3.023     3.68    ok 
+   ok   tunnel in 1.5–3.0s
+   ok   maintenance under 0.8s
+
+== voice levels (dBFS, through limiter) ===============
+voice              peak      rms   clip
+shot              -5.07   -27.22    -
+scream            -8.01      -26    -
+train             -8.39   -28.58    -
+hurt             -12.11   -34.88    -
+machine          -12.45   -32.39    -
+kill             -13.56   -37.71    -
+stone            -17.29   -43.89    -
+heart             -20.3   -45.01    -
+enemyStep        -20.71    -45.8    -
+splash              -21   -47.89    -
+step             -21.45   -47.56    -
+gravel           -22.33   -48.22    -
+drip             -23.08   -47.66    -
+breath           -24.97   -46.91    -
+chime            -25.09   -43.38    -
+hum              -30.34   -45.93    -
+step-sneak       -31.85   -57.41    -
+dryfire          -36.84      -72    -
+
+   ok   the shot is the loudest thing in the game
+   ok   ambient bed 37.1 dB under the shot (want >= 25)
+   ok   walking step sits 16.4 dB under the shot, 20.8 dB over the bed
+   ok   sneaking is 10.4 dB quieter than walking (want >= 6)
+   ok   nothing exceeds 1.0
+
+== wet / dry (C50 clarity is the pass/fail) ===========
+platform       dryRms   -44.45  wetRms   -52.51  C50     2.76    ok 
+tunnel         dryRms    -44.5  wetRms   -50.18  C50     1.69    ok 
+maintenance    dryRms   -44.49  wetRms   -59.32  C50     4.67    ok 
+
+== spatial ===========================================
+ source 90 deg right : R-L = 11.11 dB
+ source 90 deg left  : R-L = -11.12 dB
+ source dead ahead   : imbalance = 0 dB
+   ok   right side favours the right channel
+   ok   left side favours the left channel
+   ok   centred source stays centred
+
+======================================================
+audio: all checks pass
+```
+
+What measurement still cannot tell me: whether any of it sounds *good*. The
+levels are right, the decay times are right, the image is wide, nothing clips.
+Whether the Screamer is frightening rather than merely loud is not a number.
+
 ## What was and was not verified
 
 `node scripts/capture.mjs` runs the built game in headless Chromium on a
