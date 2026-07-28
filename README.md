@@ -495,6 +495,81 @@ visually distinct (diamond tread that catches a passing wavefront) and 1.7×
 louder underfoot — which is what makes its machine cover worth using instead of
 merely available. Its noise par moved from 15/32/58 to 21/42/72 to match.
 
+## The first sixty seconds, measured
+
+Nobody reads instructions. A player who has read nothing has to work out, inside
+one minute and with no tutorial text of any kind, that sound is light and that
+they need to shut up.
+
+`node scripts/first-minute.mjs` starts at the title screen, presses ENTER, sits
+through the level card, and then plays PLATFORM with a naive player's input —
+holds W because forward is the only thing that ever happens, looks around a bit,
+does not know Shift exists. It instruments `sound.emit` so that every teachable
+moment is timestamped the instant it first becomes available, samples a frame
+every four seconds, and fails if a lesson lands late or never.
+
+The first run found two things, and both were real:
+
+- **A creature was hunting the player at 8 seconds and had them down to 1 of 3
+  health by 16.** That is administering fear, not teaching it. PLATFORM's single
+  Stalker now carries a per-creature `caution` multiplier of 1.55 and a longer
+  alert hold, so it notices you, turns, searches, and gives up — and only
+  commits if you keep being careless.
+- **The level could be cleared in sixteen seconds by holding W.** Which meant
+  there was no room for anything to be learned and no time for the creature to
+  react. The deck was rebuilt: fifty-six metres instead of forty, the way out
+  moved to the far corner of the north wall so the last thing the level asks is
+  that you stop walking in a straight line, and the water moved onto the walk
+  north so it is stepped in before anything is at stake.
+
+Where it lands now:
+
+```
+== the first minute, frame by frame ===================
+t     lit%    warm%   noise   alert  hunt  hp
+4s    64.5    0.25    10.8    1      0     3
+8s    71.1    0.2     20.1    1      0     3
+12s   66.7    0.23    32.1    0      0     3
+16s   41.4    0.06    41.4    0      0     3
+20s   2.3     0       44.9    0      0     3
+
+== when each lesson first became available ============
+  0.85s    drip               the world makes light without you
+  0.98s    creature-moves     something else is moving, and it is orange
+  1.07s    own-step           your own footstep draws the floor
+  3.78s    loud-ground        not all ground is equally loud
+  6.28s    creature-breathes  it gives itself away by breathing
+  10.72s   hum                the building itself ticks over
+  4s       creature-reacts    something turned towards a noise you made
+
+ level resolved at 20s (state: results)
+
+ contact sheet -> shots/first-minute/contact-sheet.html
+
+======================================================
+first minute: every lesson is available without a word of text
+exit=0
+```
+
+Read as a teaching order: **at 0.85 s** a drip falls three metres in front of
+your face and draws an arch of ceiling — the world speaks before you have
+decided to move, so even a player who freezes learns the premise. **At 0.98 s** a
+creature takes a step across the track bed and is briefly orange. **At 1.07 s**
+your own first footstep draws the floor around you, in cold white — the same
+grammar, a different voice. **At 3.78 s** you walk into standing water and it is
+much louder and much brighter, which is the entire surface system taught in one
+step. **At 4 s** something across the platform turns towards you. **At 6.28 s** it
+breathes, and gives its position away for free.
+
+Nothing above is written on the screen. The only text in the first minute is the
+level card — a name, a line, and one hint — and then it is gone.
+
+What the numbers do not settle: twenty seconds is the *critical path*, the time
+to cross PLATFORM holding W in a straight line. A real player standing in a
+pitch-black room does not do that. How long the first minute actually feels, and
+whether the Stalker's caution is set anywhere near right for a human, is still
+unmeasured and unplayed.
+
 ## What was and was not verified
 
 `node scripts/capture.mjs` runs the built game in headless Chromium on a

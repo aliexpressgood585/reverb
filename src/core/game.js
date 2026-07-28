@@ -387,10 +387,14 @@ export class Game {
       if (inside && !st.inside && now - st.firedAt > (t.cooldown ?? 4)) {
         st.firedAt = now;
         this._tmpA.set(p.x, p.y + 0.9, p.z);
-        this.sound.emit(t.kind ?? 'turnstile', this._tmpA, {
+        const loud = this.sound.emit(t.kind ?? 'turnstile', this._tmpA, {
           gain: t.gain ?? 1,
           fromPlayer: true,
         });
+        // The noise arc has to show this. It is the loudest thing you will do
+        // in level 2 and the player did not choose to do it.
+        this.player.lastStepReach = loud;
+        this.player.stepEcho = Math.min(1, loud / 3.2);
         if (t.line) this.hud.flashLine(t.line);
       }
       st.inside = inside;

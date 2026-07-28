@@ -32,7 +32,7 @@ const browser = await chromium.launch({
   args: ['--headless=new', '--use-gl=angle', '--use-angle=swiftshader',
     '--enable-unsafe-swiftshader', '--mute-audio'],
 });
-const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
+const page = await browser.newPage({ viewport: { width: 800, height: 450 } });
 page.setDefaultTimeout(300000);
 page.on('pageerror', (e) => console.log('ERR', e.message));
 await page.goto(`http://127.0.0.1:${PORT}/?lm=512&msaa=0&nosound=1`, { waitUntil: 'load' });
@@ -45,6 +45,7 @@ await page.waitForFunction(() => !!window.REVERB);
 await page.evaluate(() => {
   const g = window.REVERB;
   g.setFixedStep(1 / 60);
+  g.setHeadlessLogicOnly(true);
 
   const log = [];
   window.__lessons = log;
@@ -79,6 +80,14 @@ await page.evaluate(() => {
 });
 
 const step = (n) => page.evaluate((k) => { for (let i = 0; i < k; i++) window.REVERB.frame(); }, n);
+
+/**
+ * Software rasterisation costs about a third of a second a frame, so the whole
+ * minute is simulated with the GPU detached and only the half-second before
+ * each sample is actually drawn. Light memory decays over 0.62 s, so 30
+ * rendered frames is enough history for the frame to be honest.
+ */
+const render = (on) => page.evaluate((v) => window.REVERB.setHeadlessLogicOnly(!v), on);
 const key = (k, on) => page.evaluate(({ k, on }) => window.REVERB.input.synth(k, on), { k, on });
 
 // --- get through the front of the game the way a player would ---------------
@@ -110,20 +119,24 @@ const PLAN = [
 
 let simT = 0;
 let shotIndex = 0;
+let finished = null;
 const frames = [];
 for (const [from, to, act] of PLAN) {
+  if (finished) break;
   await page.evaluate(({ act }) => {
     const g = window.REVERB;
     for (const k of ['forward', 'back', 'left', 'right', 'sneak']) g.input.synth(k, false);
     for (const k of Object.keys(act)) if (k !== 'look' && act[k]) g.input.synth(k, true);
   }, { act });
 
-  while (simT < to) {
+  while (simT < to && !finished) {
     if (act.look) await page.evaluate((d) => window.REVERB.player.look(d, 0), act.look);
     await step(60); // one simulated second
     simT += 1;
     if (simT % 4 === 0) {
       const name = `t${String(simT).padStart(2, '0')}s`;
+      await render(true);
+      await step(30);
       await page.screenshot({ path: `shots/first-minute/${name}.png`, timeout: 300000 });
       const m = await page.evaluate(() => {
         const g = window.REVERB;
@@ -146,10 +159,13 @@ for (const [from, to, act] of PLAN) {
           alerted: g.enemies.filter((e) => e.state !== 'IDLE').length,
           hunting: g.enemies.filter((e) => e.state === 'HUNT').length,
           health: g.player.health,
+          state: g.state,
         };
       });
+      await render(false);
       frames.push({ t: simT, name, ...m });
       shotIndex++;
+      if (m.state !== 'play') { finished = { at: simT, state: m.state }; break; }
     }
   }
 }
@@ -193,8 +209,15 @@ need('loud-ground', 45, 'ground loudness differs');
 if (!firstAlert || firstAlert.t > 45) {
   fails.push(`a creature reacts to you: ${firstAlert ? firstAlert.t + 's' : 'never'}, wanted inside 45s`);
 }
-const dark = frames.filter((f) => f.litPct < 1).length;
-if (dark > frames.length * 0.4) fails.push(`${dark} of ${frames.length} sampled frames were effectively black`);
+// Frames after the level resolves are the results card over a cleared canvas,
+// so only the frames of actual play are judged for darkness.
+const played = frames.filter((f) => f.state === 'play');
+const dark = played.filter((f) => f.litPct < 1).length;
+if (dark > played.length * 0.4) fails.push(`${dark} of ${played.length} played frames were effectively black`);
+if (finished) {
+  console.log(`\n level resolved at ${finished.at}s (state: ${finished.state})`);
+  if (finished.at < 20) fails.push(`the level was over in ${finished.at}s, before it could teach anything`);
+}
 
 writeFileSync('shots/first-minute/contact-sheet.html',
   `<!doctype html><meta charset=utf-8><title>REVERB first minute</title>

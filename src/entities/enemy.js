@@ -37,7 +37,10 @@ export class Enemy {
     this.id = ++_uid;
     this.world = world;
     this.type = opts.type ?? 'stalker';
-    this.cfg = TYPES[this.type];
+    // A level may soften or sharpen an individual creature. PLATFORM's one
+    // Stalker is deliberately slow to commit: the first minute has to teach
+    // fear, not administer it.
+    this.cfg = { caution: 1, ...TYPES[this.type], ...(opts.tune ?? {}) };
 
     this.material = createEntityMaterial(world.shared, COLOR.ENEMY);
     this.group = buildBody(this.material, this.type);
@@ -74,7 +77,7 @@ export class Enemy {
     // Inverse-square, then whatever the walls left of it, then whatever the
     // level itself does to sound. THE DEEP has no walls worth the name.
     const carry = this.world.level?.def.hearing ?? 1;
-    const strength = (evt.loudness / (1 + d * d * 0.03)) * t * carry;
+    const strength = ((evt.loudness / (1 + d * d * 0.03)) * t * carry) / this.cfg.caution;
     if (strength < HEARING.alertThreshold) return;
 
     this.confidence = Math.min(1.6, this.confidence + strength);

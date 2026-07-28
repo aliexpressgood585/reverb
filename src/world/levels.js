@@ -10,71 +10,87 @@ import { SURF } from './surfaces.js';
  */
 
 // ---------------------------------------------------------------- 1. PLATFORM
+//
+// The teaching level, and the only one whose shape is dictated by what a player
+// has to learn rather than by what the station would plausibly contain.
+//
+// Measured with scripts/first-minute.mjs: an earlier version could be cleared
+// in sixteen seconds by holding W, which is not long enough for anything to be
+// learned and not long enough for the one creature down here to react to you.
+// The deck is now fifty-six metres of walk with a turn at the end.
 const PLATFORM = {
   id: 1,
   name: 'PLATFORM',
   line: 'THE TRAIN IS NOT COMING',
   space: { rt60: 1.9, brightness: 0.42, predelay: 0.022, spread: 1.2 },
-  spawn: { x: 0, z: -17, yaw: Math.PI },
-  exit: { x: -2.0, z: 25.5, r: 2.2 },
+  spawn: { x: 0, z: -26, yaw: Math.PI },
+  exit: { x: -4.4, z: 31.0, r: 2.2 },
   build(b) {
     const H = 4.2;
     // platform deck
-    b.floor(-7, -20, 6, 20, 0, SURF.TILE);
-    b.ceiling(-7, -20, 13, 20, H, SURF.CONCRETE);
+    b.floor(-7, -30, 6, 26, 0, SURF.TILE);
+    b.ceiling(-7, -30, 13, 26, H, SURF.CONCRETE);
     // track bed, one step down
-    b.floor(6, -20, 13, 20, -0.95, SURF.GRAVEL);
-    b.wall(6, -20, 6, 20, -0.95, 0, SURF.CONCRETE, { blocksSound: false });
+    b.floor(6, -30, 13, 26, -0.95, SURF.GRAVEL);
+    b.wall(6, -30, 6, 26, -0.95, 0, SURF.CONCRETE, { blocksSound: false });
 
     // enclosure
-    b.wall(-7, -20, -7, 20, 0, H, SURF.TILE);
-    b.wall(13, -20, 13, 20, -0.95, H, SURF.CONCRETE);
-    b.wall(-7, -20, 13, -20, -0.95, H, SURF.CONCRETE);
-    // north wall with the stair opening
-    b.wall(-7, 20, -4.2, 20, 0, H, SURF.TILE);
-    b.wall(0.2, 20, 13, 20, -0.95, H, SURF.TILE);
+    b.wall(-7, -30, -7, 26, 0, H, SURF.TILE);
+    b.wall(13, -30, 13, 26, -0.95, H, SURF.CONCRETE);
+    b.wall(-7, -30, 13, -30, -0.95, H, SURF.CONCRETE);
+    // north wall. The way out is a gap in its far corner, so the last thing
+    // this level asks of you is to stop walking in a straight line.
+    b.wall(-2.4, 26, 13, 26, -0.95, H, SURF.TILE);
 
     // stairwell out
-    b.floor(-4.2, 20, 0.2, 28, 0, SURF.CONCRETE);
-    b.ceiling(-4.2, 20, 0.2, 28, 3.0, SURF.CONCRETE);
-    b.wall(-4.2, 20, -4.2, 28, 0, 3.0, SURF.TILE);
-    b.wall(0.2, 20, 0.2, 28, 0, 3.0, SURF.TILE);
-    b.wall(-4.2, 28, 0.2, 28, 0, 3.0, SURF.TILE);
+    b.floor(-6.4, 26, -2.4, 34, 0, SURF.CONCRETE);
+    b.ceiling(-6.4, 26, -2.4, 34, 3.0, SURF.CONCRETE);
+    b.wall(-6.4, 26, -6.4, 34, 0, 3.0, SURF.TILE);
+    b.wall(-2.4, 26, -2.4, 34, 0, 3.0, SURF.TILE);
+    b.wall(-6.4, 34, -2.4, 34, 0, 3.0, SURF.TILE);
 
     // pillars down the deck
-    for (let z = -15; z <= 15; z += 7.5) b.block(3.4, z, 0.7, 0.7, 0, H, SURF.TILE);
+    for (let z = -24; z <= 20; z += 7.5) b.block(3.4, z, 0.7, 0.7, 0, H, SURF.TILE);
 
-    // standing water — the deck drains badly. The pool at z = -7 sits square
-    // on the walk north, so a player who has read nothing steps in it inside
-    // the first five seconds and hears the difference.
-    b.floor(-2.0, -8.6, 2.4, -5.2, 0.005, SURF.PUDDLE);
-    b.floor(-6.4, -6.5, -3.0, -2.0, 0.005, SURF.PUDDLE);
-    b.floor(-1.4, 4.0, 2.2, 8.5, 0.005, SURF.PUDDLE);
-    b.floor(7.0, -4.0, 12.0, 2.0, -0.945, SURF.PUDDLE);
+    // Standing water. The pool at z = -16 sits square on the walk north, so a
+    // player who has read nothing steps in it inside four seconds and hears
+    // the difference before anything is at stake.
+    b.floor(-2.0, -17.6, 2.4, -14.2, 0.005, SURF.PUDDLE);
+    b.floor(-6.4, -9.5, -3.0, -4.0, 0.005, SURF.PUDDLE);
+    b.floor(-1.4, 5.0, 2.2, 10.5, 0.005, SURF.PUDDLE);
+    b.floor(7.0, -8.0, 12.0, 1.0, -0.945, SURF.PUDDLE);
 
-    // a strip of rotted carpet: the quiet road, if you find it
-    b.floor(-6.6, 9.0, -4.2, 19.5, 0.006, SURF.CARPET);
+    // A strip of rotted carpet running to the stairwell: the quiet road, for
+    // anyone who has worked out by now that there is such a thing.
+    b.floor(-6.6, 6.0, -4.2, 25.5, 0.006, SURF.CARPET);
 
     // benches
-    b.block(-5.4, -12, 1.5, 0.5, 0, 0.5, SURF.METAL);
-    b.block(-5.4, 2, 1.5, 0.5, 0, 0.5, SURF.METAL);
+    b.block(-5.4, -21, 1.5, 0.5, 0, 0.5, SURF.METAL);
+    b.block(-5.4, -3, 1.5, 0.5, 0, 0.5, SURF.METAL);
   },
   drips: [
-    // The opening line of the game, three metres in front of your face and
-    // timed to land before you have decided to move.
-    { x: 0.6, z: -14.4, y: 4.1, every: [3.6, 6.2], gain: 1.15, first: 0.85 },
-    { x: -1.0, z: -12.0, y: 4.1, every: [2.4, 4.0], gain: 0.9, first: 2.6 },
-    { x: 1.2, z: -5.0, y: 4.1, every: [2.8, 4.4], gain: 1.0, first: 5.0 },
-    { x: 0.5, z: 0.0, y: 4.1, every: [3.0, 5.2], gain: 1.0 },
-    { x: -2.0, z: 11.0, y: 4.1, every: [2.2, 3.6], gain: 1.1 },
-    { x: -2.4, z: 19.0, y: 3.0, every: [2.0, 3.2], gain: 1.2 },
+    // The opening line of the game: two and a half metres in front of your
+    // face, and timed to land before you have decided to move.
+    { x: 0.6, z: -23.4, y: 4.1, every: [3.6, 6.2], gain: 1.15, first: 0.85 },
+    { x: -1.0, z: -19.5, y: 4.1, every: [2.6, 4.2], gain: 0.9, first: 2.6 },
+    { x: 1.2, z: -12.0, y: 4.1, every: [2.8, 4.4], gain: 1.0, first: 5.4 },
+    { x: 0.5, z: -3.0, y: 4.1, every: [3.0, 5.2], gain: 1.0 },
+    { x: -2.0, z: 7.0, y: 4.1, every: [2.2, 3.6], gain: 1.1 },
+    { x: -2.4, z: 17.0, y: 4.1, every: [2.4, 3.8], gain: 1.1 },
+    { x: -4.4, z: 24.5, y: 4.1, every: [2.0, 3.2], gain: 1.2 },
   ],
   machines: [],
   enemies: [
-    { type: 'stalker', x: 9.5, z: -1, route: [[9.5, -13], [10.5, -17], [9.5, 6], [10.0, 13]] },
+    // Visible from the first second, slow to be sure, and slower still to run.
+    // You are meant to watch this one work before it ever works on you.
+    {
+      type: 'stalker', x: 9.5, z: -10,
+      route: [[9.5, -22], [10.5, -27], [9.5, 2], [10.0, 18]],
+      tune: { caution: 1.55, alertHold: 2.0, speedSearch: 1.25, speedHunt: 2.6, reach: 1.15 },
+    },
   ],
   trains: { every: [38, 70], gain: 0.85 },
-  par: [11, 24, 44],
+  par: [13, 28, 50],
   signature: 'the track bed — a metre-deep pit of ballast you can drop into and cannot leave quietly',
   hint: 'WALK. LISTEN. THE DRIPS GO NORTH.',
 };
