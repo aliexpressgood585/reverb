@@ -133,7 +133,7 @@ export class Enemy {
       surface: surf,
       silentToAI: true,
     });
-    this.glow = Math.min(1.5, this.glow + 0.9);
+    this.glow = Math.min(1.6, this.glow + 1.15);
   }
 
   update(dt, player) {
@@ -142,7 +142,7 @@ export class Enemy {
     this.memory -= dt;
     this.confidence = Math.max(0, this.confidence - dt * 0.16);
     this.attackCooldown -= dt;
-    this.glow = Math.max(0, this.glow - dt * 2.6);
+    this.glow = Math.max(0, this.glow - dt * 1.6);
 
     const cfg = this.cfg;
     let moving = false;
@@ -228,7 +228,7 @@ export class Enemy {
         gain: this.state === 'HUNT' ? 1.25 : 0.8,
         silentToAI: true,
       });
-      this.glow = Math.min(1.5, this.glow + 0.55);
+      this.glow = Math.min(1.6, this.glow + 0.7);
     }
 
     // Contact.

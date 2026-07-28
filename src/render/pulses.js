@@ -21,6 +21,7 @@ export class PulseField {
     this.pos = new Float32Array(MAX_PULSES * 3);
     this.data = new Float32Array(MAX_PULSES * 4);
     this.color = new Float32Array(MAX_PULSES * 3);
+    this.colorWorld = new Float32Array(MAX_PULSES * 3);
     this.ref = new Float32Array(MAX_PULSES).fill(2);
 
     // CPU-side bookkeeping, one entry per slot.
@@ -44,6 +45,7 @@ export class PulseField {
       uPulsePos: { value: this.pos },
       uPulseData: { value: this.data },
       uPulseColor: { value: this.color },
+      uPulseColorWorld: { value: this.colorWorld },
       uPulseRef: { value: this.ref },
       uPulseCount: { value: 0 },
     };
@@ -75,7 +77,8 @@ export class PulseField {
    * Spawn a wavefront.
    * @param {THREE.Vector3|{x,y,z}} p  origin in world space
    * @param {object} o
-   *   color      [r,g,b]
+   *   color      [r,g,b] as seen on living things
+   *   worldColor [r,g,b] as seen on walls and floors (defaults to `color`)
    *   power      peak brightness (also the "loudness" the AI hears)
    *   speed      metres per second of shell expansion
    *   life       seconds until the shell is gone
@@ -113,6 +116,13 @@ export class PulseField {
     this.color[i * 3] = c[0];
     this.color[i * 3 + 1] = c[1];
     this.color[i * 3 + 2] = c[2];
+
+    // A creature's footstep still lights the floor — but cold, like any other
+    // footstep. Warm colour is reserved for the creature itself.
+    const w = o.worldColor ?? c;
+    this.colorWorld[i * 3] = w[0];
+    this.colorWorld[i * 3 + 1] = w[1];
+    this.colorWorld[i * 3 + 2] = w[2];
 
     this.data[i * 4] = 0;
     this.data[i * 4 + 1] = power;

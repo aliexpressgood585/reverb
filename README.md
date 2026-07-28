@@ -399,6 +399,57 @@ What measurement still cannot tell me: whether any of it sounds *good*. The
 levels are right, the decay times are right, the image is wide, nothing clips.
 Whether the Screamer is frightening rather than merely loud is not a number.
 
+## Palette discipline, measured
+
+The rule is that warm colour means *alive*, and the first round of stills broke
+it badly: whole frames went amber whenever a creature moved nearby, because a
+creature's footstep pulse was lighting the floor and ceiling in rust orange. The
+creature stopped being the one warm object and became the least warm thing in a
+warm room.
+
+A pulse now carries **two** colours. `uPulseColor` is what it looks like on
+living things; `uPulseColorWorld` is what it looks like on walls and floors. For
+every sound a creature makes, the world-facing colour is cold white — a
+creature's footstep lights the floor exactly like anyone else's — while the
+creature itself stays rust. The player's heartbeat, which used to be blended a
+quarter of the way toward orange, is now pure cold white too.
+
+So the palette is now a hard invariant with one line each:
+
+| | |
+|---|---|
+| `#DCE3E8` cold white | you, and anything anything else set in motion |
+| `#1B6B7A` deep cyan | water, machinery, the building itself |
+| `#C4522A` rust orange | **alive**, and only ever on the living thing itself |
+
+`node scripts/palette-check.mjs` reads the rendered framebuffer and enforces it:
+it counts warm pixels (red clearly dominant), measures how tightly they cluster,
+and fails if warmth appears in a frame that has nothing alive in it.
+
+```
+== palette ===========================================
+scene                       warm%    cold%   black%   spread   verdict
+player alone, walking        0.01    29.18    69.08    0.031    ok 
+creature centre frame        0.41    21.75    77.47    0.047    ok 
+creature at frame edge       0.44    36.86    61.21    0.073    ok 
+gunshot                      0.08    92.71        0    0.374    ok 
+wounded, heartbeat              0     1.01    98.85        -    ok 
+
+ warm  = R-B > 24/255 and lit: reserved for living things
+ spread= std deviation of warm pixels / frame diagonal; small means one object
+
+======================================================
+palette: warm colour belongs to creatures only
+```
+
+A creature occupies well under half a percent of the frame and every warm pixel
+in the image belongs to it — the spread figure is the standard deviation of warm
+pixel positions over the frame diagonal, and 0.05 means one compact object. Push
+that creature out to the edge of vision and the numbers barely move, which is
+the peripheral-readability check: there is nothing else warm for it to compete
+with. A gunshot, the brightest moment in the game, measures 0.06% warm and 93%
+cold, so the flash reads as white rather than as fire.
+
 ## What was and was not verified
 
 `node scripts/capture.mjs` runs the built game in headless Chromium on a

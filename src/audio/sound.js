@@ -17,6 +17,16 @@ import { SURF, SURFACE_ACOUSTICS } from '../world/surfaces.js';
  * `sound.emit()` and gets audio, light and AI perception as one indivisible act.
  */
 
+// Colour rule, enforced here and nowhere else:
+//   cold white  = you, and anything you or anything else set in motion
+//   deep cyan   = water, machinery, the building itself
+//   rust orange = alive, and ONLY on the living thing itself
+//
+// A creature's footstep lights the floor cold, like any other footstep. If the
+// room went orange every time something walked in it, the creature would stop
+// being the one warm object in the frame and the whole read would collapse.
+const COLD_ECHO = [COLOR.STEP[0] * 0.62, COLOR.STEP[1] * 0.66, COLOR.STEP[2] * 0.70];
+
 const KINDS = {
   //            colour          power  ref   speed              life thick reveal loud
   step:      { color: COLOR.STEP,  power: 11.0, ref: 1.8,  speed: SPEED.STEP,    life: 1.5, thick: 0.11, reveal: 0.0, loud: 1.0 },
@@ -26,14 +36,14 @@ const KINDS = {
   drip:      { color: COLOR.WATER, power: 7.5,  ref: 2.8,  speed: SPEED.DRIP,    life: 2.4, thick: 0.09, reveal: 0.0, loud: 0.0 },
   shot:      { color: COLOR.SHOT,  power: 15.0, ref: 7.5, speed: SPEED.SHOT,    life: 1.7, thick: 0.30, reveal: 1.0, loud: 9.0 },
   dryfire:   { color: COLOR.STEP,  power: 3.0,  ref: 1.1,  speed: SPEED.STEP,    life: 1.0, thick: 0.08, reveal: 0.0, loud: 0.5 },
-  enemyStep: { color: COLOR.ENEMY, power: 5.0,  ref: 2.4,  speed: SPEED.ENEMY,   life: 1.6, thick: 0.13, reveal: 1.0, loud: 0.0 },
-  breath:    { color: COLOR.ENEMY, power: 3.4,  ref: 2.0,  speed: SPEED.ENEMY * 0.7, life: 2.4, thick: 0.17, reveal: 1.0, loud: 0.0 },
-  scream:    { color: COLOR.ENEMY, power: 13.0, ref: 6.5,  speed: SPEED.SCREAM,  life: 2.6, thick: 0.26, reveal: 1.0, loud: 0.0 },
+  enemyStep: { color: COLOR.ENEMY, worldColor: COLD_ECHO, power: 5.0,  ref: 2.4,  speed: SPEED.ENEMY,   life: 1.6, thick: 0.13, reveal: 1.0, loud: 0.0 },
+  breath:    { color: COLOR.ENEMY, worldColor: COLD_ECHO, power: 3.4,  ref: 2.0,  speed: SPEED.ENEMY * 0.7, life: 2.4, thick: 0.17, reveal: 1.0, loud: 0.0 },
+  scream:    { color: COLOR.ENEMY, worldColor: COLD_ECHO, power: 13.0, ref: 6.5,  speed: SPEED.SCREAM,  life: 2.6, thick: 0.26, reveal: 1.0, loud: 0.0 },
   machine:   { color: COLOR.WATER, power: 12.0, ref: 5.0,  speed: SPEED.MACHINE, life: 2.8, thick: 0.22, reveal: 0.35, loud: 0.0 },
   train:     { color: COLOR.WATER, power: 22.0, ref: 16.0, speed: SPEED.TRAIN,   life: 5.5, thick: 0.55, reveal: 0.6, loud: 0.0 },
   heart:     { color: COLOR.STEP,  power: 4.2,  ref: 1.7,  speed: SPEED.HEART,   life: 1.8, thick: 0.14, reveal: 0.0, loud: 0.55 },
-  hurt:      { color: COLOR.ENEMY, power: 14.0, ref: 5.0,  speed: SPEED.STEP,    life: 2.0, thick: 0.24, reveal: 0.8, loud: 2.5 },
-  kill:      { color: COLOR.ENEMY, power: 16.0, ref: 5.5,  speed: SPEED.ENEMY,   life: 2.4, thick: 0.26, reveal: 1.0, loud: 0.0 },
+  hurt:      { color: COLOR.ENEMY, worldColor: COLD_ECHO, power: 14.0, ref: 5.0,  speed: SPEED.STEP,    life: 2.0, thick: 0.24, reveal: 0.8, loud: 2.5 },
+  kill:      { color: COLOR.ENEMY, worldColor: COLD_ECHO, power: 16.0, ref: 5.5,  speed: SPEED.ENEMY,   life: 2.4, thick: 0.26, reveal: 1.0, loud: 0.0 },
   hum:       { color: COLOR.WATER, power: 4.6,  ref: 2.4,  speed: SPEED.DRIP * 0.7, life: 3.4, thick: 0.10, reveal: 0.0, loud: 0.0 },
   chime:     { color: COLOR.WATER, power: 8.0,  ref: 3.2,  speed: SPEED.DRIP,    life: 3.0, thick: 0.15, reveal: 0.0, loud: 0.0 },
 };
@@ -103,6 +113,7 @@ export class SoundWorld {
       speed: k.speed,
       life: k.life,
       thickness: k.thick,
+      worldColor: o.worldColor ?? k.worldColor,
       ref: k.ref,
       reveal: o.reveal ?? k.reveal,
       priority: power,

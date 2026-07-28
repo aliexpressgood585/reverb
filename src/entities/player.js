@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PLAYER, STEP_NOISE, COLOR } from '../core/config.js';
+import { PLAYER, STEP_NOISE } from '../core/config.js';
 import { SURFACE_ACOUSTICS } from '../world/surfaces.js';
 
 const FORWARD = new THREE.Vector3();
@@ -196,14 +196,11 @@ export class Player {
       this.heartTimer -= dt;
       if (this.heartTimer <= 0) {
         this.heartTimer = rate;
+        // Cold white, with no warm bias. Everything the player emits is the
+        // same colour; warmth means something else is in the room.
         this.world.sound.emit('heart', this.eyePosition(), {
           gain: 0.5 + wounded * 0.8,
           fromPlayer: true,
-          color: [
-            COLOR.STEP[0] * 0.75 + COLOR.ENEMY[0] * 0.25,
-            COLOR.STEP[1] * 0.72,
-            COLOR.STEP[2] * 0.72,
-          ],
           panner: { refDistance: 0.4, rolloff: 0.2 },
         });
       }

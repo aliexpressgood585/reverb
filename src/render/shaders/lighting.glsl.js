@@ -12,7 +12,8 @@ export const PULSE_UNIFORMS_GLSL = /* glsl */ `
 
 uniform vec3  uPulsePos[MAX_PULSES];
 uniform vec4  uPulseData[MAX_PULSES];   // x radius, y intensity, z thickness, w entity-reveal
-uniform vec3  uPulseColor[MAX_PULSES];
+uniform vec3  uPulseColor[MAX_PULSES];      // as seen on living things
+uniform vec3  uPulseColorWorld[MAX_PULSES]; // as seen on walls and floors
 uniform float uPulseRef[MAX_PULSES];    // reference distance for the 1/r² falloff
 uniform int   uPulseCount;
 
@@ -95,7 +96,11 @@ void gatherLit(vec3 P, vec3 N, vec3 V, float gloss, float revealGate,
     float occ = occlusion(P, uPulsePos[i]);
 
     float falloff = atten * intensity * gate * occ;
-    vec3 energy = uPulseColor[i] * (shell * falloff);
+    // The one warm thing in any frame is a creature. Its footsteps light the
+    // floor like anyone else's — cold — so that an orange silhouette never has
+    // to compete with an orange room.
+    vec3 tint = mix(uPulseColorWorld[i], uPulseColor[i], revealGate);
+    vec3 energy = tint * (shell * falloff);
 
     // Soft wrap: a surface edge-on to the wave still catches it, a surface
     // facing away from it stays black. No 'ambient floor' anywhere.
@@ -107,7 +112,7 @@ void gatherLit(vec3 P, vec3 N, vec3 V, float gloss, float revealGate,
       float sh = 20.0 + gloss * 260.0;
       // Built from the shell body only — the filament belongs to the diffuse
       // line, and letting it into the specular lobe turns water into lava.
-      spec += uPulseColor[i] * (s * s * 0.9 * falloff)
+      spec += tint * (s * s * 0.9 * falloff)
             * pow(max(dot(N, H), 0.0), sh) * gloss * 0.85;
     }
   }

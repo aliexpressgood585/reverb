@@ -58,12 +58,12 @@ void main() {
   float flicker = 0.80 + 0.20 * vnoise(vec2(uTime * 7.0, vLocal.y * 3.0));
   // Almost all of the light a body gives off sits on its outline. Filling the
   // interior turns a creature into a cardboard cut-out.
-  vec3 self = uTint * uGlow * (0.035 + fres * fres * 3.2) * flicker;
+  vec3 self = uTint * uGlow * (0.16 + fres * fres * 3.4) * flicker;
 
   // Break up the flat faces. Without this a body is a solid orange slab, which
   // reads as a placeholder rather than as something that has been down here.
-  float grime = 0.52 + 0.48 * fbm(vLocal.xy * 7.0 + vLocal.zx * 3.4);
-  float bands = 0.86 + 0.14 * sin(vLocal.y * 41.0);
+  float grime = 0.70 + 0.30 * fbm(vLocal.xy * 7.0 + vLocal.zx * 3.4);
+  float bands = 0.91 + 0.09 * sin(vLocal.y * 41.0);
 
   vec3 col = (self + diffuse * 0.42 + spec * 0.45) * grime * bands;
 
