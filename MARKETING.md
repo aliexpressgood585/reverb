@@ -125,8 +125,8 @@ with one eye closed.
 
 ### Screenshot order for the store page
 
-1. `04-walking` — the wavefront line sweeping the platform tile, a creature far
-   down the track bed in its own orange rings
+1. `00-platform` — seven drips running away down the deck in cyan, your own
+   footstep in cold white at your feet, one creature on the track bed
 2. `08-enemy` — a Stalker caught mid-stride, hunched, lit only by the noise it
    is making
 3. `10-the-deep` — a gunshot opening the causeway, black water either side,
