@@ -34,12 +34,13 @@ export class Screens {
       </div>`;
   }
 
-  showLevelIntro(def) {
+  /** `resumed` is the checkpoint's line when you are coming back to a mark. */
+  showLevelIntro(def, resumed = null) {
     this.root.className = 'on card';
     this.root.innerHTML = `
       <p class="idx">${String(def.id).padStart(2, '0')} / 05</p>
       <h2>${def.name}</h2>
-      <p class="tag">${def.line}</p>
+      <p class="tag">${resumed ?? def.line}</p>
       <p class="hint">${def.hint}</p>`;
   }
 
@@ -57,12 +58,12 @@ export class Screens {
       <p class="go">${r.last ? 'PRESS ENTER' : 'PRESS ENTER TO DESCEND'}</p>`;
   }
 
-  showDeath() {
+  showDeath(fromMark = false) {
     this.root.className = 'on card dead';
     this.root.innerHTML = `
       <h2>IT FOUND YOU</h2>
       <p class="tag">something you did made a sound</p>
-      <p class="go">PRESS ENTER TO TRY AGAIN</p>`;
+      <p class="go">${fromMark ? 'PRESS ENTER TO GO BACK TO THE MARK' : 'PRESS ENTER TO TRY AGAIN'}</p>`;
   }
 
   showEnding() {

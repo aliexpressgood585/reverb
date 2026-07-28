@@ -239,6 +239,10 @@ const TUNNEL = {
     { type: 'sentinel', x: -1.2, z: 30, facing: Math.PI },
   ],
   trains: { every: [30, 55], gain: 1.15 },
+  // Past the second Sentinel, drawn across the full width of the bore. Eighty
+  // metres of ballast is a long way to be sent back through for a mistake made
+  // at the far end of it.
+  checkpoint: { x0: -7, z0: 13, x1: 7, z1: 15, line: 'THIS FAR IS YOURS NOW' },
   par: [38, 64, 100],
   signature: 'the alcoves — five carpeted holes in the wall, the only silent ground in eighty metres',
   hint: 'BALLAST IS THE LOUDEST GROUND IN THE STATION.',
@@ -317,6 +321,11 @@ const MAINTENANCE = {
     { type: 'sentinel', x: 0, z: -1, facing: Math.PI * 0.5 },
   ],
   trains: { every: [50, 90], gain: 0.6 },
+  // East of the Sentinel, drawn the full depth of the level. Not a spot on the
+  // spine: the plant-room dividers stop a metre short of the outer walls, so
+  // there is a service gap along the north and south edges that walks straight
+  // past anything smaller than this.
+  checkpoint: { x0: 12, z0: -18, x1: 14, z1: 20, line: 'THIS FAR IS YOURS NOW' },
   par: [21, 42, 72],
   signature: 'noise cover — while a machine is running, what you do inside its racket barely reaches anything',
   hint: 'THE PLANT IS ON A CLOCK. YOU ARE NOT.',
@@ -371,6 +380,10 @@ const DEEP = {
     { type: 'sentinel', x: 3.6, z: -12, facing: 0 },
   ],
   trains: { every: [28, 48], gain: 1.5 },
+  // Dead centre of the descent, on the line of the carpet — the one patch of
+  // quiet ground in the level. Nothing here stops sound and nothing here stops
+  // walking either, so the band has to span the whole hall.
+  checkpoint: { x0: -42, z0: 5, x1: 42, z1: 8, line: 'THIS FAR IS YOURS NOW' },
   par: [20, 42, 74],
   // No partitions means no occlusion, so a noise made anywhere is a noise made
   // everywhere. This is the number that makes THE DEEP frightening.

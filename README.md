@@ -51,7 +51,7 @@ without it the game is, quite literally, unplayable.
 | Left mouse | fire |
 | `P` | photo mode: hides the interface, grabs a high-resolution still |
 | `M` | mute |
-| `R` | restart the level |
+| `R` | restart the level from the top — this gives up the mark |
 
 No crosshair. It is not an oversight.
 
@@ -68,6 +68,12 @@ No crosshair. It is not an oversight.
 Each level ends on a black card: your time, how many shots you fired, and how
 much total noise you made. Clear a level without firing and stay under the noise
 threshold and it reads `UNHEARD`.
+
+The last three are long enough that dying at the far end of one used to cost the
+whole descent, so each has a single mark somewhere across the middle. Cross it
+and the building sounds a note. Die after that and you come back to it with your
+body repaired — and with the clock, the shots and the noise exactly where you
+left them.
 
 ---
 
@@ -172,6 +178,25 @@ They are **not lit by your footsteps**. `uPulseData[i].w` gates whether a pulse
 touches a living body, and only gunfire, screams and the train set it. The rest
 of the time a creature is visible only through its own `uGlow`, which is driven
 by the noise it is making right now. A standing enemy is completely invisible.
+
+They walk on a navigation grid (`src/world/nav.js`), baked at level load from the
+same floors and walls the collision pass uses — 0.25 m cells, A\* with a
+line-of-walk shortcut, string-pulled so a straight run stays straight. Three
+things about it are deliberate:
+
+- **Blocking is generous rather than conservative.** A cell dies only within
+  0.22 m of a partition, which is closer than a body actually fits. TURNSTILES
+  has 0.775 m gaps between a stall and a full-height divider; a grid eroded by
+  the true 0.35 m body radius would call the hall impassable and quietly make
+  the level easier. The path may hug a wall, and the collision slide that was
+  always there handles the last few centimetres.
+- **Tightness is a cost, not a wall.** Cells with under 0.6 m of clearance cost
+  up to twice as much to cross, so a creature takes the middle of a corridor
+  when there is a middle and squeezes the gate when there is not.
+- **The grid is advisory.** Every path ends in the same straight-line move that
+  preceded it, and a failed or exhausted path falls back to it, so the worst
+  case is the old behaviour exactly. A leg that stops shortening is abandoned
+  rather than ground against.
 
 - **Stalker** — patrols, chases, ordinary and therefore the one you will meet most.
 - **Screamer** — when it locks on it screams, which lights half the level orange
@@ -519,6 +544,97 @@ visually distinct (diamond tread that catches a passing wavefront) and 1.7×
 louder underfoot — which is what makes its machine cover worth using instead of
 merely available. Its noise par moved from 15/32/58 to 21/42/72 to match.
 
+## Navigation, measured
+
+Enemy movement used to be a straight line at the last sound with wall sliding.
+The reason that survived so long is that it looks correct in four levels out of
+five: PLATFORM, TURNSTILES and THE TUNNEL are effectively corridors, and THE
+DEEP is a hall. It is only in MAINTENANCE — six plant rooms off one spine —
+that a creature can hear you through a wall and spend the rest of the level
+grinding against it.
+
+`node scripts/hunt-check.mjs` locks every creature in every level into `HUNT`
+with the player's spawn as its target, gives it thirty seconds, and records how
+close it got. Then it does the whole run again with `level.nav` cleared, which
+falls back through the same code path to exactly the old behaviour. The two
+columns are the same build, five minutes apart:
+
+```
+                                        straight line        grid
+MAINTENANCE  screamer  from 4,8              19.70m    →    0.20m
+             stalker   from 18,-8            26.35m    →    0.20m
+             sentinel  from 0,-1             10.35m    →    0.24m
+THE DEEP     screamer  from 0,6              17.10m    →    0.22m
+```
+
+Four of seventeen creatures could not previously walk to the player's own spawn
+point. The other thirteen are unchanged to within two centimetres, which is the
+result worth having: the grid does not make the open levels behave differently,
+it makes the cellular one behave at all.
+
+`node scripts/nav-check.mjs` runs the same bake in plain Node — no browser, no
+GPU, under a second for all five levels — and asks the structural questions:
+
+```
+PLATFORM      grid  89×265   17621 cells (1101 m²)   1 component   0.27ms / plan
+TURNSTILES    grid 137×169   16751 cells (1047 m²)   1 component   0.75ms / plan
+THE TUNNEL    grid  58×337    9326 cells ( 583 m²)   1 component   0.16ms / plan
+MAINTENANCE   grid 193×161   25116 cells (1570 m²)   1 component   1.59ms / plan
+THE DEEP      grid 345×345  110788 cells (6924 m²)   1 component   0.60ms / plan
+```
+
+Every patrol leg and every creature-to-player walk exists; every level is one
+connected place; the worst plan in the game costs 1.6 ms and most requests never
+reach the search at all, because a clear line of walk answers them first.
+
+**The first thing this check caught was a level bug, not a creature bug.** THE
+TUNNEL's five maintenance alcoves — the level's whole signature, "the only
+silent ground in eighty metres" — were sealed. Both side walls were emitted as
+one segment running the full eighty-two metres, straight across every alcove
+mouth, so the carpeted recesses behind them could not be entered by anything.
+The walkable set came back as six components; five of them were alcoves. They
+are now cut with a mouth each and a lintel above 2.5 m that is marked
+acoustically transparent, because standing in one and still hearing the tunnel
+is the point.
+
+That is the argument for measuring connectivity rather than eyeballing a level:
+the geometry rendered correctly, the stills looked right, and nobody could get
+in.
+
+## Checkpoints
+
+Dying in THE DEEP used to cost the whole descent. That is a fine amount of
+tension right up until it is eighty metres of walking you have already proved
+you can do, so THE TUNNEL, MAINTENANCE and THE DEEP each have one mark.
+
+It is a **band drawn across the level, not a spot**, and that was a correction
+rather than a first instinct. The first version was a disc in the middle of
+MAINTENANCE's spine, which looked unavoidable — every plant room is a dead end
+and the dividers are full height. The check disagreed: the dividers stop a metre
+short of the outer walls, leaving a service gap along the north and south edges
+that walks straight past. `nav-check.mjs` deletes the checkpoint from the
+walkable set and asserts the exit goes unreachable, so a mark that can be missed
+fails the build.
+
+What a death costs you, and what it does not:
+
+| | |
+|---|---|
+| position | back on the mark, facing where you were facing |
+| health | full |
+| ammunition, stones | restored |
+| the clock | keeps running |
+| shots fired | carried over |
+| noise made | carried over |
+
+Death costs you the ground between here and there. It does not launder the
+grade — you cannot farm a clean `UNHEARD` by dying after a bad gunshot.
+
+The mark announces itself the only way anything in this game is allowed to: by
+making a sound, which makes a light. It is a cyan chime, because this is the
+building speaking rather than you, and it is inaudible to the creatures, because
+a checkpoint that gets you killed is not a checkpoint.
+
 ## The first sixty seconds, measured
 
 Nobody reads instructions. A player who has read nothing has to work out, inside
@@ -624,19 +740,26 @@ frames, sharp lines rather than blurry spheres, white next to absolute black,
 orange that separates instantly from the background, and no rectangular
 interface furniture anywhere.
 
-### The five checks
+### The seven checks
 
-Everything above is enforced by a script that exits non-zero. Running all five
+Everything above is enforced by a script that exits non-zero. Running all seven
 takes about twenty minutes under software rasterisation and is the whole of the
 test suite:
 
 | | |
 |---|---|
-| `node scripts/smoke.mjs` | the real state machine, then all five levels driven with input: no creature embedded in a wall, every exit resolves, no page or shader error |
+| `node scripts/smoke.mjs` | the real state machine, then all five levels driven with input: no creature embedded in a wall, every exit resolves, the mark is taken and returned to, no page or shader error |
+| `node scripts/nav-check.mjs` | the navigation bake, in plain Node: every patrol leg and creature-to-player walk exists, each level is one connected place, each checkpoint band is unavoidable, worst plan under 8 ms |
+| `node scripts/hunt-check.mjs` | every creature locked into HUNT for thirty seconds, run twice — with the grid and with `level.nav` cleared, which is the old straight-line behaviour exactly |
 | `node scripts/audio-check.mjs` | every voice rendered offline through the real graph: loudness hierarchy, RT60 per level, C50 clarity, stereo separation, clipping |
 | `node scripts/palette-check.mjs` | the framebuffer: how much of a frame is warm, how tightly it clusters, how much is true black |
 | `node scripts/level-contrast.mjs` | three stills per level plus a signature each; fails if two levels agree on openness, ceiling and ground |
 | `node scripts/first-minute.mjs` | the game from the title screen with a naive player's input; fails if a lesson lands late |
+
+The two navigation checks are the only ones that do not need a GPU;
+`nav-check.mjs` runs the real level builder in Node and finishes in under a
+second, which makes it the cheapest way to find out that a level has stopped
+being one place.
 
 Plus `node scripts/capture.mjs` for the marketing stills and
 `node scripts/reshoot.mjs <n>` to re-take one of them without paying for the set.
@@ -671,10 +794,15 @@ itself defaults to a 2048 atlas and 4× MSAA.
 
 ## What is left to improve
 
-- **Enemy pathfinding is a straight line** toward the last sound, with wall
-  sliding. In THE DEEP that is fine because it is open. In MAINTENANCE they can
-  press themselves into a corner of a plant room. A coarse navigation grid over
-  the same occupancy field would fix it cheaply.
+- **The navigation grid is flat.** It knows floors and partitions and nothing
+  about height, so PLATFORM's track bed is walkable ground continuous with the
+  deck — which is true, but only because the lip happens to be a step rather
+  than a drop. A level with a real ledge would need a per-cell height and a
+  traversal cost for the climb.
+- **Creatures do not avoid each other.** Two Stalkers converging on the same
+  sound will walk through one another; there is no separation force and no
+  reservation on the grid. In a corridor this reads as one creature with a
+  doubled silhouette, which is the one place it is visible.
 - **The occlusion grid is 2D.** Sound treats a knee-high barrier and a full
   partition identically as long as both are stamped. Storing a height per cell
   and comparing against the source and receiver heights would be a small change
@@ -687,9 +815,11 @@ itself defaults to a 2048 atlas and 4× MSAA.
   levels with room to spare, but a level twice the size of THE DEEP would start
   losing texel density. Add `?lm=4096` on the URL to raise it (and `?lm=1024&msaa=0`
   to lower everything for slow hardware — that is what the capture rig uses).
-- **No mid-level checkpoints.** Dying in THE DEEP costs you the whole descent.
-  That is deliberate for a game about tension, and it is also the first thing I
-  would playtest.
+- **One mark per level, and its placement is unplaytested.** THE TUNNEL,
+  MAINTENANCE and THE DEEP each have a single checkpoint band, proven
+  unavoidable but positioned by looking at the map rather than by dying in the
+  wrong place repeatedly. Whether the second half of THE DEEP wants a mark of
+  its own is a question for a player, not for a script.
 - **No mobile support.** It needs a keyboard, a mouse and a real GPU.
 
 ---
@@ -700,7 +830,8 @@ itself defaults to a 2048 atlas and 4× MSAA.
 src/
   core/       config, input, the game loop and world queries
   render/     pulse pool, materials, light memory, post chain, GLSL chunks
-  world/      quad-based level builder, atlas packer, occlusion bake, the 5 levels
+  world/      quad-based level builder, atlas packer, occlusion bake,
+              navigation bake, the 5 levels
   audio/      Web Audio graph, procedural IR, synthesised voices, the emit contract
   entities/   player, the three creatures, their bodies, the stone
   ui/         the arc, the cards, the stylesheet

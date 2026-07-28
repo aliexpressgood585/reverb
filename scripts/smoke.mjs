@@ -109,6 +109,72 @@ for (let lvl = 0; lvl < 5; lvl++) {
   if (after !== 'results') problems.push(`L${lvl + 1}: exit did not resolve (state=${after})`);
 }
 
+// --- the mark: take it, die, and come back to it ----------------------------
+for (const lvl of [2, 3, 4]) {
+  const r = await ev((l) => {
+    const g = window.REVERB;
+    g.debugEnter(l, {});
+    const c = g.level.def.checkpoint;
+    // Stand on real ground inside the band and let a frame notice. The centre
+    // of MAINTENANCE's band is the spine wall itself, so ask the navigation
+    // bake for somewhere a body actually fits rather than assuming.
+    const nav = g.level.nav;
+    let px = (c.x0 + c.x1) / 2;
+    let pz = (c.z0 + c.z1) / 2;
+    if (!nav.openAt(px, pz)) {
+      search:
+      for (let z = c.z0; z <= c.z1; z += 0.25) {
+        for (let x = c.x0; x <= c.x1; x += 0.25) {
+          if (nav.openAt(x, z)) { px = x; pz = z; break search; }
+        }
+      }
+    }
+    g.player.position.x = px;
+    g.player.position.z = pz;
+    g.player.shots = 2;
+    g.sound.noiseScore = 17.5;
+    g.frame();
+    const took = !!g.checkpoint;
+    // Whatever the mark actually captured is the contract. A creature can
+    // reach you inside that frame — THE DEEP's Screamer patrols across the
+    // band — and its hit adds hurt-noise before the mark is taken.
+    const mark = took ? { ...g.checkpoint } : null;
+
+    // That same hit also leaves a mercy window, which would swallow the
+    // killing blow below and leave the run alive.
+    g.player.invuln = 0;
+    g.player.hurt(99, g.player.position);
+    const died = g.state === 'dead';
+    g.deadTime = 2;
+    g.input.synth('confirm', true);
+    g.frame();
+    g.input.synth('confirm', false);
+
+    return {
+      level: g.level.def.name,
+      took, died, mark,
+      backAt: [+g.player.position.x.toFixed(2), +g.player.position.z.toFixed(2)],
+      at: [+mark.x.toFixed(2), +mark.z.toFixed(2)],
+      health: g.player.health,
+      shots: g.player.shots,
+      noise: +g.sound.noiseScore.toFixed(2),
+    };
+  }, lvl);
+  console.log('mark', JSON.stringify({ ...r, mark: undefined }));
+  if (!r.took) problems.push(`${r.level}: standing on the checkpoint band did not take the mark`);
+  if (!r.died) problems.push(`${r.level}: fatal damage did not reach the death screen`);
+  if (r.backAt[0] !== r.at[0] || r.backAt[1] !== r.at[1]) {
+    problems.push(`${r.level}: resumed at ${r.backAt} rather than the mark at ${r.at}`);
+  }
+  if (r.health !== 3) problems.push(`${r.level}: resumed on ${r.health} health`);
+  // The shots you fired and the noise you made survive the death exactly.
+  if (r.mark.shots !== 2) problems.push(`${r.level}: the mark recorded ${r.mark.shots} shots, not 2`);
+  if (r.mark.noise < 17.5) problems.push(`${r.level}: the mark recorded ${r.mark.noise} noise, under the 17.5 already made`);
+  if (r.shots !== r.mark.shots || Math.abs(r.noise - r.mark.noise) > 0.01) {
+    problems.push(`${r.level}: death laundered the score (shots ${r.shots} vs ${r.mark.shots}, noise ${r.noise} vs ${r.mark.noise})`);
+  }
+}
+
 // --- the rendering path, once, with the GPU back on -------------------------
 await ev(() => { window.REVERB.setHeadlessLogicOnly(false); window.REVERB.debugEnter(0, {}); });
 await run(6);

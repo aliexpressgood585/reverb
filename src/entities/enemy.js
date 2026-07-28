@@ -163,8 +163,11 @@ export class Enemy {
 
     this.pathTimer -= dt;
     const moved = Math.hypot(dst.x - this.goalX, dst.z - this.goalZ) > 0.9;
-    if (moved || this.pathTimer <= 0 || this.pathAt >= this.pathN) {
-      this.pathTimer = 0.45;
+    // A plan that came back empty is not re-asked every frame; the timer is the
+    // retry, and until it fires the fallback below does the walking.
+    if (moved || this.pathTimer <= 0 || (this.pathN > 0 && this.pathAt >= this.pathN)) {
+      // Kept off a round number so six creatures stay permanently out of phase.
+      this.pathTimer = 0.42 + (this.id % 7) * 0.02;
       this.goalX = dst.x;
       this.goalZ = dst.z;
       this.pathN = nav.path(

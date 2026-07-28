@@ -114,7 +114,16 @@ export class Game {
 
   // ------------------------------------------------------------------ levels
 
-  loadLevel(i) {
+  /**
+   * @param {?object} resume  a mark taken earlier in this level. Dying in THE
+   *   DEEP used to cost the whole descent, which is a fine amount of tension
+   *   right up until it is eighty metres of walking you have already proved you
+   *   can do. A resume puts you back on the mark with your body repaired and
+   *   your resupply intact — and with the noise you made, the shots you fired
+   *   and the clock all exactly where you left them. Death costs you the
+   *   ground between here and there; it does not launder the grade.
+   */
+  loadLevel(i, resume = null) {
     this.levelIndex = Math.max(0, Math.min(LEVELS.length - 1, i));
     const def = LEVELS[this.levelIndex];
 
@@ -161,15 +170,22 @@ export class Game {
       ? def.trains.every[0] * 0.5 + Math.random() * def.trains.every[0]
       : Infinity;
 
-    this.player.spawn(def.spawn.x, def.spawn.z, def.spawn.yaw);
+    const at = resume ?? def.spawn;
+    this.player.spawn(at.x, at.z, at.yaw ?? def.spawn.yaw);
     this.levelTime = 0;
+    this.checkpoint = resume;
+    if (resume) {
+      this.levelTime = resume.time;
+      this.player.shots = resume.shots;
+      this.sound.noiseScore = resume.noise;
+    }
     this.settleTimer = 4 + Math.random() * 4;
     this.humTimer = 1.5 + Math.random() * 2.5;
     this.triggerState = (def.triggers ?? []).map(() => ({ inside: false, firedAt: -99 }));
 
     this.state = 'intro';
     this.introTime = 0;
-    this.screens.showLevelIntro(def);
+    this.screens.showLevelIntro(def, resume ? def.checkpoint.line : null);
   }
 
   /** Begin a fresh run from the first level. */
@@ -288,7 +304,7 @@ export class Game {
   onPlayerDeath() {
     this.state = 'dead';
     this.deadTime = 0;
-    this.screens.showDeath();
+    this.screens.showDeath(!!this.checkpoint);
   }
 
   // -------------------------------------------------------------- simulation
@@ -443,6 +459,38 @@ export class Game {
     this.stoneMaterial.uniforms.uGlow.value = 0.25;
   }
 
+  /**
+   * The mark. One per level from THE TUNNEL down.
+   *
+   * It is a band drawn right across the level rather than a spot, because a
+   * spot can be walked around — MAINTENANCE turned out to have a second route
+   * east along a one-metre service gap behind the plant rooms, which a disc at
+   * the middle of the spine missed entirely. A band the full depth of the level
+   * cannot be missed, and `scripts/nav-check.mjs` proves it by deleting the
+   * band and checking the exit goes unreachable.
+   *
+   * You resume standing where you actually crossed it. It announces itself the
+   * only way anything in this game is allowed to: by making a sound, which
+   * makes a light. Cyan, because this is the building speaking and not you —
+   * and inaudible to the creatures, because a checkpoint that gets you killed
+   * is not a checkpoint.
+   */
+  _checkpoint() {
+    const c = this.level.def.checkpoint;
+    if (!c || this.checkpoint) return;
+    const p = this.player.position;
+    if (p.x < c.x0 || p.x > c.x1 || p.z < c.z0 || p.z > c.z1) return;
+    this.checkpoint = {
+      x: p.x, z: p.z, yaw: this.player.yaw,
+      time: this.levelTime,
+      shots: this.player.shots,
+      noise: this.sound.noiseScore,
+    };
+    this._tmpA.set(p.x, p.y + 1.2, p.z);
+    this.sound.emit('chime', this._tmpA, { gain: 0.85 });
+    this.hud.flashLine(c.line);
+  }
+
   _checkExit() {
     const ex = this.level.def.exit;
     const d = Math.hypot(this.player.position.x - ex.x, this.player.position.z - ex.z);
@@ -548,7 +596,7 @@ export class Game {
         if (this.deadTime > 1.2 && (input.consume('confirm') || input.consume('restart') || input.mouse.fired)) {
           input.takeMouse();
           this.screens.hide();
-          this.loadLevel(this.levelIndex);
+          this.loadLevel(this.levelIndex, this.checkpoint);
         }
         break;
     }
@@ -571,6 +619,7 @@ export class Game {
     this._ambience(dt);
     this._updateStones(dt);
     for (const e of this.enemies) e.update(dt, this.player);
+    this._checkpoint();
     this._checkExit();
 
     this.hud.update({

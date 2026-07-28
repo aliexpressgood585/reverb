@@ -82,6 +82,50 @@ for (const def of LEVELS) {
     }
   }
 
+  // A checkpoint you can walk past is not a checkpoint. Delete the disc from
+  // the walkable set and ask whether the exit is still reachable: if it is,
+  // there is a route that skips the mark and a player can lose the whole level
+  // to a death they had already earned their way past.
+  const cp = def.checkpoint;
+  if (cp) {
+    const open2 = Uint8Array.from(nav.open);
+    let band = 0;
+    for (let cz = 0; cz < nav.nz; cz++) {
+      for (let cx = 0; cx < nav.nx; cx++) {
+        const i = cz * nav.nx + cx;
+        if (open2[i] !== 1) continue;
+        const x = nav.centreX(i), z = nav.centreZ(i);
+        if (x >= cp.x0 && x <= cp.x1 && z >= cp.z0 && z <= cp.z1) { open2[i] = 0; band++; }
+      }
+    }
+    if (band === 0) problems.push(`${def.name}: the checkpoint band covers no standable ground`);
+    const seen = new Uint8Array(open2.length);
+    const stack = [nav.snap(spawn.x, spawn.z)];
+    seen[stack[0]] = 1;
+    let bypass = false;
+    const goal = nav.snap(exit.x, exit.z);
+    while (stack.length) {
+      const cur = stack.pop();
+      if (cur === goal) { bypass = true; break; }
+      const cxi = cur % nav.nx, czi = (cur / nav.nx) | 0;
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const sx = cxi + dx, sz = czi + dz;
+          if (sx < 0 || sz < 0 || sx >= nav.nx || sz >= nav.nz) continue;
+          const ni = sz * nav.nx + sx;
+          if (open2[ni] !== 1 || seen[ni]) continue;
+          seen[ni] = 1;
+          stack.push(ni);
+        }
+      }
+    }
+    console.log(
+      `  checkpoint band x ${cp.x0}..${cp.x1}, z ${cp.z0}..${cp.z1} — ${band} cells of ground — ` +
+      `${bypass ? 'CAN BE WALKED PAST' : 'unavoidable on the way to the exit'}`
+    );
+    if (bypass) problems.push(`${def.name}: the exit can be reached without crossing the checkpoint`);
+  }
+
   // Cost: the worst honest request in this level, corner to opposite corner.
   const corners = [
     { x: built.bounds.min.x + 1, z: built.bounds.min.z + 1 },

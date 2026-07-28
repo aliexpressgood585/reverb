@@ -44,6 +44,11 @@ export class Player {
     this.stones = 6;
     this.shots = 0;
     this.strideAccum = 0;
+    // Carrying the last life's mercy window into this one meant a respawn could
+    // begin briefly unkillable, and the wound tint could survive the reload.
+    this.invuln = 0;
+    this.hurtFlash = 0;
+    this.heartTimer = 1.2;
   }
 
   look(dx, dy) {
