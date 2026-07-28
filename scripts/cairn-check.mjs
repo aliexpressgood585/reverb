@@ -159,7 +159,52 @@ if (good.unreachable > 0 || bad.unreachable > 0) {
   problems.push(`${good.unreachable + bad.unreachable} generated gaps need more than full power`);
 }
 
-// 4 — the loop actually renders on a phone-shaped viewport
+// 4 — THE ARC MUST NOT LIE
+//
+// In a precision jumper, an aim line that disagrees with the physics does not
+// read as a bad aim line — it reads as bad controls, and every death feels
+// like the game cheated rather than like you missed. Playtest verdict on the
+// first build was exactly that: "the jumps are not accurate."
+await page.reload({ waitUntil: 'load' });
+await page.waitForFunction(() => !!window.CAIRN);
+const aim = await page.evaluate(() => {
+  const G = window.CAIRN;
+  const { state, step, predict } = G;
+  G.begin();
+  const errs = [];
+  let missed = 0;
+  let seed = 999;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return (seed % 1000) / 1000; };
+
+  for (let n = 0; n < 120; n++) {
+    const v = { vx: (rnd() - 0.5) * 22, vy: 6 + rnd() * 13 };
+    const said = predict(v, []);
+    state.vx = v.vx; state.vy = v.vy;
+    state.airborne = true;
+    state.takeoff = state.y;
+    state.peakX = state.x; state.peakY = state.y;
+    const from = state.standing;
+    for (let f = 0; f < 900 && state.airborne; f++) step(1 / 60);
+    const didLand = state.standing !== from;
+    if (!said && !didLand) continue;          // both agree: this one falls
+    if (!said || !didLand) { missed++; continue; }
+    errs.push(Math.hypot(said.x - state.x, said.y - state.y));
+  }
+  errs.sort((a, b) => a - b);
+  return {
+    n: errs.length,
+    median: +(errs[errs.length >> 1] ?? 0).toFixed(4),
+    worst: +(errs[errs.length - 1] ?? 0).toFixed(4),
+    disagreed: missed,
+  };
+});
+console.log(`aim line vs physics  ${aim.n} landings, median error ` +
+  `${(aim.median * 100).toFixed(1)}cm, worst ${(aim.worst * 100).toFixed(1)}cm, ` +
+  `${aim.disagreed} outright disagreements`);
+if (aim.worst > 0.05) problems.push(`the aim line is off by up to ${(aim.worst * 100).toFixed(0)}cm — it is lying to the player`);
+if (aim.disagreed > 0) problems.push(`${aim.disagreed} jumps landed somewhere the aim line did not predict at all`);
+
+// 5 — the loop actually renders on a phone-shaped viewport
 await page.reload({ waitUntil: 'load' });
 await page.waitForFunction(() => !!window.CAIRN);
 await page.evaluate(() => window.CAIRN.begin());

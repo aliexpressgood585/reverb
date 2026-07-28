@@ -230,16 +230,22 @@ const state = {
   spin: 0,
 };
 
-// The aim line: sixteen dots on the arc you are about to fly. It is the whole
+// The aim line: the arc you are actually about to fly, sampled from the real
+// integrator, plus a flat mark on the surface it ends on. It is the whole
 // tutorial — you see the consequence before you commit to it.
+const arc = [];
 const dots = [];
-for (let i = 0; i < 16; i++) {
+for (let i = 0; i < 40; i++) {
   const d = new THREE.Mesh(BOX, matLive);
-  d.scale.setScalar(0.11 - i * 0.004);
+  d.scale.setScalar(0.1);
   d.visible = false;
   scene.add(d);
   dots.push(d);
 }
+const landMark = new THREE.Mesh(BOX, new THREE.MeshBasicMaterial({ color: COLOR.live }));
+landMark.scale.set(1.05, 0.06, 1.05);
+landMark.visible = false;
+scene.add(landMark);
 
 function restart() {
   const from = state.standing ?? solids[0];
@@ -334,6 +340,7 @@ function onUp() {
   if (!aiming) return;
   aiming = false;
   for (const d of dots) d.visible = false;
+  landMark.visible = false;
   const v = aimVector();
   if (!v) return;
   state.vx = v.vx;
@@ -371,49 +378,104 @@ function resize() {
 }
 addEventListener('resize', resize);
 
+/**
+ * One tick of flight, and the ONLY place flight is integrated.
+ *
+ * The preview and the real jump call this same function, because a trajectory
+ * line computed a second way is a trajectory line that lies. The first version
+ * drew the arc from the closed-form parabola, offset 0.7 m above the feet,
+ * while the jump itself ran semi-implicit Euler from the feet — so the dots
+ * showed a flight the player was never going to take. It read exactly as it
+ * was described in testing: "the jumps are not accurate."
+ */
+function flight(p, dt) {
+  p.py = p.y; p.px = p.x;
+  p.vy += GRAVITY * dt;
+  p.x += p.vx * dt;
+  p.y += p.vy * dt;
+}
+
+/** The highest thing the segment (px,py)->(x,y) fell through. */
+function surfaceUnder(p, skip) {
+  if (p.vy >= 0) return null;
+  let best = null;
+  for (const s of solids) {
+    if (s === skip) continue;
+    if (p.py < s.y || p.y > s.y) continue;
+    const t = (p.py - s.y) / (p.py - p.y || 1e-6);
+    const cx = p.px + (p.x - p.px) * t;
+    if (Math.abs(cx - s.x) > s.hw + PLAYER_HALF) continue;
+    if (!best || s.y > best.y) best = s;
+  }
+  return best;
+}
+
+/**
+ * Fly the launch we are about to make, with the same integrator and the same
+ * timestep, and report exactly where it ends. The arc stops at the surface it
+ * actually hits, so the player aims at a landing point rather than at a hint.
+ */
+function predict(v, out) {
+  const p = { x: state.x, y: state.y, vx: v.vx, vy: v.vy, px: state.x, py: state.y };
+  const floor = state.y;
+  // The real jump keeps extending the tower as it rises, so the preview has to
+  // see at least as much world as the jump will.
+  generate(state.y + GEN_AHEAD);
+  out.length = 0;
+  let landed = null;
+  for (let f = 0; f < 900; f++) {   // the same budget the real flight loop gets
+    flight(p, 1 / 60);
+    if (f % 4 === 0) out.push(p.x, p.y);
+    const hit = surfaceUnder(p, state.standing);
+    if (hit) {
+      landed = { x: clamp(p.x, hit.x - hit.hw, hit.x + hit.hw), y: hit.y, solid: hit };
+      break;
+    }
+    // The death floor is the ledge you are standing on RIGHT NOW, not
+    // `state.takeoff`, which still holds the previous jump's launch height
+    // while you are aiming. Using the stale one made the arc predict landings
+    // on ledges far below that the real jump dies before ever reaching.
+    //
+    // Byte-for-byte the same test as the one in step(). It carried five
+    // centimetres of slack for one build, and five centimetres was enough to
+    // let the arc promise a landing on a ledge just under the lip that the
+    // real jump died before ever touching.
+    if (p.vy < 0 && p.y < floor) { landed = null; break; }
+  }
+  return landed;
+}
+
 function step(dt) {
   generate(state.y + GEN_AHEAD);
 
   if (state.airborne) {
-    state.vy += GRAVITY * dt;
-    const px = state.x, py = state.y;
-    state.x += state.vx * dt;
-    state.y += state.vy * dt;
+    flight(state, dt);
     state.spin += dt * (state.vx > 0 ? 7 : -7);
     if (state.y > state.peakY) { state.peakY = state.y; state.peakX = state.x; }
 
-    if (state.vy < 0) {
-      // Landing is a crossing test, not an overlap test, so a fast fall cannot
-      // tunnel through a ledge between two frames.
-      let best = null;
-      for (const s of solids) {
-        if (s === state.standing) continue;
-        if (py < s.y || state.y > s.y) continue;
-        const t = (py - s.y) / (py - state.y || 1e-6);
-        const cx = px + (state.x - px) * t;
-        if (Math.abs(cx - s.x) > s.hw + PLAYER_HALF) continue;
-        if (!best || s.y > best.y) best = s;
-      }
-      if (best) {
-        state.x = clamp(state.x, best.x - best.hw, best.x + best.hw);
-        land(best);
-      } else if (state.y < state.takeoff) {
-        die();
-      }
+    const hit = surfaceUnder(state, state.standing);
+    if (hit) {
+      state.x = clamp(state.x, hit.x - hit.hw, hit.x + hit.hw);
+      land(hit);
+    } else if (state.vy < 0 && state.y < state.takeoff) {
+      die();
     }
   }
 
   if (state.y > state.best) state.best = state.y;
 
-  // Aim preview.
+  // The aim line, and the mark where it ends.
   if (aiming) {
     const v = aimVector();
+    const landing = v ? predict(v, arc) : null;
     for (let i = 0; i < dots.length; i++) {
-      if (!v) { dots[i].visible = false; continue; }
-      const t = (i + 1) * 0.055;
-      dots[i].position.set(state.x + v.vx * t, state.y + 0.7 + v.vy * t + 0.5 * GRAVITY * t * t, PLANE_Z);
-      dots[i].visible = true;
+      const j = i * 2;
+      const on = !!v && j < arc.length;
+      dots[i].visible = on;
+      if (on) dots[i].position.set(arc[j], arc[j + 1] + 0.55, PLANE_Z);
     }
+    landMark.visible = !!landing;
+    if (landing) landMark.position.set(landing.x, landing.y + 0.06, PLANE_Z);
   }
 
   // Presentation.
@@ -464,4 +526,7 @@ requestAnimationFrame(tick);
 
 // Headless harness hook, same idea as the first game's: the test rig drives the
 // real loop rather than a copy of it.
-window.CAIRN = { state, solids, step, begin, generate, GRAVITY, MAX_POWER, teach: () => taught };
+window.CAIRN = {
+  state, solids, step, begin, generate, predict, GRAVITY, MAX_POWER,
+  arc, teach: () => taught,
+};
