@@ -178,13 +178,37 @@ const TUNNEL = {
     const W = 3.6;
     b.floor(-W, -38, W, 44, 0, SURF.GRAVEL);
     b.ceiling(-W, -38, W, 44, H, SURF.CONCRETE);
-    b.wall(-W, -38, -W, 44, 0, H, SURF.CONCRETE);
-    b.wall(W, -38, W, 44, 0, H, SURF.CONCRETE);
     b.wall(-W, -38, W, -38, 0, H, SURF.CONCRETE);
     b.wall(-W, 44, W, 44, 0, H, SURF.CONCRETE);
 
     // maintenance alcoves — carpeted, and the only place to stand and think
     const alcoves = [[-26, -1], [-8, 1], [7, -1], [22, 1], [33, -1]];
+
+    // The side walls are emitted in segments with a mouth left open at each
+    // alcove. They used to run unbroken from end to end, which sealed all five
+    // alcoves behind a solid partition: the level's signature — the only silent
+    // ground in eighty metres — could not be walked into at all. Found by
+    // scripts/nav-check.mjs, which measures whether the walkable set is one
+    // connected place rather than trusting that it looks like one.
+    for (const side of [-1, 1]) {
+      const x = side * W;
+      const mouths = alcoves
+        .filter(([, s]) => s === side)
+        .map(([z]) => [z - 1.5, z + 1.5])
+        .sort((a, b) => a[0] - b[0]);
+      let from = -38;
+      for (const [m0, m1] of mouths) {
+        if (m0 > from) b.wall(x, from, x, m0, 0, H, SURF.CONCRETE);
+        // A lintel over the mouth, because the alcove ceiling is two metres
+        // lower than the tunnel's and the gap would otherwise open onto void.
+        // Acoustically transparent: the point of an alcove is that you can
+        // still hear the tunnel from inside it.
+        b.wall(x, m0, x, m1, 2.5, H, SURF.CONCRETE, { blocksSound: false });
+        from = m1;
+      }
+      if (from < 44) b.wall(x, from, x, 44, 0, H, SURF.CONCRETE);
+    }
+
     for (const [z, side] of alcoves) {
       const x0 = side < 0 ? -W - 2.6 : W;
       const x1 = side < 0 ? -W : W + 2.6;
