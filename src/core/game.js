@@ -161,6 +161,7 @@ export class Game {
     this.player.spawn(def.spawn.x, def.spawn.z, def.spawn.yaw);
     this.levelTime = 0;
     this.settleTimer = 4 + Math.random() * 4;
+    this.humTimer = 1.5 + Math.random() * 2.5;
 
     this.state = 'intro';
     this.introTime = 0;
@@ -337,6 +338,20 @@ export class Game {
       }
     }
 
+    // The electrical bed, made visible. A failing ballast somewhere overhead
+    // ticks over, the hum swells, and a thin cyan ring falls out of the dark.
+    this.humTimer -= dt;
+    if (this.humTimer <= 0) {
+      this.humTimer = 3.2 + Math.random() * 3.4;
+      const b = this.level.bounds;
+      this._tmpA.set(
+        b.min.x + Math.random() * (b.max.x - b.min.x),
+        b.max.y - 0.25,
+        b.min.z + Math.random() * (b.max.z - b.min.z)
+      );
+      this.sound.emit('hum', this._tmpA, { gain: 0.75 + Math.random() * 0.5 });
+    }
+
     // The building settling. Keeps the world from ever going fully lightless.
     this.settleTimer -= dt;
     if (this.settleTimer <= 0) {
@@ -402,7 +417,9 @@ export class Game {
   _completeLevel() {
     this.state = 'results';
     const noise = this.sound.noiseScore;
-    const t = GRADE_TARGETS.quiet;
+    // Each level sets its own par: a long ballast tunnel cannot be crossed as
+    // quietly as a carpeted corridor, and grading them on one scale is a lie.
+    const t = this.level.def.par ?? GRADE_TARGETS.quiet;
     let grade;
     if (this.player.shots === 0 && noise < t[0]) grade = 'UNHEARD';
     else if (this.player.shots === 0 && noise < t[1]) grade = 'QUIET';
@@ -420,6 +437,9 @@ export class Game {
   }
 
   // ------------------------------------------------------------------- frame
+
+  /** Test hook: run the simulation without touching the GPU. */
+  setHeadlessLogicOnly(v) { this.noRender = !!v; }
 
   /** Capture rig hook: run the simulation on a fixed clock so stills repeat. */
   setFixedStep(dt) {
@@ -537,6 +557,8 @@ export class Game {
     this.camera.updateMatrixWorld();
     this.shared.eye.value.copy(p);
     this.sound.engine.updateListener(this.camera);
+
+    if (this.noRender) return;
 
     if (this.level) {
       this.memory.render(dt);

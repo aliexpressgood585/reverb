@@ -35,6 +35,7 @@ const KINDS = {
   hurt:      { color: COLOR.ENEMY, power: 14.0, ref: 5.0,  speed: SPEED.STEP,    life: 2.0, thick: 0.24, reveal: 0.8, loud: 2.5 },
   kill:      { color: COLOR.ENEMY, power: 16.0, ref: 5.5,  speed: SPEED.ENEMY,   life: 2.4, thick: 0.26, reveal: 1.0, loud: 0.0 },
   door:      { color: COLOR.STEP,  power: 12.0, ref: 4.0,  speed: SPEED.STEP,    life: 2.4, thick: 0.20, reveal: 0.2, loud: 1.8 },
+  hum:       { color: COLOR.WATER, power: 4.6,  ref: 2.4,  speed: SPEED.DRIP * 0.7, life: 3.4, thick: 0.10, reveal: 0.0, loud: 0.0 },
   chime:     { color: COLOR.WATER, power: 8.0,  ref: 3.2,  speed: SPEED.DRIP,    life: 3.0, thick: 0.15, reveal: 0.0, loud: 0.0 },
 };
 

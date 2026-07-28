@@ -11,8 +11,15 @@ const wake = () => game.sound.init();
 addEventListener('pointerdown', wake, { once: true });
 addEventListener('keydown', wake, { once: true });
 
-canvas.addEventListener('click', () => {
-  if (game.state === 'play' && !input.locked) input.requestLock();
+// Outside the game itself the mouse is not captured, so a click has to stand in
+// for ENTER — otherwise the title screen looks like it has stopped responding.
+addEventListener('pointerdown', () => {
+  if (game.state === 'play') {
+    if (!input.locked) input.requestLock();
+  } else {
+    input.synth('confirm', true);
+    setTimeout(() => input.synth('confirm', false), 60);
+  }
 });
 
 let raf;

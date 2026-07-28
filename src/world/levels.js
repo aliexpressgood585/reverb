@@ -67,6 +67,7 @@ const PLATFORM = {
     { type: 'stalker', x: 9.5, z: 8, route: [[9.5, 12], [9.5, -14], [10.5, -6]] },
   ],
   trains: { every: [38, 70], gain: 0.85 },
+  par: [11, 24, 44],
   hint: 'WALK. LISTEN. THE DRIPS GO NORTH.',
 };
 
@@ -77,7 +78,7 @@ const TURNSTILES = {
   line: 'EVERY WAY THROUGH IS WET',
   space: { decay: 2.0, brightness: 0.55, predelay: 0.014, spread: 0.8 },
   spawn: { x: 0, z: -15, yaw: Math.PI },
-  exit: { x: 0, z: 19.5, r: 2.2 },
+  exit: { x: 0, z: 21.4, r: 1.8 },
   build(b) {
     const H = 3.6;
     b.floor(-16, -18, 16, 22, 0, SURF.PUDDLE);
@@ -128,6 +129,7 @@ const TURNSTILES = {
     { type: 'screamer', x: 0, z: 8, route: [[-8, 14], [8, 14], [8, 6], [-8, 6]] },
   ],
   trains: { every: [45, 85], gain: 0.7 },
+  par: [14, 30, 55],
   hint: 'THE CARPET IS DRY. THE CARPET IS QUIET.',
 };
 
@@ -181,6 +183,7 @@ const TUNNEL = {
     { type: 'sentinel', x: -1.2, z: 30, facing: Math.PI },
   ],
   trains: { every: [30, 55], gain: 1.15 },
+  par: [38, 64, 100],
   hint: 'BALLAST IS THE LOUDEST GROUND IN THE STATION.',
 };
 
@@ -205,7 +208,8 @@ const MAINTENANCE = {
 
     // spine corridor, carpeted so you can cross it silently if you dare
     b.floor(-22, -3, 24, 1, 0.006, SURF.CARPET);
-    wall(-22, -3, -10.5, -3); wall(-6.5, -3, 3.5, -3); wall(7.5, -3, 24, -3);
+    wall(-22, -3, -10.5, -3); wall(-6.5, -3, 3.5, -3);
+    wall(7.5, -3, 11, -3); wall(15, -3, 24, -3);
     wall(-22, 1, -16.5, 1); wall(-12.5, 1, 0.5, 1); wall(4.5, 1, 15.5, 1); wall(19.5, 1, 24, 1);
 
     // four plant rooms, each with a machine that fires on its own clock
@@ -254,6 +258,7 @@ const MAINTENANCE = {
     { type: 'sentinel', x: 0, z: -1, facing: Math.PI * 0.5 },
   ],
   trains: { every: [50, 90], gain: 0.6 },
+  par: [15, 32, 58],
   hint: 'THE PLANT IS ON A CLOCK. YOU ARE NOT.',
 };
 
@@ -306,6 +311,7 @@ const DEEP = {
     { type: 'sentinel', x: 3.6, z: -12, facing: 0 },
   ],
   trains: { every: [28, 48], gain: 1.5 },
+  par: [20, 42, 74],
   hint: 'THE CAUSEWAY IS DRY. THE WATER IS NOT YOUR FRIEND.',
 };
 

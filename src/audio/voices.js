@@ -219,6 +219,14 @@ export const VOICES = {
     tone(E, dest, t, { f0: 90, f1: 55, gain: 0.22 * o.gain, a: 0.01, d: 0.35, r: 0.4 });
   },
 
+  hum(E, dest, o) {
+    const t = E.time;
+    E.humSwell(o.gain);
+    // A ballast that has been failing for years, ticking over one more time.
+    tone(E, dest, t, { f0: 99.5, f1: 98.0, type: 'triangle', gain: 0.09 * o.gain, a: 0.35, d: 0.9, r: 1.4 });
+    burst(E, dest, t + 0.02, { freq: 2400, q: 7, gain: 0.035 * o.gain, a: 0.002, d: 0.02, r: 0.04 });
+  },
+
   chime(E, dest, o) {
     const t = E.time;
     for (const [m, g] of [[1, 0.16], [2.02, 0.08], [3.01, 0.04]]) {

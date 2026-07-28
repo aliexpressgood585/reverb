@@ -65,6 +65,7 @@ export class AudioEngine {
     this.send.connect(this.convolver);
 
     this.setSpace({ decay: 2.6, brightness: 0.5, predelay: 0.02 });
+    this.startHum();
 
     if (ctx.listener.forwardX) {
       ctx.listener.upX.value = 0;
@@ -114,6 +115,59 @@ export class AudioEngine {
     }
 
     this.convolver.buffer = buf;
+  }
+
+  /**
+   * The station's electrical bed: a pair of detuned mains-frequency tones and
+   * a whisper of filtered noise, sitting right at the threshold of hearing.
+   * It is the only continuous sound in the game, and it is not silent light —
+   * `hum` pulses are emitted in step with its swells (see world ambience).
+   */
+  startHum() {
+    if (!this.ctx || this.hum) return;
+    const ctx = this.ctx;
+    const out = ctx.createGain();
+    out.gain.value = 0.055;
+    out.connect(this.master);
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 220;
+    lp.Q.value = 0.7;
+    lp.connect(out);
+
+    for (const [f, g, type] of [[49.4, 0.55, 'sine'], [50.6, 0.4, 'sine'], [99.7, 0.16, 'triangle']]) {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.value = f;
+      const gn = ctx.createGain();
+      gn.gain.value = g;
+      o.connect(gn).connect(lp);
+      o.start();
+    }
+
+    const air = this.noiseSource();
+    const ap = ctx.createBiquadFilter();
+    ap.type = 'bandpass';
+    ap.frequency.value = 320;
+    ap.Q.value = 0.4;
+    const ag = ctx.createGain();
+    ag.gain.value = 0.055;
+    air.connect(ap).connect(ag).connect(out);
+    air.start();
+
+    this.hum = out;
+  }
+
+  /** A swell in the bed — the thing a `hum` pulse is the light of. */
+  humSwell(amount = 1) {
+    if (!this.hum) return;
+    const t = this.ctx.currentTime;
+    const g = this.hum.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(0.055 + 0.05 * amount, t + 0.5);
+    g.linearRampToValueAtTime(0.055, t + 2.4);
   }
 
   /** Shared white-noise source buffer — allocating one per footstep is waste. */

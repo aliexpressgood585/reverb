@@ -42,6 +42,7 @@ export class Enemy {
     this.material = createEntityMaterial(world.shared, COLOR.ENEMY);
     this.group = buildBody(this.material, this.type);
     this.position = new THREE.Vector3(opts.x, opts.y ?? 0, opts.z);
+    this.position.y = world.floorHeight(opts.x, opts.z, opts.y ?? 0);
     this.group.position.copy(this.position);
     world.scene.add(this.group);
 
@@ -119,6 +120,7 @@ export class Enemy {
     const res = this.world.collide(nx, nz, this.position.x, this.position.z, 0.35);
     this.position.x = res.x;
     this.position.z = res.z;
+    this.position.y = this.world.floorHeight(res.x, res.z, this.position.y);
     this.facing = Math.atan2(d.x, d.z);
     this.walkPhase += (step / 0.75) * 6.283;
     return false;

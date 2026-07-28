@@ -130,17 +130,20 @@ await page.evaluate(() => window.REVERB.player.fire());
 await step(11);
 await shot('07-gunshot');
 
-// 08 — an enemy caught mid-stride, lit only by the noise it is making
-await enter(0, { x: 6.0, z: 4, yaw: Math.PI * 0.62, pitch: -0.03 });
+// 08 — a creature caught mid-stride, lit only by the noise it is making
+await enter(0, { x: 3.0, z: 4, yaw: 0, pitch: -0.02 });
 await page.evaluate(() => {
   const g = window.REVERB;
   const e = g.enemies[0];
-  e.position.set(10.2, -0.95, 10.5);
+  e.position.set(9.0, -0.95, 10.0);
   e.state = 'HUNT';
-  e.memory = 8;
-  e.target.set(2, 0, -6);
+  e.memory = 9;
+  e.target.set(9.0, -0.95, -6);
+  e.stepTimer = 0.02;
+  const p = g.player.position;
+  g.player.yaw = Math.atan2(-(e.position.x - p.x), -(e.position.z - p.z));
 });
-await step(26);
+await step(30);
 await shot('08-enemy');
 
 // 09 — THE TUNNEL: gravel, a long ring running away down the bore
@@ -166,10 +169,24 @@ await step(60);
 await hold(['forward', 'sneak'], false);
 await shot('11-sneaking');
 
-// 12 — MAINTENANCE under the machines
+// 12 — MAINTENANCE, caught on a machine cycle
 await enter(3, { x: -15, z: -6, yaw: Math.PI * 0.5, pitch: -0.05 });
 await step(90);
 await shot('12-maintenance');
+
+// 13 — a Sentinel at close range: the picture you get right before it is over
+await enter(2, { x: 0.4, z: -18, yaw: Math.PI, pitch: 0.02 });
+await page.evaluate(() => {
+  const g = window.REVERB;
+  const e = g.enemies[0];
+  e.position.set(-1.2, 0, -13.0);
+  e.state = 'HUNT';
+  e.memory = 9;
+  e.target.set(-1.2, 0, -22);
+  e.stepTimer = 0.02;
+});
+await step(26);
+await shot('13-sentinel');
 
 const diag = await page.evaluate(() => ({
   pulses: window.REVERB.pulses.count,

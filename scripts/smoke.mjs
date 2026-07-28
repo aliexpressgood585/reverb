@@ -32,9 +32,12 @@ page.on('console', (m) => {
   if (m.type() === 'error') problems.push('console: ' + m.text().split('\n')[0]);
 });
 
-await page.goto(`http://127.0.0.1:${PORT}/?lm=512&msaa=0`, { waitUntil: 'load' });
+await page.goto(`http://127.0.0.1:${PORT}/?lm=512&msaa=0&nosound=1`, { waitUntil: 'load' });
 await page.waitForFunction(() => !!window.REVERB);
-await page.evaluate(() => window.REVERB.setFixedStep(1 / 60));
+await page.evaluate(() => {
+  window.REVERB.setFixedStep(1 / 60);
+  window.REVERB.setHeadlessLogicOnly(true);
+});
 
 const ev = (fn, arg) => page.evaluate(fn, arg);
 const run = (n) => ev((k) => { for (let i = 0; i < k; i++) window.REVERB.frame(); }, n);
@@ -106,9 +109,11 @@ for (let lvl = 0; lvl < 5; lvl++) {
   if (after !== 'results') problems.push(`L${lvl + 1}: exit did not resolve (state=${after})`);
 }
 
-// --- photo mode -------------------------------------------------------------
-await ev(() => { window.REVERB.debugEnter(0, {}); window.REVERB.hud.setVisible(false); });
-await run(4);
+// --- the rendering path, once, with the GPU back on -------------------------
+await ev(() => { window.REVERB.setHeadlessLogicOnly(false); window.REVERB.debugEnter(0, {}); });
+await run(6);
+await ev(() => window.REVERB.hud.setVisible(false));
+await run(2);
 await ev(() => window.REVERB.hud.setVisible(true));
 
 await browser.close();
