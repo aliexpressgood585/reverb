@@ -32,6 +32,9 @@ await page.evaluate(() => window.REVERB.setFixedStep(1 / 60));
 
 const step = (n) => page.evaluate((k) => { for (let i = 0; i < k; i++) window.REVERB.frame(); }, n);
 const enter = (l, o) => page.evaluate(({ l, o }) => window.REVERB.debugEnter(l, o), { l, o });
+const hold = (keys, on) => page.evaluate(({ keys, on }) => {
+  for (const k of keys) window.REVERB.input.synth(k, on);
+}, { keys, on });
 const shot = async (n) => {
   const t = Date.now();
   await page.screenshot({ path: `shots/${n}.png`, timeout: 300000 });
@@ -49,6 +52,15 @@ if (want.has('08')) {
   });
   await step(30);
   await shot('08-enemy');
+}
+
+if (want.has('09')) {
+  await enter(2, { x: 0, z: -20, yaw: Math.PI, pitch: -0.06 });
+  await step(14);
+  await hold(['forward'], true);
+  await step(46);
+  await hold(['forward'], false);
+  await shot('09-tunnel');
 }
 
 if (want.has('10')) {
