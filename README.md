@@ -467,13 +467,37 @@ openness, and MAINTENANCE shared its dominant ground (concrete) with THE DEEP.
 So each level was pushed further apart, and each was given a mechanic that
 exists nowhere else:
 
-| level | shape | ground | its own mechanic |
-|---|---|---|---|
-| **PLATFORM** | 20×48, ceiling 4.2 m, openness 2.3 m | tile | the track bed — a metre-deep pit of ballast you can drop into and cannot climb out of quietly |
-| **TURNSTILES** | 32×40, ceiling **2.75 m**, openness 2.7 m | water | **the gates** — three ranks, each costing you a ratchet and a clang, with no way round |
-| **THE TUNNEL** | 12×82, ceiling 4.6 m, openness **0.8 m** | ballast | the alcoves — five carpeted holes in the wall, the only silent ground in eighty metres |
-| **MAINTENANCE** | 46×38, ceiling **2.5 m**, openness 1.5 m | **steel deck** | **noise cover** — while a machine is running, what you do inside its racket barely reaches anything |
-| **THE DEEP** | 84×84, ceiling **11 m**, openness **6.6 m** | concrete + black water | **carry** — no partitions means no occlusion, so every sound you make reaches half again as far |
+```
+== level signatures ==================================
+level         footprint  ceil   open   rt60   drips  mach  trig  ground
+PLATFORM      20x64      4.2    2.3    1.9    7      0     0     TILE 56%, BALLAST 30%, WATER 8%
+TURNSTILES    32x40      2.8    2.7    1.3    3      0     3     WATER 80%, CARPET 14%
+THE TUNNEL    12x82      4.6    0.8    2.7    3      0     0     BALLAST 78%, STEEL 12%, CARPET 5%, WATER 5%
+MAINTENANCE   46x38      2.5    1.5    0.65   2      5     0     STEEL 93%, CARPET 6%
+THE DEEP      84x84      11     6.6    3.2    4      0     0     CONCRETE 62%, WATER 37%
+
+unique mechanic per level:
+  PLATFORM      the track bed — a metre-deep pit of ballast you can drop into and cannot leave quietly
+  TURNSTILES    the gates themselves — every rank costs you a ratchet and a clang, and there is no way round
+  THE TUNNEL    the alcoves — five carpeted holes in the wall, the only silent ground in eighty metres
+  MAINTENANCE   noise cover — while a machine is running, what you do inside its racket barely reaches anything
+  THE DEEP      carry — with no walls to stop it, every sound you make reaches half again as far as anywhere else
+
+
+======================================================
+levels: each one reads as its own place
+```
+
+| level | its own mechanic |
+|---|---|
+| **PLATFORM** | the track bed — a metre-deep pit of ballast you can drop into and cannot climb out of quietly |
+| **TURNSTILES** | **the gates** — three ranks, each costing you a ratchet and a clang, with no way round |
+| **THE TUNNEL** | the alcoves — five carpeted holes in the wall, the only silent ground in eighty metres |
+| **MAINTENANCE** | **noise cover** — while a machine is running, what you do inside its racket barely reaches anything |
+| **THE DEEP** | **carry** — no partitions means no occlusion, so every sound you make reaches half again as far |
+
+Ceilings now span 2.5 m to 11 m, openness 0.8 m to 6.6 m, and every level has a
+different dominant ground. No two of them can be confused.
 
 The three that are new mechanics rather than relabelled scenery:
 
@@ -600,22 +624,46 @@ frames, sharp lines rather than blurry spheres, white next to absolute black,
 orange that separates instantly from the background, and no rectangular
 interface furniture anywhere.
 
-Not verified, because it cannot be from a cloud container:
+### The five checks
 
-- **Audio.** There is no output device here. The graph builds without error and
-  every voice is scheduled through code paths that run, but no one has heard a
-  single sound in this game. The convolution reverb in particular — its decay
-  times, the wet/dry balance, whether the Screamer is genuinely unpleasant — is
-  tuned on paper, from the numbers.
+Everything above is enforced by a script that exits non-zero. Running all five
+takes about twenty minutes under software rasterisation and is the whole of the
+test suite:
+
+| | |
+|---|---|
+| `node scripts/smoke.mjs` | the real state machine, then all five levels driven with input: no creature embedded in a wall, every exit resolves, no page or shader error |
+| `node scripts/audio-check.mjs` | every voice rendered offline through the real graph: loudness hierarchy, RT60 per level, C50 clarity, stereo separation, clipping |
+| `node scripts/palette-check.mjs` | the framebuffer: how much of a frame is warm, how tightly it clusters, how much is true black |
+| `node scripts/level-contrast.mjs` | three stills per level plus a signature each; fails if two levels agree on openness, ceiling and ground |
+| `node scripts/first-minute.mjs` | the game from the title screen with a naive player's input; fails if a lesson lands late |
+
+Plus `node scripts/capture.mjs` for the marketing stills and
+`node scripts/reshoot.mjs <n>` to re-take one of them without paying for the set.
+
+### Still not verified
+
+- **Whether any of it sounds good.** The levels are right, the decay times are
+  right, the image is wide, nothing clips — all measured. Whether the Screamer
+  is frightening rather than merely loud is not a number, and there is no output
+  device in this container. Nobody has heard this game.
 - **Real frame rate.** Software rasterisation runs at roughly 2.5 fps at
-  1600×900, which says nothing about a real GPU. The two full-screen 32-pulse
-  loops per frame plus the imprint pass should be comfortable on anything from
-  the last five years, but that is a prediction, not a measurement.
+  1600×900, which says nothing about a real GPU. Two full-screen 32-pulse loops
+  per frame plus the imprint pass should be comfortable on anything from the
+  last five years, but that is a prediction, not a measurement. The one number I
+  do have: MAINTENANCE got noticeably more expensive when its floor moved to
+  glossy steel, because a glossy surface runs the specular branch for every
+  pulse. Its gloss was pulled back from 0.68 to 0.42 partly for that reason.
 - **Mouse-look feel.** Pointer lock does not exist headless. Sensitivity is a
   guess.
-- **Difficulty.** Nobody has played this. The noise pars in `src/world/levels.js`
-  are derived from stride length times surface multiplier times level size, not
-  from anyone actually trying to earn `UNHEARD`.
+- **Difficulty, and whether the fear lands.** The rig proves a creature turns
+  towards you at four seconds. It cannot tell me whether that is frightening or
+  whether PLATFORM's Stalker, at caution 1.55, is now too forgiving. Twenty
+  seconds is the *critical path* through level one — a straight line held at
+  walking pace — and a real player in a pitch-black room does not walk in
+  straight lines. How long the first minute actually feels is unknown.
+- **The noise pars.** Derived from stride length times surface multiplier times
+  level size, not from anyone actually trying to earn `UNHEARD`.
 
 The capture rig runs with `?lm=1024&msaa=0`, which halves the light-memory atlas
 and drops multisampling so software rendering finishes this century. The game
