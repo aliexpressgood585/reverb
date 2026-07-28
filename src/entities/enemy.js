@@ -32,6 +32,10 @@ const TYPES = {
 
 let _uid = 0;
 
+// A straightened path never needs many corners in a hand-built station; the
+// creature re-plans twice a second anyway, so this is a ceiling, not a budget.
+const MAX_WAYPOINTS = 32;
+
 export class Enemy {
   constructor(world, opts) {
     this.id = ++_uid;
@@ -66,6 +70,19 @@ export class Enemy {
     this.attackCooldown = 0;
     this.health = this.type === 'sentinel' ? 2 : 1;
     this._tmp = new THREE.Vector3();
+    this._wp = new THREE.Vector3();
+
+    // Navigation. Allocated once; nothing below this line ever allocates.
+    this.pathX = new Float32Array(MAX_WAYPOINTS);
+    this.pathZ = new Float32Array(MAX_WAYPOINTS);
+    this.pathN = 0;
+    this.pathAt = 0;
+    // Staggered so six creatures in THE DEEP never re-plan on the same frame.
+    this.pathTimer = (this.id % 7) * 0.07;
+    this.goalX = Infinity;
+    this.goalZ = Infinity;
+    this.progress = Infinity;
+    this.stuck = 0;
   }
 
   hear(evt) {
@@ -131,6 +148,76 @@ export class Enemy {
     return false;
   }
 
+  /**
+   * Walk toward a destination the way something that lives here would: around
+   * the partition rather than into it.
+   *
+   * The grid is advisory. Every path ends in the same `_moveToward` that has
+   * always been here, and a failed or exhausted path falls straight back to it,
+   * so the worst case is exactly the behaviour this replaced. Returns true on
+   * arrival at the real destination — never at a waypoint.
+   */
+  _navToward(dst, speed, dt) {
+    const nav = this.world.level && this.world.level.nav;
+    if (!nav) return this._moveToward(dst, speed, dt);
+
+    this.pathTimer -= dt;
+    const moved = Math.hypot(dst.x - this.goalX, dst.z - this.goalZ) > 0.9;
+    if (moved || this.pathTimer <= 0 || this.pathAt >= this.pathN) {
+      this.pathTimer = 0.45;
+      this.goalX = dst.x;
+      this.goalZ = dst.z;
+      this.pathN = nav.path(
+        this.position.x, this.position.z, dst.x, dst.z,
+        this.pathX, this.pathZ, MAX_WAYPOINTS
+      );
+      this.pathAt = 0;
+      this.progress = Infinity;
+      this.stuck = 0;
+    }
+
+    // Skip anything already behind us. A straightened path can hand back a
+    // corner we have already rounded.
+    while (this.pathAt < this.pathN - 1) {
+      const dx = this.pathX[this.pathAt] - this.position.x;
+      const dz = this.pathZ[this.pathAt] - this.position.z;
+      if (dx * dx + dz * dz > 0.16) break;
+      this.pathAt++;
+      this.progress = Infinity;
+      this.stuck = 0;
+    }
+
+    if (this.pathAt >= this.pathN) return this._moveToward(dst, speed, dt);
+
+    const wx = this.pathX[this.pathAt];
+    const wz = this.pathZ[this.pathAt];
+    const last = this.pathAt === this.pathN - 1;
+    this._wp.set(wx, this.position.y, wz);
+    const reached = this._moveToward(this._wp, speed, dt);
+
+    if (!reached) {
+      // Nothing in the grid knows the body has width, so a corner can still be
+      // clipped. If a leg stops shortening, abandon it rather than grind.
+      const left = Math.hypot(wx - this.position.x, wz - this.position.z);
+      if (left < this.progress - 0.02) {
+        this.progress = left;
+        this.stuck = 0;
+        return false;
+      }
+      this.stuck += dt;
+      if (this.stuck > 0.6) {
+        this.stuck = 0;
+        this.progress = Infinity;
+        if (last) this.pathTimer = 0;
+        else this.pathAt++;
+      }
+      return false;
+    }
+    if (!last) { this.pathAt++; this.progress = Infinity; this.stuck = 0; return false; }
+    // The grid stops at the last standable cell; the last metre is direct.
+    return this._moveToward(dst, speed, dt);
+  }
+
   _footstep(gain) {
     const surf = this.world.surfaceAt(this.position.x, this.position.z);
     this.world.sound.emit('enemyStep', this.position, {
@@ -158,7 +245,7 @@ export class Enemy {
         if (cfg.patrol && this.route.length > 0) {
           speed = cfg.speedSearch * 0.55;
           const wp = this.route[this.routeIndex];
-          if (this._moveToward(wp, speed, dt)) {
+          if (this._navToward(wp, speed, dt)) {
             this.routeIndex = (this.routeIndex + 1) % this.route.length;
           } else moving = true;
         } else {
@@ -182,7 +269,7 @@ export class Enemy {
       }
       case 'SEARCH': {
         speed = cfg.speedSearch;
-        moving = !this._moveToward(this.target, speed, dt);
+        moving = !this._navToward(this.target, speed, dt);
         if (!moving || this.memory <= 0) {
           this.state = 'IDLE';
           this.stateTime = 0;
@@ -193,7 +280,7 @@ export class Enemy {
       case 'HUNT': {
         speed = cfg.speedHunt;
         if (this.memory > 0) {
-          moving = !this._moveToward(this.target, speed, dt);
+          moving = !this._navToward(this.target, speed, dt);
         }
         if (this.type === 'screamer') {
           this.screamCooldown = (this.screamCooldown ?? 0) - dt;

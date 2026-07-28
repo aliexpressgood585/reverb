@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SURF } from './surfaces.js';
+import { buildNav } from './nav.js';
 
 const ATLAS = 2048;
 const TEXELS_PER_METRE = 8;
@@ -19,6 +20,7 @@ export class LevelBuilder {
     this.quads = [];
     this.floors = [];
     this.walls = [];
+    this.solids = [];
   }
 
   /** p0..p3 wind counter-clockwise when viewed from the front face. */
@@ -26,14 +28,16 @@ export class LevelBuilder {
     this.quads.push({ p: [p0, p1, p2, p3], n: normal, s: surface });
   }
 
-  floor(x0, z0, x1, z1, y, surface = SURF.CONCRETE) {
+  floor(x0, z0, x1, z1, y, surface = SURF.CONCRETE, opts = {}) {
     const [ax, bx] = x0 < x1 ? [x0, x1] : [x1, x0];
     const [az, bz] = z0 < z1 ? [z0, z1] : [z1, z0];
     this.addQuad(
       [ax, y, bz], [bx, y, bz], [bx, y, az], [ax, y, az],
       [0, 1, 0], surface
     );
-    this.floors.push({ x0: ax, z0: az, x1: bx, z1: bz, y, surface });
+    // `nav: false` means "a surface, but not ground". The lid of a ticket booth
+    // catches light and stops a thrown stone; nothing walks on it.
+    this.floors.push({ x0: ax, z0: az, x1: bx, z1: bz, y, surface, nav: opts.nav !== false });
   }
 
   ceiling(x0, z0, x1, z1, y, surface = SURF.CONCRETE) {
@@ -83,11 +87,15 @@ export class LevelBuilder {
   block(cx, cz, w, d, y0, y1, surface = SURF.CONCRETE) {
     const x0 = cx - w / 2, x1 = cx + w / 2;
     const z0 = cz - d / 2, z1 = cz + d / 2;
+    // The inside of a closed block is not a room. It is a place the hall floor
+    // happens to pass under, and without this the navigation bake hands every
+    // ticket booth and machinery housing back as an unreachable island.
+    if (y1 > 0.45 && y0 < 1.6) this.solids.push({ x0, z0, x1, z1 });
     this.wall(x0, z0, x1, z0, y0, y1, surface);
     this.wall(x1, z0, x1, z1, y0, y1, surface);
     this.wall(x1, z1, x0, z1, y0, y1, surface);
     this.wall(x0, z1, x0, z0, y0, y1, surface);
-    this.floor(x0, z0, x1, z1, y1, surface);
+    this.floor(x0, z0, x1, z1, y1, surface, { nav: false });
   }
 
   // ---------------------------------------------------------------- packing
@@ -272,6 +280,7 @@ export class LevelBuilder {
       geometry: geo,
       bounds,
       occlusion: this._occlusion(bounds),
+      nav: buildNav(bounds, this.floors, this.walls, this.solids),
       floors: this.floors,
       walls: this.walls,
     };
