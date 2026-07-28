@@ -75,21 +75,30 @@ term, no fill, no fake bounce. If that loop returns zero, the pixel is `#000000`
 
 Three details make the shell read as a *line* rather than a glowing ball:
 
-- **It is asymmetric.** The leading edge is `0.34 × thickness`; the wake behind
+- **It is asymmetric.** The leading edge is `0.30 × thickness`; the wake behind
   it is `1.70 × thickness`. A razor front with a soft tail reads as motion.
-- **It has a filament.** The shell brightness is `s² × 0.75 + s¹⁴ × 1.25` — a
-  broad body plus a hot crest riding on top of it.
-- **It obeys `1/r²` and time.** Intensity is `power × (1 − t/life)²`, then divided
-  by distance squared. A footstep dies at two metres. A gunshot fills the room.
+- **It has a filament.** The shell brightness is `s² × 0.32 + s²⁶ × 3.2`. The
+  `s²` term is a dim body; the `s²⁶` term only exists within a few centimetres
+  of the crest, and it is the hairline that makes the thing read as a *line*.
+  Getting this exponent wrong is the difference between a moving edge and a
+  glowing bubble — the first pass used `s¹⁴` and looked like fog.
+- **It obeys `1/r²` and time.** Intensity is `power × (1 − t/life)²`, attenuated
+  by `1 / (1 + (d/ref)²)`. Each sound carries its own reference distance: a
+  footstep uses 1.8 m and dies at two, a gunshot uses 7.5 m and fills the room.
+  One knob, and inverse-square is still inverse-square.
 
 ### Sound does not go through walls
 
 Each level bakes a top-down occupancy grid of its wall segments
 (`src/world/builder.js`), blurred so a coarse march cannot step over a thin
-partition, and uploaded as a texture. Every lit pixel ray-marches sixteen samples
-in XZ from itself back to the pulse origin and attenuates by what it crosses. The
-same grid is sampled on the CPU by `SoundWorld.transmission()`, so enemies hear
-through exactly the walls the light stops at.
+partition, and uploaded as a texture. Every lit pixel ray-marches eighteen
+samples in XZ from itself back to the pulse origin and attenuates by what it
+crosses. The same grid is sampled on the CPU by `SoundWorld.transmission()`, so
+enemies hear through exactly the walls the light stops at.
+
+Only partitions taller than 1.7 m are stamped into it. Sound goes over a bench,
+a turnstile stall and a railway sleeper; stamping those made THE TUNNEL
+acoustically opaque along its entire length, which is a very quiet bug to find.
 
 ### Light memory
 
@@ -99,8 +108,13 @@ unreadable — you would never hold a mental picture of a room.
 So `src/render/memory.js` runs a second pass every frame that rasterises the
 level geometry into its **lightmap chart** instead of into the camera, and
 accumulates `max(previous × decay, current)` into a ping-ponged half-float
-atlas. Revealed geometry stays faintly visible for about three seconds and then
-is gone.
+atlas. Revealed geometry stays faintly visible for about two and a half seconds
+and then is gone.
+
+What gets stored is `lit / (1 + lit)`, not `lit`. Memory records *that* you saw
+a surface, not how hard it was hit — store raw radiance and a single gunshot
+paints the whole room white for three seconds, and the imprint stops being a
+hint and becomes a floodlight.
 
 This is a lightmap, not a screen-space trail. The imprint is anchored to the
 world, so turning your head does not smear it and walking backwards does not
@@ -193,8 +207,8 @@ rectangles in the corners.
 
 ### Post
 
-`EffectComposer`: render → `UnrealBloomPass` (strength 0.78, radius 0.48,
-threshold 0.42) → one custom final pass doing chromatic aberration weighted by
+`EffectComposer`: render → `UnrealBloomPass` (strength 0.55, radius 0.34,
+threshold 0.55) → one custom final pass doing chromatic aberration weighted by
 `r⁴` so it only touches the far corners, an exponential exposure curve that
 reaches true white without ever lifting true black, film grain **gated on
 luminance so unlit pixels stay exactly `#000000`**, and a vignette.
@@ -206,7 +220,7 @@ frame turns the whole premise into grey mush.
 
 ## Design decisions I made along the way
 
-**Sound travels at 9–34 m/s, not 343.** Real physics puts the wavefront across a
+**Sound travels at 7–34 m/s, not 343.** Real physics puts the wavefront across a
 room inside one frame. The whole game is watching the shell travel, so the speed
 of sound is an art direction parameter. Gunfire is fastest (30 m/s) because it
 should feel like a detonation; a drip is slowest (8 m/s) because you want to
@@ -239,6 +253,19 @@ so what you see and what the AI hears never disagree.
 the wounded-player glow as a plain light. Routing it through the same contract as
 everything else means the enemies hear your pulse, which turns injury into a
 mechanic instead of a status effect.
+
+**The palette is de-gamma'd on the way in.** The shader works in linear light
+and the final pass encodes to sRGB, so feeding it `#C4522A` directly and then
+gamma-encoding the result produces beige. Each palette entry is raised to 2.2
+and normalised to a peak of 1, which both restores the rust and makes `power`
+mean the same thing whatever the hue: brightness lives in the pulse, colour
+lives in the palette.
+
+**The hum is not silent light.** A continuous electrical drone that never
+illuminates anything would break the first pillar outright. So the bed is paired
+with a failing fluorescent ballast: every few seconds it ticks over, the hum
+swells, and a thin cyan ring falls out of the ceiling. The drone is the sound of
+that ring still ringing.
 
 **No music.** Ambience only: the drips, the plant, the settling of the building,
 and occasionally a train passing somewhere above that shakes the whole station

@@ -98,7 +98,7 @@ canvas { position: fixed; inset: 0; display: block; }
 }
 
 #screens .tag {
-  margin-top: 2.4em;
+  margin-top: 4.2em;
   font-size: 11px;
   letter-spacing: 0.72em;
   text-indent: 0.72em;
@@ -148,12 +148,12 @@ canvas { position: fixed; inset: 0; display: block; }
   animation: cardIn 0.8s ease-out both;
 }
 #screens.card .tag {
-  margin-top: 1.8em;
+  margin-top: 2.6em;
   opacity: 0.42;
   animation: cardIn 1.4s ease-out both;
 }
 #screens.card .hint {
-  margin-top: 5em;
+  margin-top: 9em;
   font-size: 9px;
   letter-spacing: 0.42em;
   text-indent: 0.42em;
