@@ -201,6 +201,8 @@ node scripts/cairn-device-check.mjs
                                # CAIRN: 4x CPU throttle + heap profile of the loop
 node scripts/cairn-first-minute.mjs
                                # CAIRN: the on-ramp and the teaching beat
+node scripts/cairn-daily-check.mjs
+                               # CAIRN: daily seed, UTC rollover, slot isolation
 node scripts/smoke.mjs         # REVERB: state machine + 5 levels
 node scripts/nav-check.mjs     # REVERB: navigation, <1s, no GPU
 ```
@@ -239,6 +241,13 @@ a share of gaps are placed **beyond the physical reach envelope on purpose**:
 you cannot cross them, you die at the apex, and your corpse is the step. A third
 of an expert bot's deaths are now deliberate throws into a gap it knew it could
 not make, against 1.8% of a novice's.
+
+**Daily Climb is a separate tower with a separate save slot.** The seed is
+derived from the UTC date (`Store.dailySeed`), never stored, so it is identical
+everywhere on earth and a share card carrying the date is enough to hand someone
+the same climb. `Store.setSlot()` keys storage; endless keeps the original key
+names exactly, so saves already on phones still load. Never let the two share a
+slot — a daily seed is discarded tomorrow, an endless tower is a whole history.
 
 **The first time a player stands on their own corpse, the camera pulls back.**
 `FEEL.monument.teachPull` for `teachMs`, once per player ever, persisted. It is

@@ -135,7 +135,19 @@ Cheap to build, disproportionate effect on how a run *feels* to have played.
 
 ---
 
-## 5 — Daily Climb
+## 5 — Daily Climb. DONE — `scripts/cairn-daily-check.mjs`
+
+One seed per UTC date, derived from the date rather than stored, so the tower is
+identical for everyone on earth at the same instant and a share card only has to
+carry the date for a recipient to play it. Verified across three timezones at
+00:30 UTC — where Los Angeles still reads the previous day locally and gets the
+new day's seed anyway — and across the midnight boundary itself.
+
+Its own save slot, because a daily seed is thrown away tomorrow and an endless
+tower is a player's whole history. Checked: an endless tower survives a daily
+session intact, and the two keep separate keys on disk.
+
+### The brief, as it stood
 
 One seed per UTC date, identical for everyone, one tower per day, separate from
 endless. The single highest-value retention feature in the brief — but it ranks

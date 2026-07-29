@@ -59,6 +59,7 @@ const ui = {
   recordCrossed: false,
   bestAtRunStart: 0,
   monument: false,
+  daily: false,
   // PHASE3 §3 — the first sixty seconds, instrumented. Milliseconds from the
   // touch that starts the run to the first time each thing ever happens. Read by
   // scripts/cairn-first-minute.mjs; nothing in the game reads them.
@@ -80,6 +81,7 @@ const el = {
   debug: document.getElementById('debug'),
   mute: document.getElementById('mute'),
   monshare: document.getElementById('monshare'),
+  daily: document.getElementById('daily'),
 };
 
 function resize() {
@@ -255,6 +257,46 @@ function teach() {
   setTimeout(() => { if (!ui.monument) camera.monTarget = 0; }, FEEL.monument.teachMs);
 }
 try { ui.taught = localStorage.getItem('cairn.taught') === '1'; } catch { /* private mode */ }
+
+/**
+ * THE DAILY CLIMB.
+ *
+ * One seed per UTC date, the same tower for everyone on earth that day, kept in
+ * its own save slot so it can never touch the endless tower — a daily seed is
+ * thrown away tomorrow and an endless tower is a player's whole history.
+ *
+ * The switch is a full reset rather than a resume: two towers, two records, two
+ * piles of bodies. `sim.dailyDate` is what the share card carries, because the
+ * date IS the seed and a recipient who has it plays the identical climb.
+ */
+function setMode(daily) {
+  if (daily === !!ui.daily) return;
+  Store.save(sim);                                // bank the tower being left
+  ui.daily = daily;
+  ui.beats = {};
+  ui.taught = ui.taught;                          // the lesson is per player, not per mode
+  const date = Store.dailyDate();
+  sim.dailyDate = daily ? date : null;
+  sim.world.seed = daily ? Store.dailySeed(date) : 0x1a2b3c;
+  Store.setSlot(daily ? `daily.${date}` : '');
+  sim.best = 0; sim.deaths = 0;
+  sim.reset(true);
+  if (!Store.load(sim)) sim.world.generate(FEEL.camera.viewH * 2.2);
+  sim.phase = ui.started ? PHASE.PLAY : PHASE.TITLE;
+  camera.y = 0; camera.x = COLUMN * 0.5;
+  renderer.trailN = 0;
+  ui.bestAtRunStart = sim.best;
+  ui.recordCrossed = false;
+  el.daily.className = daily ? 'on' : '';
+  el.daily.textContent = daily ? `DAILY ${date.slice(5)}` : 'DAILY';
+  try { localStorage.setItem('cairn.mode', daily ? 'daily' : ''); } catch { /* private */ }
+}
+
+el.daily.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setMode(!ui.daily);
+});
 
 input.onMonument = () => monument(!ui.monument);
 input.onTap = () => {
@@ -482,6 +524,22 @@ addEventListener('pointerdown', () => { if (!ui.started) begin(); }, { passive: 
 
 // ---------------------------------------------------------------------- boot
 
+// Boot into whichever tower was last open. The mode has to be restored BEFORE
+// the first load, or the endless slot gets read into a daily session.
+let bootDaily = false;
+try { bootDaily = localStorage.getItem('cairn.mode') === 'daily'; } catch { /* private */ }
+if (bootDaily) {
+  const d = Store.dailyDate();
+  ui.daily = true;
+  sim.dailyDate = d;
+  sim.world.seed = Store.dailySeed(d);
+  Store.setSlot(`daily.${d}`);
+  sim.reset(true);
+  el.daily.className = 'on';
+  el.daily.textContent = `DAILY ${d.slice(5)}`;
+} else {
+  el.daily.textContent = 'DAILY';
+}
 Store.load(sim);
 resize();
 showTitle();
@@ -515,7 +573,7 @@ try {
 // The harness drives the real loop, never a copy of it.
 window.CAIRN = {
   sim, input, camera, renderer, audio, post, FEEL, Store, predict,
-  begin, frame, update, ui, monument, teach,
+  begin, frame, update, ui, monument, teach, setMode,
   step(n) { for (let i = 0; i < n; i++) sim.tick(0); },
   fire(vx, vy) { return sim.launch(vx, vy); },
 };

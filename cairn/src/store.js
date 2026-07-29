@@ -23,6 +23,40 @@ import { FEEL, COLUMN, BIOMES, biomeAt, newBiomeSlot } from './feel.js';
 const KEY = 'cairn.v1';
 const BAK = 'cairn.bak';
 const SCHEMA = 2;
+
+/**
+ * THE SLOT. Endless and the Daily Climb are two towers and must never share
+ * storage: a daily seed is thrown away tomorrow and an endless tower is the
+ * player's whole history. `''` is endless and keeps the original key names
+ * exactly, so every save already on a phone still loads.
+ */
+let slot = '';
+export function setSlot(name) { slot = name ? `.${name}` : ''; }
+const key = () => KEY + slot;
+const bakKey = () => BAK + slot;
+
+/**
+ * ONE SEED PER UTC DATE, the same for everyone on earth.
+ *
+ * Built from the date only, in UTC, so a player in Auckland and a player in Los
+ * Angeles are climbing the identical tower at the same moment even though their
+ * local calendars disagree. The seed is derived rather than stored, so a share
+ * card only has to carry the date for a recipient to get the same climb.
+ */
+export function dailyDate(now = new Date()) {
+  return now.toISOString().slice(0, 10);          // YYYY-MM-DD, always UTC
+}
+
+export function dailySeed(date = dailyDate()) {
+  // FNV-1a over the date string. Any stable hash would do; what matters is that
+  // it is a pure function of the date and computed identically everywhere.
+  let h = 0x811c9dc5;
+  for (let i = 0; i < date.length; i++) {
+    h ^= date.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h | 0) || 0x1a2b3c;
+}
 const MAX_STORED = 600;   // beyond this the tower is scenery, not gameplay
 
 /**
@@ -45,9 +79,9 @@ const MAX_STORED = 600;   // beyond this the tower is scenery, not gameplay
 
 const FIELDS = 5;
 
-function readSlot(key) {
+function readSlot(k) {
   let raw;
-  try { raw = localStorage.getItem(key); } catch { return null; }
+  try { raw = localStorage.getItem(k); } catch { return null; }
   if (!raw) return null;
   try { return JSON.parse(raw); } catch { return null; }
 }
@@ -85,11 +119,11 @@ export function save(sim) {
     // Demote the current save to the backup slot before overwriting it, but only
     // if it is intact — promoting a corrupt payload to the backup would destroy
     // the one copy that could still be recovered.
-    const current = readSlot(KEY);
+    const current = readSlot(key());
     if (current && validate(current)) {
-      try { localStorage.setItem(BAK, JSON.stringify(current)); } catch { /* quota */ }
+      try { localStorage.setItem(bakKey(), JSON.stringify(current)); } catch { /* quota */ }
     }
-    localStorage.setItem(KEY, payload);
+    localStorage.setItem(key(), payload);
   } catch { /* private mode, quota, whatever — the game still plays */ }
 }
 
@@ -124,8 +158,8 @@ export function load(sim) {
   // Main slot, then the backup. A tower is worth two attempts.
   let d = null;
   let from = '';
-  for (const [key, label] of [[KEY, 'main'], [BAK, 'backup']]) {
-    const cand = readSlot(key);
+  for (const [k, label] of [[key(), 'main'], [bakKey(), 'backup']]) {
+    const cand = readSlot(k);
     if (cand && validate(cand)) { d = migrate(cand); from = label; break; }
   }
   if (!d) return false;
@@ -157,7 +191,7 @@ export function load(sim) {
 }
 
 export function wipe() {
-  try { localStorage.removeItem(KEY); } catch { /* nothing to do */ }
+  try { localStorage.removeItem(key()); localStorage.removeItem(bakKey()); } catch { /* none */ }
 }
 
 // ------------------------------------------------------------------- poster
@@ -266,7 +300,11 @@ export async function share(sim) {
   const type = blob.type || 'image/png';
   const ext = type.split('/')[1] || 'png';
   const file = new File([blob], `cairn.${ext}`, { type });
-  const text = `${Math.round(sim.best)}m — ${sim.deaths} stones below. CAIRN`;
+  // A daily share carries its DATE, which is the seed — so a recipient plays the
+  // identical tower rather than a story about one.
+  const text = sim.dailyDate
+    ? `${Math.round(sim.best)}m — ${sim.deaths} stones below. CAIRN daily ${sim.dailyDate}`
+    : `${Math.round(sim.best)}m — ${sim.deaths} stones below. CAIRN`;
 
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file], text }); return 'shared'; } catch { /* cancelled */ }

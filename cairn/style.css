@@ -252,3 +252,27 @@ body.monument #toast { opacity: 0; pointer-events: none; }
 
 /* Offered only once the pull-back has landed, never during it. */
 #monshare.on { opacity: 1; pointer-events: auto; }
+
+/*
+ * The Daily Climb switch. Mirrors #mute exactly — same size, same weight, same
+ * near-invisibility — because it is the same KIND of thing: a setting, not a
+ * feature competing with the tower for attention. It brightens when the daily
+ * tower is the one you are on.
+ */
+#daily {
+  position: fixed;
+  left: calc(env(safe-area-inset-left, 0px) + 14px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  appearance: none;
+  background: none;
+  border: 0;
+  color: var(--ink);
+  opacity: 0.22;
+  font: 300 9px/1 var(--mono);
+  letter-spacing: 0.28em;
+  padding: 10px;
+  z-index: 5;
+  touch-action: none;
+}
+#daily.on { opacity: 0.72; color: #C99A4A; }
+body.monument #daily { opacity: 0; pointer-events: none; }
