@@ -189,6 +189,8 @@ node scripts/cairn-balance.mjs --all --seeds=200 --attempts=50
                                # CAIRN: 30,000 headless climbs, ~2.5 min, no browser
 node scripts/cairn-precision.mjs
                                # CAIRN: arc fidelity + aim tolerance, ~2 s, no browser
+node scripts/cairn-ghost-check.mjs
+                               # CAIRN: the death preview is drawn, and at the apex
 node scripts/smoke.mjs         # REVERB: state machine + 5 levels
 node scripts/nav-check.mjs     # REVERB: navigation, <1s, no GPU
 ```
@@ -227,6 +229,12 @@ a share of gaps are placed **beyond the physical reach envelope on purpose**:
 you cannot cross them, you die at the apex, and your corpse is the step. A third
 of an expert bot's deaths are now deliberate throws into a gap it knew it could
 not make, against 1.8% of a novice's.
+
+**When a launch cannot land, the game draws the body you would leave** at the
+apex, exact to 0.000 u against the corpse `_die` will create. Some gaps in this
+tower cannot be crossed on purpose; without that preview they are
+indistinguishable from a badly aimed jump, and the mechanic the design rests on
+reads as unfairness. `FEEL.aim.ghostAlpha` is the only knob.
 
 **Jump accuracy is measured, not assumed** (`cairn/BALANCE.md`). The drawn arc
 matches the flight exactly — including off a wall cling, which it did **not**

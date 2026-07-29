@@ -320,6 +320,9 @@ export class Sim {
     this._ghost = newBody();
     // Scratch for launchVelocity, so aiming allocates nothing per frame.
     this._lv = { vx: 0, vy: 0 };
+    // Where a predicted launch would freeze. Filled by `predict`, read by the
+    // renderer to draw the body you are about to leave. Allocated once.
+    this.predictPeak = { x: 0, y: 0, dies: false };
     this.reset(true);
   }
 
@@ -647,11 +650,20 @@ export function predict(sim, vx, vy, outArc) {
   p.grounded = false; p.standing = b.standing;
 
   outArc.length = 0;
+  const peak = sim.predictPeak;
+  peak.dies = false;
   const ticks = Math.ceil(FEEL.aim.arcSeconds / DT);
   for (let i = 0; i < ticks; i++) {
     const r = sim._flight(p, 0);
     if (i % FEEL.aim.arcDotEvery === 0) outArc.push(p.x, p.y);
-    if (r === 'die') { outArc.push(p.x, p.y); return null; }
+    if (r === 'die') {
+      outArc.push(p.x, p.y);
+      // The same two fields `_die` hands to `world.corpse`, so the previewed
+      // body and the real one are the same body. One source, again: a preview
+      // of where you will land that is merely close is a preview that lies.
+      peak.x = p.peakX; peak.y = p.peakY; peak.dies = true;
+      return null;
+    }
     if (r) {
       const rhw = solidHalfWidth(r, sim.deaths);
       const lx = clamp(p.x, r.x - rhw - FEEL.landing.forgiveness, r.x + rhw + FEEL.landing.forgiveness);

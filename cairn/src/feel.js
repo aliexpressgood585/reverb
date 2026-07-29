@@ -100,6 +100,12 @@ export const FEEL = {
     arcSeconds: 2.6,      // how far ahead the predicted arc is simulated
     arcDotEvery: 6,       // ticks between arc dots
     arcCrisp: 0.60,       // fraction of the arc drawn at full opacity
+    // THE BODY YOU WOULD LEAVE.
+    // When the aimed launch cannot land, the apex is drawn as the silhouette
+    // you are about to become. Without it a gap placed past the reach envelope
+    // reads as "the game cheated"; with it, the same gap reads as "put a body
+    // there", which is the decision the whole design is built to offer.
+    ghostAlpha: 0.52,
   },
 
   // ---------------------------------------------------------------- camera

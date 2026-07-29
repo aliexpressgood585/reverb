@@ -676,7 +676,42 @@ export class Renderer {
       ctx.moveTo(lx - R * 1.7, ly); ctx.lineTo(lx - R * 0.6, ly);
       ctx.moveTo(lx + R * 0.6, ly); ctx.lineTo(lx + R * 1.7, ly);
       ctx.stroke();
+      return;
     }
+
+    // THE BODY YOU WOULD LEAVE.
+    //
+    // This launch does not land. Drawn at the apex, in the gold of memory and
+    // in the same silhouette every corpse in the tower is drawn with, is the
+    // shape you are about to become — at the exact spot `_die` will put it,
+    // because `predict` reports the same two fields `_die` reads.
+    //
+    // Some gaps in this tower cannot be crossed at all; that is deliberate and
+    // it is the point of the game. But the bot only knows a gap is impossible
+    // because it can run the physics nine times, and a player has one arc
+    // following their thumb. Without this, an uncrossable gap is
+    // indistinguishable from a badly aimed jump, and the mechanic the whole
+    // design rests on reads as the game being unfair. With it, the question
+    // stops being "can I make this" and becomes "where do I want my body",
+    // which is a decision instead of a punishment.
+    const pk = sim.predictPeak;
+    if (!pk.dies) return;
+    const a = FEEL.aim.ghostAlpha;
+    ctx.save();
+    ctx.translate(this.X(pk.x), this.Y(pk.y));
+    this._figurePath(ctx, FEEL.tower.corpseW * 0.5 * this.scale,
+                     FEEL.tower.corpseH * 0.5 * this.scale, 0);
+    ctx.fillStyle = rgb(MEMORY_GOLD, a * 0.30);
+    ctx.fill();
+    ctx.strokeStyle = rgb(MEMORY_GOLD, a);
+    // Solid, not dashed. A body is 5.2 x 6.0 u — about fifteen CSS pixels tall
+    // on a phone — and a dash pattern at that size breaks the silhouette into a
+    // dotted blob that reads as a marker rather than as a person. The SIZE is
+    // left honest: this is exactly how much room the corpse will take up, and
+    // that is the thing the player is deciding about.
+    ctx.lineWidth = Math.max(1, 1.3 * this.dpr);
+    ctx.stroke();
+    ctx.restore();
   }
 
   /** A hairline at your all-time best, visible only when you are near it. */

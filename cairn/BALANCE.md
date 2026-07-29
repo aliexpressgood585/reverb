@@ -287,6 +287,53 @@ its 97 launches all leave from the ground. A test that never enters the state
 cannot fail in it — the same failure mode this file's own audit records twice
 already.
 
+### The body you would leave
+
+The measurements above say the difficulty is structural: what kills you is a gap
+that cannot be crossed, not an aim that was two degrees off. That creates a
+problem this file raised and could not answer — **the bot knows a gap is
+impossible because it runs the physics nine times, and a player has one arc
+following their thumb.** An uncrossable gap that is indistinguishable from a
+badly aimed jump reads as the game cheating.
+
+So when the aimed launch cannot land, the game now draws the silhouette you are
+about to become, at the apex, in the gold of memory and in the same figure every
+corpse in the tower is drawn with. The question stops being "can I make this"
+and becomes "where do I want my body", which is a decision instead of a
+punishment — and it is the decision the whole design exists to offer.
+
+It is exact, and it has to be, because it is the basis of choosing where to die:
+
+| | |
+|---|---|
+| launches that die, previewed apex vs the corpse actually created | 2,848 |
+| worst error | **0.000 u** |
+
+`predict()` reports the same two fields `_die()` hands to `world.corpse()`. One
+source, again.
+
+Drawn, too, not merely computed — `scripts/cairn-ghost-check.mjs` holds a real
+aim that cannot land and samples the composited frame with the ghost on and with
+`FEEL.aim.ghostAlpha` forced to zero:
+
+```
+apex box   ghost on 121.0,73.7,29.5   off 94.5,51.8,22.1   delta 35.15
+control    ghost on  24.4,13.1, 7.4   off  23.9,12.9, 7.4   delta  0.55
+```
+
+Two notes worth keeping, because both cost time. The check cannot work by
+diffing two screenshots: every frame of this game moves, so two shots always
+differ and the first version of it "failed" with the feature working perfectly.
+And `renderer.X/Y` are CSS-space while the canvas backing store is device
+pixels — a sampler that forgets the dpr reads a patch of empty sky and reports
+the feature missing, which it also did.
+
+The silhouette is drawn solid rather than dashed, and at the corpse's true size.
+A body is 5.2 × 6.0 u — about fifteen CSS pixels on a phone — and a dash pattern
+at that size breaks it into a dotted blob that reads as a marker rather than a
+person. The size is left honest: that is exactly how much room the corpse will
+take up, which is the thing being decided.
+
 ### How wrong can a launch be?
 
 4,186 jumps sampled from real towers on the expert line. Three thresholds,
@@ -363,11 +410,10 @@ Open, not done, not claimed:
   median death height stops rising around attempt 30. The reasoning above says
   it cannot be fixed without breaking test 12, but that is an argument, not a
   measurement of an alternative.
-- **Nothing measures whether the uncrossable gaps read as uncrossable.** The bot
-  knows a gap is past the envelope because it ran the physics 9 times. A player
-  has one arc following their thumb. If the game does not make "you cannot make
-  this, put a body in it" legible on sight, the mechanic is a difficulty spike
-  rather than a decision, and this file cannot tell the difference.
+- **Nothing measures whether the ghost actually teaches it.** The preview is
+  proven exact and proven drawn. Whether a player seeing a gold body appear at
+  the apex concludes "put a body there" rather than "I failed" is a question
+  about a person, and no bot in this repository can answer it.
 - **Only one `seed0`.** 200 world seeds is a lot of towers but they all descend
   from `0x1a2b3c`. A second root has not been run.
 - **The precision survey never launches from a wall.** Section A proves the arc

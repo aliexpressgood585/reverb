@@ -150,6 +150,50 @@ function arcFidelity() {
 }
 
 // ---------------------------------------------------------------------------
+// D. is the previewed body where the real one lands?
+// ---------------------------------------------------------------------------
+
+/**
+ * When a launch cannot land, the game draws the silhouette you are about to
+ * become at the apex. That preview is only worth drawing if it is exact: it is
+ * the whole basis of deciding WHERE to die, which on this tower is a real
+ * decision, because the body is the step the next attempt uses.
+ */
+function ghostFidelity() {
+  const arc = [];
+  let n = 0, worst = 0, missing = 0;
+
+  for (let s = 0; s < 400; s++) {
+    const seed = (0x1a2b3c + s * 0x9e3779b1) | 0;
+    for (let k = 0; k < 8; k++) {
+      const sim = new Sim(seed);
+      sim.phase = PHASE.PLAY;
+      // Aim low and sideways on purpose: these are the launches that die.
+      const ang = (8 + ((s * 5 + k * 13) % 34)) * DEG * (k % 2 ? 1 : -1);
+      const sp = FEEL.launch.maxSpeed * (0.55 + ((s + k) % 45) / 100);
+      const vx = Math.cos(ang) * sp, vy = Math.abs(Math.sin(ang)) * sp;
+
+      const landed = predict(sim, vx, vy, arc);
+      if (landed || !sim.predictPeak.dies) continue;
+      const px = sim.predictPeak.x, py = sim.predictPeak.y;
+
+      sim.launch(vx, vy);
+      const real = flyForReal(sim);
+      if (!real.died) continue;
+
+      let corpse = null;
+      for (const sol of sim.world.solids) {
+        if (sol.corpse && (!corpse || sol.order > corpse.order)) corpse = sol;
+      }
+      if (!corpse) { missing++; continue; }
+      n++;
+      worst = Math.max(worst, Math.hypot(corpse.x - px, corpse.y - py));
+    }
+  }
+  return { n, worst, missing };
+}
+
+// ---------------------------------------------------------------------------
 // B. how much slop does a jump tolerate?
 // ---------------------------------------------------------------------------
 
@@ -302,6 +346,11 @@ for (const [name, r] of [['from the ground', fid.ground], ['from a wall cling', 
     `${verdict}   worst landing error ${r.worstDx.toFixed(3)}u across, ` +
     `${r.worstDy.toFixed(3)}u up`);
 }
+
+console.log('\nD. is the previewed body where the real one lands?');
+const gh = ghostFidelity();
+console.log(`   ${gh.n} launches that die   worst preview-to-corpse error ` +
+  `${gh.worst.toFixed(3)}u${gh.missing ? `   ${gh.missing} WITH NO CORPSE` : ''}`);
 
 console.log('\nB. how much slop does a jump tolerate?');
 const { out, byHeight } = slopSurvey();
