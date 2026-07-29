@@ -300,6 +300,44 @@ in one sentence.
 
 A bridged gap is worth **40 m** of height, up from 17.
 
+### What a player hitting one looks like, and what came of it
+
+A player was stopped at 391 m: the next ledge sat about 38 u above them, past the
+~34 u a full-power launch lifts, and the two bodies flanking them had already
+eroded to MEMORY. The mechanic firing exactly as designed, and reading as a wall.
+
+Three things came out of chasing it.
+
+**A real bug, fixed.** `_die` passed the apex as the corpse's CENTRE, so the
+body's landable surface sat `corpseH / 2` — three units — *above* the highest
+point the body ever reached. That is a small lie about the only rule this game
+has, and it had a large consequence: the body you leave at maximum height is one
+you can never stand on, because standing on it means reaching higher than you
+just proved you could. The surface is now exactly where you froze.
+
+**Ordinary generation is sound.** With overreach switched off: **964 gaps, 100%
+DIRECT, zero dead ends.** Every wall in this game comes from the deliberate
+mechanic and none from the ordinary generator.
+
+**And the two requirements are in direct tension.** Switching overreach off also
+makes **30 of 30 expert seeds immortal**, climbing 24-75 km without dying — the
+exact empty loop this whole document exists to have fixed. "No situation is ever
+impossible" and "the game has a ceiling" cannot both be had from this mechanism.
+
+| overreachRate | WALL | BRIDGED | expert passes 600 m on attempt 1 |
+|---|---|---|---|
+| 0 | **0%** | 0% | 100% — never dies |
+| **0.14 (shipped)** | **6.3%** | 6.3% | 20% |
+| 0.22 | 9.5% | 9.8% | 5% |
+
+0.14 is the compromise: a third fewer walls than shipped before, still killable.
+It is not zero, and zero needs the generation-time route check PHASE3 §2 owes —
+verify each overreach gap as it is built and demote it to an ordinary gap when no
+route exists. Nothing here explains why roughly half of overreach gaps have no
+one-body route: it is independent of the rise (identical at every band tried),
+independent of the audit's sweep resolution (identical at 1 deg / 2 u), and
+untested for two-body routes and for wall launches off a corpse's side.
+
 ### The cost, stated plainly
 
 **10.4% of gaps above 481 m have no route even with a body in them.** Over the

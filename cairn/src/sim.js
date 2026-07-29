@@ -631,7 +631,20 @@ export class Sim {
     const b = this.body;
     const rot = (this.world.rng() - 0.5) * 1.1;
     const pose = Math.floor(this.world.rng() * 4);
-    this.world.corpse(b.peakX, b.peakY, rot, pose, this.time, this.deaths);
+    // THE BODY'S TOP SITS AT THE APEX, NOT ITS CENTRE.
+    //
+    // This used to pass `peakY` as the centre, which put the corpse's landable
+    // surface `corpseH / 2` — three units — ABOVE the highest point the body ever
+    // reached. That is a small lie about the one rule the game has, and it had a
+    // large consequence: the body you leave at maximum height is a body you can
+    // never stand on, because standing on it requires reaching higher than you
+    // just proved you could. Roughly half of all uncrossable gaps had no route
+    // for exactly this reason, and a player at 391 m hit one.
+    //
+    // Now the surface is exactly where you froze. Throw, freeze, and the top of
+    // what is left is the height you earned.
+    this.world.corpse(b.peakX, b.peakY - FEEL.tower.corpseH * 0.5,
+                      rot, pose, this.time, this.deaths);
     this.deaths++;
     this.hitStop = FEEL.juice.hitStopDeath;
     this.phase = PHASE.DYING;

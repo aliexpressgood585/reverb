@@ -201,7 +201,7 @@ export const FEEL = {
     // gaps need a body to bridge them, 10.4% have no route even with one, and
     // the expert model still passes 600 m on only 3.3% of first attempts. Lower
     // and the mechanic stops mattering; higher and the terrain does the killing.
-    overreachRate: 0.22,  // their share of gaps at full difficulty
+    overreachRate: 0.14,  // their share of gaps at full difficulty
     // Rise as a multiple of the ideal full-power lift. The floor must clear what
     // the apex hang actually buys (~1.05) or the gap is merely hard; the ceiling
     // must stay close enough that a corpse left below it finishes the job.

@@ -103,8 +103,12 @@ function reaches(sim, target) {
     if (shoot(dx / Math.max(t, 1e-3), vy)) return true;
   }
 
-  for (let a = 12; a <= 168; a += 3) {
-    for (let s = L.minSpeed; s <= L.maxSpeed + 0.01; s += 6) {
+  // Fine. A corpse offers a 2.6 u half-width perch and the launch that lands on
+  // it can be a narrow solution; a coarse sweep misses it and reports a dead end
+  // that is the sweep's doing. This audit has already invented two such
+  // findings, so resolution is not the place to save time.
+  for (let a = 12; a <= 168; a += 1) {
+    for (let s = L.minSpeed; s <= L.maxSpeed + 0.01; s += 2) {
       if (shoot(Math.cos(a * DEG) * s, Math.sin(a * DEG) * s)) return true;
     }
   }

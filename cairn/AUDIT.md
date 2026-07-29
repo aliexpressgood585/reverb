@@ -157,10 +157,23 @@ Not fixed here, and deliberately not papered over: the band-hazard table in
 
 These are open, not done, and not claimed:
 
-- **No 4× throttled mobile profile.** Reason above.
-- **No allocation audit of the frame loop.** Pools exist for particles, rings,
-  trail, dust and solids, and the scratch bodies for prediction are allocated
-  once. This was designed for, not verified with a heap profiler.
+- ~~No 4x throttled mobile profile~~ and ~~no allocation audit of the frame
+  loop~~ — **both done**, `scripts/cairn-device-check.mjs`. What a container that
+  rasterises WebGL in software can honestly gate is not milliseconds, so it gates
+  the two things that are hardware-independent. **Cost is sub-linear in corpses**
+  (3.1x the tower costs 0.2x the per-corpse time — culling and height buckets
+  working), so the tower has no cliff waiting at some height. And a steady frame
+  with 300 corpses **retains 60 bytes and churns 216 bytes** — the pools hold and
+  there is no leak. The whole frame including the grade is reported and not
+  gated: 4 fps at 1x here, 3 fps at 4x throttle, software-rasterised and 20-40x
+  slower than a phone GPU.
+- **Dead ends still exist, and the requirement to remove them is in direct
+  tension with the game having a ceiling.** See BALANCE.md. Ordinary gaps are
+  100% crossable across 964 audited; every wall comes from the deliberate
+  overreach mechanic, and turning it off makes 30 of 30 expert seeds immortal at
+  24-75 km. The rate is now 0.14 — 6.3% of gaps above 391 m need a body, 6.3%
+  have no route with one. Closing that properly needs the generation-time route
+  check that PHASE3 §2 still owes.
 - **Balance is measured, and one of its four targets is only partly met.**
   30,000 climbs across novice/average/expert models are in `BALANCE.md`, with
   the generator retuned. Three targets hold outright. The fourth — the average

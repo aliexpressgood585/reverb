@@ -197,6 +197,8 @@ node scripts/cairn-reach-check.mjs --from=481
                                # CAIRN: is there a route up, with or without a body
 node scripts/cairn-store-check.mjs
                                # CAIRN: migration, backup slot, poisoned rows
+node scripts/cairn-device-check.mjs
+                               # CAIRN: 4x CPU throttle + heap profile of the loop
 node scripts/smoke.mjs         # REVERB: state machine + 5 levels
 node scripts/nav-check.mjs     # REVERB: navigation, <1s, no GPU
 ```
