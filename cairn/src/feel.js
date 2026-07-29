@@ -163,6 +163,23 @@ export const FEEL = {
     // player for as long as the player keeps taking ground off it.
     diffScale: 260,       // metres to reach 63% of the way to the ceiling
 
+    // THE ON-RAMP — PHASE3 §3, "the first jump nearly unmissable".
+    //
+    // The difficulty curve is already at its gentlest here, and it was not gentle
+    // enough: the first ledge a new player must hit is as narrow as the curve's
+    // starting width, which is a coin-flip for someone who has not worked out
+    // that the drag vector IS the launch vector. A reviewer who read the source
+    // concluded this was a slingshot and played it inverted, which is the
+    // strongest evidence available that the aim model has to be learned on
+    // ground where being wrong is survivable.
+    //
+    // Over `openingSpan` metres the tower blends from deliberately generous to
+    // whatever the curve says. Nothing is explained; the first jumps are simply
+    // hard to miss.
+    openingSpan: 60,
+    openingWidth: 27,     // ledge width at the very base
+    openingGap: 0.55,     // share of the normal gap at the very base
+
     riseEase: 0.55,       // share of the rise range in play at zero height
     gapNear: 0.42,        // share of the usable gap at zero height
     gapFar: 1.00,         // ... and at full difficulty
@@ -248,6 +265,14 @@ export const FEEL = {
   // span. Change `playerOffsetY` and these two follow it.
   monument: {
     ease: 2.4,            // how fast the pull-back converges, per second
+    // THE ONE TIME THE GAME EXPLAINS ITSELF, and it does it with the camera.
+    // The first time a player ever stands on one of their own bodies, it pulls
+    // back this far for `teachMs` and returns. No text, no pause, no control
+    // taken away — just a beat where the thing that happened is impossible to
+    // miss. PHASE3 §3 asks for exactly this and calls it the beat that sells the
+    // game.
+    teachPull: 0.38,
+    teachMs: 1500,
     pad: 1.24,            // view span as a multiple of the tower's top
     centre: 0.245,        // camera height as a fraction of the span
     minSpan: 260,         // never pull back past this on a short tower

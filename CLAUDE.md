@@ -199,6 +199,8 @@ node scripts/cairn-store-check.mjs
                                # CAIRN: migration, backup slot, poisoned rows
 node scripts/cairn-device-check.mjs
                                # CAIRN: 4x CPU throttle + heap profile of the loop
+node scripts/cairn-first-minute.mjs
+                               # CAIRN: the on-ramp and the teaching beat
 node scripts/smoke.mjs         # REVERB: state machine + 5 levels
 node scripts/nav-check.mjs     # REVERB: navigation, <1s, no GPU
 ```
@@ -237,6 +239,13 @@ a share of gaps are placed **beyond the physical reach envelope on purpose**:
 you cannot cross them, you die at the apex, and your corpse is the step. A third
 of an expert bot's deaths are now deliberate throws into a gap it knew it could
 not make, against 1.8% of a novice's.
+
+**The first time a player stands on their own corpse, the camera pulls back.**
+`FEEL.monument.teachPull` for `teachMs`, once per player ever, persisted. It is
+the only moment the game explains itself and it does it without text or taking
+control. Before it, a player could do the thing the whole game is about and not
+notice. The first 60 m is also an explicit on-ramp (`tower.opening*`) with no
+uncrossable gaps by construction.
 
 **The save file is schema 2 and has a backup slot.** Schema 1 did not store
 `bornDeath`, so a reload brought every corpse back at age = `deaths` — already

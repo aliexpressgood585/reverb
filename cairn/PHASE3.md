@@ -79,7 +79,27 @@ found by a bot and invisible to the eye.
 
 ---
 
-## 3 — The first sixty seconds, choreographed and instrumented
+## 3 — The first sixty seconds. DONE — `scripts/cairn-first-minute.mjs`
+
+The on-ramp: over `tower.openingSpan` (60 m) the tower blends from deliberately
+generous to whatever the difficulty curve says. Landing windows 17.0 u against
+10.7 u later, gaps 18.6 u against 23.0 u, and the narrowest window on the ramp is
+14.5 u — comfortably over the ~8 u a novice's 6.5 deg / 11.5% error typically
+misses by. No rise on the ramp exceeds a full-power launch and no gap on it can
+be uncrossable, by construction rather than by curve.
+
+**And the beat that sells the game now exists.** The first time a player ever
+stands on one of their own bodies, the camera pulls back for 1.5 s and comes
+home. No text, no pause, control never taken away. It fires once per player,
+ever, and remembers. Until now that moment happened with no acknowledgement at
+all — a player could do the thing the entire game is about and not notice.
+
+All four beats are instrumented with real timestamps on `window.CAIRN.ui.beats`,
+because the wall-clock windows below cannot be asserted with a bot: a bot aims in
+microseconds and a person takes seconds, so any number it produced would describe
+the harness. The windows are for a real session on a real phone.
+
+### The brief, as it stood
 
 Retention is decided here and nowhere else. The beats:
 

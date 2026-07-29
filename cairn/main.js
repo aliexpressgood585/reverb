@@ -59,6 +59,11 @@ const ui = {
   recordCrossed: false,
   bestAtRunStart: 0,
   monument: false,
+  // PHASE3 §3 — the first sixty seconds, instrumented. Milliseconds from the
+  // touch that starts the run to the first time each thing ever happens. Read by
+  // scripts/cairn-first-minute.mjs; nothing in the game reads them.
+  beats: {},
+  taught: false,
 };
 
 let dpr = 1;
@@ -96,8 +101,16 @@ function buzz(pattern) {
 
 // -------------------------------------------------------------------- flow
 
+/** Stamp the first time something ever happens, in ms since the run began. */
+function beat(name) {
+  if (ui.beats[name] === undefined && ui.beats.start !== undefined) {
+    ui.beats[name] = Math.round(performance.now() - ui.beats.start);
+  }
+}
+
 function begin() {
   if (ui.started) return;
+  ui.beats.start = performance.now();
   ui.started = true;
   audio.unlock();
   sim.phase = PHASE.PLAY;
@@ -220,6 +233,29 @@ function monument(on) {
 }
 let monShareTimer = 0;
 
+/**
+ * THE ONE TIME THE GAME EXPLAINS ITSELF.
+ *
+ * The first time a player ever stands on one of their own bodies, the camera
+ * pulls back for a beat and comes home. That is the whole premise of the game
+ * happening, and until now it happened off to the side of the screen with no
+ * acknowledgement at all — a player could do it and not notice they had.
+ *
+ * No text, no pause, no control taken away: `input.locked` is deliberately not
+ * touched, so a player who is already aiming keeps aiming. It fires once per
+ * player, ever, and remembers that it did.
+ */
+function teach() {
+  if (ui.taught || ui.monument) return;
+  ui.taught = true;
+  try { localStorage.setItem('cairn.taught', '1'); } catch { /* private mode */ }
+  buzz([12, 40, 12]);
+  camera.monTop = Math.max(sim.best, sim.body.y, 60);
+  camera.monTarget = FEEL.monument.teachPull;
+  setTimeout(() => { if (!ui.monument) camera.monTarget = 0; }, FEEL.monument.teachMs);
+}
+try { ui.taught = localStorage.getItem('cairn.taught') === '1'; } catch { /* private mode */ }
+
 input.onMonument = () => monument(!ui.monument);
 input.onTap = () => {
   if (ui.monument) { monument(false); return; }
@@ -253,8 +289,10 @@ function drainEvents() {
       ui.squashVel -= force * 9;
       if (force > 0.45) buzz(26);
     } else if (kind === EV.DEATH) {
+      beat('firstDeath');
       handleDeath();
     } else if (kind === EV.LAUNCH) {
+      beat('firstLaunch');
       ui.squashVel += 5;
     }
   }
@@ -309,6 +347,12 @@ function update(real) {
     if (!ui.recordCrossed) { ui.recordCrossed = true; crossedRecord(); }
   }
 
+  // Standing on yourself: the beat, and the one lesson the game teaches.
+  if (sim.phase === PHASE.PLAY && b.grounded && b.standing && b.standing.corpse) {
+    beat('firstCorpse');
+    teach();
+  }
+
   // Title: a live scene, drifting slowly up whatever tower this player has.
   if (!ui.started) {
     camera.y += real * 11;
@@ -331,7 +375,12 @@ function update(real) {
 
   // Biome crossing: a full-screen wash and a re-tuning of the ambient bed.
   const bi = Math.floor(Math.max(0, b.y) / BIOME_SPAN);
-  if (bi !== lastBiome) { lastBiome = bi; ui.wash = 1; audio.wash(); }
+  if (bi !== lastBiome) {
+    lastBiome = bi;
+    if (bi > 0) beat('firstBiome');
+    ui.wash = 1;
+    audio.wash();
+  }
   ui.wash = Math.max(0, ui.wash - real * 1.5);
   audio.setHeight(Math.max(0, b.y), bi);
 }
@@ -466,7 +515,7 @@ try {
 // The harness drives the real loop, never a copy of it.
 window.CAIRN = {
   sim, input, camera, renderer, audio, post, FEEL, Store, predict,
-  begin, frame, update, ui, monument,
+  begin, frame, update, ui, monument, teach,
   step(n) { for (let i = 0; i < n; i++) sim.tick(0); },
   fire(vx, vy) { return sim.launch(vx, vy); },
 };

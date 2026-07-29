@@ -517,11 +517,25 @@ const page = await newPage();
     }
     sim.body.x = sim.body.px = sim.body.rx = 50;
     sim.body.y = sim.body.py = sim.body.ry = 60;
+    // Every piece of camera and renderer state the live loop may have left
+    // dirty. Setting position alone left rotation, shake and the monument
+    // pull-back live, and the closest-pair margin still swung 4.6 to 18.0.
     camera.x = 50; camera.y = 60; camera.zoom = 1; camera.viewH = 150;
-    renderer.trailN = 0;
+    camera.rot = 0; camera.rotVel = 0; camera.shake = 0;
+    camera.shakeX = 0; camera.shakeY = 0; camera.t = 0;
+    camera.mon = 0; camera.monTarget = 0;
+    renderer.trailN = 0; renderer.ringN = 0; renderer.partN = 0;
     renderer.draw(sim, camera, null, { started: true, squash: 0, stretch: 0 }, 1 / 60, false);
-    await new Promise((res) => requestAnimationFrame(res));
-    await new Promise((res) => requestAnimationFrame(res));
+
+    // NO AWAIT BETWEEN THE DRAW AND THE SAMPLE.
+    //
+    // This used to wait two requestAnimationFrames "to let the frame settle",
+    // and the game's own loop redraws on exactly those frames — with its own
+    // lerping camera and its own drifting dust. So the pixels being measured
+    // were never the pixels this test set up, and the closest-pair margin swung
+    // between 0.7 and 53.5 on identical code: a coin flip dressed as an
+    // assertion, in the one suite that gates every push. Everything below runs
+    // in the same task as the draw, so no frame can interleave.
 
     // Sample a box around each corpse off the scene canvas and describe it.
     const cv = renderer.canvas;

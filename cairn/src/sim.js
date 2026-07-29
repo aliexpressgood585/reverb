@@ -255,7 +255,9 @@ export class World {
       // THE GAPS YOU CANNOT CROSS — decided first, because a gap that is too
       // high changes every number below it.
       const over = Math.max(0, diff - T.overreachFrom) / Math.max(1e-6, 1 - T.overreachFrom);
-      const unreachable = this.rng() < over * T.overreachRate;
+      // Never inside the on-ramp. The difficulty curve already puts the first
+      // overreach gap near 92 m, but a curve is a number and this is a promise.
+      const unreachable = h >= T.openingSpan && this.rng() < over * T.overreachRate;
 
       const rise = unreachable
         ? lift * (T.overreachLift + this.rng() * T.overreachLiftSpan)
@@ -267,14 +269,20 @@ export class World {
       const usable = Math.max(4, maxDx - this.lastHw);
       const span = T.gapNear + (T.gapFar - T.gapNear) * diff;
 
-      const width = T.maxWidth - (T.maxWidth - T.minWidth) * diff
+      let width = T.maxWidth - (T.maxWidth - T.minWidth) * diff
         * (T.widthEase + (1 - T.widthEase) * this.rng());
+
+      // The on-ramp: generous at the base, blending into the curve by
+      // `openingSpan`. `open` is 0 at the very bottom and 1 past the ramp.
+      const open = clamp(h / T.openingSpan, 0, 1);
+      if (open < 1) width = T.openingWidth + (width - T.openingWidth) * open;
 
       // An unreachable ledge stays nearly overhead, so the body left below it is
       // a step toward it rather than a body stranded out in a gap.
-      const want = unreachable
+      let want = unreachable
         ? usable * T.overreachDrift * this.rng()
         : usable * span * (1 - T.gapJitter + this.rng() * T.gapJitter);
+      if (open < 1) want *= T.openingGap + (1 - T.openingGap) * open;
 
       const dir = this.rng() < 0.5 ? -1 : 1;
       let nx = this.lastX + want * dir;
