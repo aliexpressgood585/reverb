@@ -351,3 +351,34 @@ Dead zone went 8 px → 14 px in the same pass. A resting thumb drifts, and at
 
 Test 11 pins the direction, because every other test in the suite passes
 identically under either mapping — a silent flip back would be invisible.
+
+---
+
+## 18. The record is a feeling, not a menu
+
+"I don't want the metres to stop me every moment."
+
+The personal-best card was raised the instant the player landed above their
+previous best — which, on any run that is beating the record, is **every single
+landing**. The game interrupted the climb with a two-button modal, repeatedly,
+at precisely the moment the player was doing well. The one state a game must
+never break into is a run that is going better than usual.
+
+Three changes:
+
+- **The record updates silently.** Crossing it gives a bloom pulse, a rising
+  tone and a tap on the wrist, once per run. Nothing to dismiss.
+- **The summary moved to after the death transition**, so control is already
+  back before it appears.
+- **It is a strip, not a card.** `pointer-events: none` on everything except the
+  SHARE chip, and it fades on its own in 4.2 s. It reports; it does not ask.
+
+The brief asks for both "run summary on a new personal best" and "death → next
+attempt with no menu, no modal, no button". Those pull against each other, and
+the resolution is that the summary is allowed to exist but is never allowed to
+be in the way. Ignoring it costs the player nothing.
+
+Test 14 pins it: forty record-beating landings must produce zero blocking
+overlays and zero cards. It checks `elementFromPoint` at the centre of the
+screen on every landing, because that is the question — not "was a card shown"
+but "was anything in the player's way".

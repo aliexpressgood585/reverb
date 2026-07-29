@@ -20,6 +20,7 @@
  *  11  the aim points where you drag — direct, never a slingshot
  *  12  difficulty does not collapse as the corpse tower grows
  *  13  the four erosion stages are distinguishable in a single still
+ *  14  nothing ever blocks the middle of the screen during a climb
  *
  * Three and four are the ones that would otherwise be assumed rather than
  * known, and both have already failed once during development.
@@ -550,6 +551,60 @@ const page = await newPage();
   minGap > 3
     ? pass(13, `all four erosion stages separate in one frame (closest neighbouring pair differs by ${minGap.toFixed(1)})`)
     : fail(13, `two erosion stages look the same (closest pair differs by only ${minGap.toFixed(1)})`);
+}
+
+// ── 14. nothing interrupts a climb ─────────────────────────────────────────
+//
+// The record used to raise a full-screen card with two buttons the instant you
+// landed above your previous best — which on a record run is EVERY landing. The
+// game stopped the player mid-climb, repeatedly, exactly when they were doing
+// well. Reported as "I don't want the metres to stop me every moment".
+//
+// Play a run that keeps beating the record and assert that at no point is
+// anything blocking the middle of the screen, and that play never pauses.
+{
+  const r = await page.evaluate(async () => {
+    const { sim, update, ui } = window.CAIRN;
+    sim.reset(true); sim.phase = 1;
+    ui.started = true; ui.dead = 0; sim.best = 0; ui.bestAtRunStart = 0;
+
+    let blocked = 0, paused = 0, cards = 0, climbs = 0;
+    const centre = () => {
+      const e = document.elementFromPoint(195, 420);
+      if (!e) return false;
+      return e.id !== 'view' && getComputedStyle(e).pointerEvents !== 'none';
+    };
+
+    for (let step = 0; step < 40; step++) {
+      // A jump that reliably gains height, so the record keeps falling.
+      let t = null;
+      for (const sol of sim.world.solids) {
+        if (sol === sim.body.standing) continue;
+        if (sol.y <= sim.body.y + 1) continue;
+        if (!t || sol.y < t.y) t = sol;
+      }
+      if (!t) break;
+      const dx = t.x - sim.body.x, dy = t.y - sim.body.y;
+      const rr = Math.hypot(dx, dy) || 1e-6;
+      const g = window.CAIRN.FEEL.gravityRise;
+      const vy = Math.sqrt(Math.max(1, 2 * g * (dy + rr * 0.42)));
+      const tUp = vy / g;
+      const tt = tUp + Math.sqrt(Math.max(0.01, 2 * (vy * tUp - 0.5 * g * tUp * tUp - dy) / g));
+      sim.launch(dx / tt, vy);
+      climbs++;
+      for (let f = 0; f < 1200 && !sim.body.grounded && sim.phase === 1; f++) sim.tick(0);
+      update(1 / 60);
+      await new Promise((res) => requestAnimationFrame(res));
+      if (centre()) blocked++;
+      if (document.getElementById('card').classList.contains('on')) cards++;
+      if (sim.phase !== 1 && ui.dead === 0) paused++;
+      if (sim.phase !== 1) { for (let k = 0; k < 80; k++) update(1 / 60); }
+    }
+    return { blocked, cards, paused, climbs, best: Math.round(sim.best) };
+  });
+  (r.blocked === 0 && r.cards === 0)
+    ? pass(14, `${r.climbs} record-beating landings to ${r.best}m, 0 blocking overlays, 0 cards raised`)
+    : fail(14, `the climb was interrupted: ${r.blocked} blocking overlays, ${r.cards} cards, over ${r.climbs} landings`);
 }
 
 await browser.close();

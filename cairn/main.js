@@ -54,8 +54,10 @@ const ui = {
   dead: 0,            // seconds since death, drives the return-to-base pan
   wash: 0,
   started: false,
-  summary: false,
   toast: 0,
+  banner: 0,
+  recordCrossed: false,
+  bestAtRunStart: 0,
 };
 
 let dpr = 1;
@@ -68,6 +70,7 @@ const el = {
   small: document.getElementById('height'),
   card: document.getElementById('card'),
   toast: document.getElementById('toast'),
+  best: document.getElementById('best'),
   debug: document.getElementById('debug'),
   mute: document.getElementById('mute'),
 };
@@ -96,6 +99,8 @@ function begin() {
   ui.started = true;
   audio.unlock();
   sim.phase = PHASE.PLAY;
+  ui.bestAtRunStart = sim.best;
+  ui.recordCrossed = false;
   hideCard();
 }
 
@@ -116,17 +121,32 @@ function handleDeath() {
 
 function finishDeath() {
   ui.dead = 0;
+  const beat = sim.best > ui.bestAtRunStart + 0.5;
   sim.respawn();
   renderer.trailN = 0;
   Store.save(sim);
+  ui.bestAtRunStart = sim.best;
+  ui.recordCrossed = false;
+  // The summary lands AFTER control has come back, so the retry is never gated.
+  if (beat) showBanner();
 }
 
-function newBest(h) {
-  sim.best = h;
+/**
+ * Crossing your own record is a FEELING, not a menu.
+ *
+ * This used to raise a full-screen card with two buttons the moment you landed
+ * above your previous best — which, on any run that is beating your record, is
+ * every single landing. The game stopped you mid-climb, repeatedly, at exactly
+ * the moment you were doing well. Reported, correctly, as "I don't want the
+ * metres to stop me every moment".
+ *
+ * Now the record updates silently, and the first time you pass it in a run you
+ * get a bloom pulse, a rising tone and a tap on the wrist. Nothing to dismiss.
+ */
+function crossedRecord() {
   ui.bestFlash = 1;
   audio.chime();
-  ui.summary = true;
-  showSummary();
+  buzz(18);
 }
 
 // ------------------------------------------------------------------ cards
@@ -138,15 +158,21 @@ function showTitle() {
 }
 function hideCard() { el.card.className = ''; }
 
-function showSummary() {
-  el.card.className = 'on small';
-  el.card.innerHTML =
-    `<p class="idx">NEW HIGH</p><h1>${Math.round(sim.best)}m</h1>` +
-    `<p class="tag">${sim.deaths} STONES BELOW YOU</p>` +
-    `<div class="row"><button id="share">SHARE</button><button id="on">CLIMB</button></div>`;
-  el.card.querySelector('#on').onpointerdown = (e) => { e.preventDefault(); ui.summary = false; hideCard(); };
-  el.card.querySelector('#share').onpointerdown = async (e) => {
+/**
+ * The run summary, as a strip that fades on its own while the game is already
+ * playable underneath it. It reports; it does not ask. SHARE is the only thing
+ * in it that takes a touch, and ignoring it costs nothing.
+ */
+function showBanner() {
+  el.best.innerHTML =
+    `<span class="k">NEW HIGH</span><b>${Math.round(sim.best)}m</b>` +
+    `<span class="k">${sim.deaths} STONES</span><button id="share">SHARE</button>`;
+  el.best.className = 'on';
+  ui.banner = 4.2;
+  el.best.querySelector('#share').onpointerdown = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    ui.banner = 4.2;
     const how = await Store.share(sim);
     toast(how === 'copied' ? 'COPIED TO CLIPBOARD'
       : how === 'downloaded' ? 'SAVED' : how === 'shared' ? '' : 'COULD NOT SHARE');
@@ -162,15 +188,11 @@ function toast(msg) {
 
 // ------------------------------------------------------------------- input
 
-input.onTap = () => {
-  if (!ui.started) begin();
-  else if (ui.summary) { ui.summary = false; hideCard(); }
-};
+input.onTap = () => { if (!ui.started) begin(); };
 input.onChargeStart = () => { audio.charge(); buzz(8); };
 input.onRelease = (p) => { audio.release(p); buzz(14); };
 input.onLaunch = (vx, vy) => {
   if (!ui.started) { begin(); return; }
-  if (ui.summary) return;
   sim.launch(vx, vy);
 };
 
@@ -239,7 +261,10 @@ function update(real) {
   b.ry = b.py + (b.y - b.py) * alpha;
 
   if (sim.phase === PHASE.PLAY && !b.grounded && !reduced) renderer.pushTrail(b.rx, b.ry);
-  if (sim.phase === PHASE.PLAY && b.y > sim.best && b.grounded && !ui.summary) newBest(b.y);
+  if (sim.phase === PHASE.PLAY && b.grounded && b.y > sim.best) {
+    sim.best = b.y;
+    if (!ui.recordCrossed) { ui.recordCrossed = true; crossedRecord(); }
+  }
 
   // Title: a live scene, drifting slowly up whatever tower this player has.
   if (!ui.started) {
@@ -259,6 +284,7 @@ function update(real) {
   ui.flash = Math.max(0, ui.flash - real * 9);
   ui.bestFlash = Math.max(0, ui.bestFlash - real * 1.6);
   if (ui.toast > 0) { ui.toast -= real; if (ui.toast <= 0) el.toast.className = ''; }
+  if (ui.banner > 0) { ui.banner -= real; if (ui.banner <= 0) el.best.className = ''; }
 
   // Biome crossing: a full-screen wash and a re-tuning of the ambient bed.
   const bi = Math.floor(Math.max(0, b.y) / BIOME_SPAN);

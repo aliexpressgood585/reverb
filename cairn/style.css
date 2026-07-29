@@ -147,6 +147,43 @@ html, body {
 }
 #toast.on { opacity: 0.62; }
 
+/* The record banner. It reports and leaves; it never gates the retry. Only the
+   SHARE chip takes a touch — everything else falls through to the canvas so a
+   player mid-flow never has to dismiss anything. */
+#best {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 40px);
+  left: 0; right: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+#best.on { display: flex; opacity: 1; }
+#best .k { font-size: 9px; letter-spacing: 0.3em; opacity: 0.4; }
+#best b {
+  font-weight: 300;
+  font-size: 19px;
+  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold);
+}
+#best button {
+  pointer-events: auto;
+  appearance: none;
+  background: none;
+  border: 1px solid rgba(201, 154, 74, 0.35);
+  color: var(--gold);
+  font: 300 9px/1 var(--mono);
+  letter-spacing: 0.26em;
+  padding: 7px 10px;
+  touch-action: none;
+}
+
 #mute {
   position: fixed;
   right: calc(env(safe-area-inset-right, 0px) + 14px);
