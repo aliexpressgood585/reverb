@@ -467,7 +467,7 @@ export class Renderer {
       //          cracked, a bare shelf, or an outline you will fall straight
       //          through.
       // The player learns the erosion rule by looking, never by being told.
-      const st = erosionOf(s, sim.deaths);
+      const st = erosionOf(s, sim);
       const age = total > 1 ? 1 - s.order / (total - 1) : 0;
       const cool = clamp(age * 1.15, 0, 1);
       const cr = lerp(B.accent[0], MEMORY_GOLD[0], cool);

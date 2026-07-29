@@ -30,7 +30,7 @@
  */
 
 import { FEEL, COLUMN } from '../cairn/src/feel.js';
-import { Sim, PHASE, predict, solidHalfWidth } from '../cairn/src/sim.js';
+import { Sim, PHASE, predict } from '../cairn/src/sim.js';
 import { SKILLS, plan, candidates, assist, rng32 } from './cairn-balance.mjs';
 
 const DEG = Math.PI / 180;

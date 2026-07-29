@@ -40,21 +40,34 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
  * challenge comes back.
  */
 export const EROSION = { FRESH: 0, THIN: 1, TOP: 2, MEMORY: 3 };
-export const EROSION_AGE = [7, 15, 25];
 
-export function erosionOf(solid, deaths) {
+/**
+ * Which stage a corpse has decayed to.
+ *
+ * Takes the SIM, not a copied `deaths`. Erosion is a function of world state,
+ * and every caller that hand-carried one field was a caller that could quietly
+ * carry a different one than the renderer did — the exact shape of bug this
+ * file's one-integrator rule exists to prevent. A missing argument now throws
+ * instead of silently ageing a corpse differently in the physics than on screen.
+ */
+export function erosionOf(solid, sim) {
   if (!solid.corpse) return EROSION.FRESH;
-  const age = deaths - solid.bornDeath;
-  if (age < EROSION_AGE[0]) return EROSION.FRESH;
-  if (age < EROSION_AGE[1]) return EROSION.THIN;
-  if (age < EROSION_AGE[2]) return EROSION.TOP;
+  const E = FEEL.erosion;
+  let age = sim.deaths - solid.bornDeath;
+  if (E.deepScale !== 1) {
+    const t = clamp(Math.max(0, sim.best - solid.y) / E.deepSpan, 0, 1);
+    age *= 1 + (E.deepScale - 1) * t;
+  }
+  if (age < E.fresh) return EROSION.FRESH;
+  if (age < E.thin) return EROSION.THIN;
+  if (age < E.top) return EROSION.TOP;
   return EROSION.MEMORY;
 }
 
 /** Half-width a corpse still offers as a landing, given its stage. */
-export function solidHalfWidth(solid, deaths) {
+export function solidHalfWidth(solid, sim) {
   if (!solid.corpse) return solid.hw;
-  const st = erosionOf(solid, deaths);
+  const st = erosionOf(solid, sim);
   if (st === EROSION.MEMORY) return 0;
   return st === EROSION.FRESH ? solid.hw : solid.hw * 0.45;
 }
@@ -543,7 +556,7 @@ export class Sim {
       const s = solids[i];
       const top = s.y + s.hh;
       if (fromY < top || toY > top) continue;
-      const hw = solidHalfWidth(s, this.deaths);
+      const hw = solidHalfWidth(s, this);
       if (hw <= 0) continue;                       // a MEMORY is not a platform
       const over = Math.abs(x - s.x) - (hw + half);
       if (over > FEEL.landing.forgiveness) continue;
@@ -559,7 +572,7 @@ export class Sim {
     const impact = Math.abs(b.vy);
     const top = s.y + s.hh;
     b.y = top;
-    const lhw = solidHalfWidth(s, this.deaths);
+    const lhw = solidHalfWidth(s, this);
     b.x = clamp(b.x, s.x - lhw - FEEL.landing.forgiveness, s.x + lhw + FEEL.landing.forgiveness);
     b.vy = 0;
     b.vx *= FEEL.landing.friction;
@@ -593,10 +606,10 @@ export class Sim {
       const s = solids[i];
       // From TOP onward a corpse is a shelf, not a wall: you can land on it,
       // you can no longer cling to its side.
-      if (s.corpse && erosionOf(s, this.deaths) >= EROSION.TOP) continue;
+      if (s.corpse && erosionOf(s, this) >= EROSION.TOP) continue;
       if (b.y > s.y + s.hh || b.y + FEEL.body.h < s.y - s.hh) continue;
       const dx = b.x - s.x;
-      const hw = solidHalfWidth(s, this.deaths);
+      const hw = solidHalfWidth(s, this);
       if (hw <= 0) continue;
       const overlap = hw + half - Math.abs(dx);
       if (overlap <= 0 || overlap > half) continue;
@@ -665,7 +678,7 @@ export function predict(sim, vx, vy, outArc) {
       return null;
     }
     if (r) {
-      const rhw = solidHalfWidth(r, sim.deaths);
+      const rhw = solidHalfWidth(r, sim);
       const lx = clamp(p.x, r.x - rhw - FEEL.landing.forgiveness, r.x + rhw + FEEL.landing.forgiveness);
       outArc.push(lx, r.y + r.hh);
       return r;

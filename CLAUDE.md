@@ -244,6 +244,14 @@ Acceptance test 2 asserts that property and passed throughout, because all 97 of
 its launches leave from the ground. Aim resolution is nowhere near the limiting
 factor: a jump forgives ~20° and one pixel of thumb is 0.31°.
 
+**Known-honest problem:** erosion does not fully hold. For an expert, a
+mid-tower band is 2-3x safer at the end of a session than at the start
+(`BALANCE.md`, band hazard). Acceptance test 12 reports 1.00 and passes, because
+it measures height reached and cannot distinguish "getting further" from "the
+band got easier". `FEEL.erosion.deepSpan/deepScale` exist to trade this
+deliberately and **ship as a no-op** — lowering `deepScale` buys ceiling and
+doubles the softening.
+
 **Known-honest problem:** every generation number now lives in
 `cairn/src/feel.js` under `tower`, and several of them (`diffScale`,
 `overreachRate`) move the whole curve. Re-run the balance harness after touching

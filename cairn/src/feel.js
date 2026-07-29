@@ -190,6 +190,27 @@ export const FEEL = {
     corpseH: 6.0,
   },
 
+  // --------------------------------------------------------------- erosion
+  // How fast a corpse stops being a platform, measured in DEATHS, never in
+  // seconds — see DECISIONS.md §16. These lived in sim.js as a bare array,
+  // which is the same class of mistake as the generator's buried constants.
+  erosion: {
+    fresh: 7,             // deaths before a corpse narrows
+    thin: 15,             // ... before it is a shelf you cannot cling to
+    top: 25,              // ... before it stops colliding entirely
+
+    // A corpse far below the record is archaeology, not a gate: the frontier is
+    // where the game is played, and the tower underneath it is a commute. These
+    // slow the ageing of corpses deep below your best.
+    //
+    // DEFAULT IS A NO-OP (`deepScale: 1`). Erosion exists because permanently
+    // solid corpses inverted the difficulty curve, and anything that softens it
+    // is walking back toward that. See BALANCE.md for what lowering it measured
+    // and why it did not ship.
+    deepSpan: 400,        // metres below `best` at which `deepScale` is reached
+    deepScale: 1,         // ageing rate down there, 1 = no slowdown
+  },
+
   // ------------------------------------------------------------------- misc
   bestLineFadeU: 90,      // how near the best-height marker must be to show
   deathToPlayMs: 900,     // budget for the death → next attempt transition

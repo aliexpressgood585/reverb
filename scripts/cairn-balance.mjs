@@ -192,7 +192,7 @@ export function candidates(sim, out) {
     const top = s.y + s.hh;
     if (top <= b.y + 0.5) continue;
     if (top - b.y > LIFT * 1.5) continue;
-    if (solidHalfWidth(s, sim.deaths) <= 0) continue;
+    if (solidHalfWidth(s, sim) <= 0) continue;
     out.push(s);
   }
   out.sort((p, q) => (p.y + p.hh) - (q.y + q.hh));
@@ -223,7 +223,7 @@ export function plan(sim, S, cands, scratch) {
       // corpses they did not need and dies more the longer they play. The bonus
       // is capped below a single rise, so it breaks ties and never overrules
       // going higher.
-      const score = top + Math.min(solidHalfWidth(hit, sim.deaths), 8) * 0.6;
+      const score = top + Math.min(solidHalfWidth(hit, sim), 8) * 0.6;
       if (!best || score > best.score) best = { vx, vy, score, aimX: hit.x };
     }
   }
@@ -241,7 +241,7 @@ export function plan(sim, S, cands, scratch) {
   // The throw has to actually leave the ledge, or the body lands back where it
   // started and the climb never ends. Only angles that carry the apex clear of
   // the perch are on the table.
-  const clear = (b.standing ? solidHalfWidth(b.standing, sim.deaths) : 0)
+  const clear = (b.standing ? solidHalfWidth(b.standing, sim) : 0)
     + FEEL.body.w * 0.5 + 1;
   let bv = null, bd = Infinity;
   for (let a = 15; a <= 85; a += 2.5) {
@@ -331,7 +331,7 @@ export function climb(sim, S, rnd, scratch, cands, trace) {
     if (trace && k > trace) {
       console.log(`    k=${k} y=${sim.body.y.toFixed(1)} noGain=${noGain} ` +
         `desperate=${!!p.desperate} cands=${cands.length} ` +
-        `hw=${sim.body.standing ? solidHalfWidth(sim.body.standing, sim.deaths).toFixed(1) : '-'}`);
+        `hw=${sim.body.standing ? solidHalfWidth(sim.body.standing, sim).toFixed(1) : '-'}`);
     }
   }
 
@@ -435,6 +435,39 @@ function plateau(curve, width) {
   return { run: best, at };
 }
 
+/**
+ * DECISIONS.md §16's flaw, measured directly.
+ *
+ * "Thirty attempts in, the lower tower is a staircase; sixty in, the band where
+ * you keep dying is trivial." That is a statement about ONE BAND OF HEIGHT
+ * getting easier over a session, and no other number here can see it: a rising
+ * median death height looks identical whether the player is getting further
+ * because they are better supplied, or because the first 400 m stopped being a
+ * climb.
+ *
+ * So: among attempts that reached the bottom of a band, what share died inside
+ * it? Compare the first quarter of a session against the last. If the hazard in
+ * a fixed band collapses, the band got easier, which is the flaw. If it holds,
+ * the player is simply getting further.
+ */
+function bandHazard(R, lo, hi) {
+  const q = Math.max(1, Math.floor(R.attempts / 4));
+  const rate = (from, to) => {
+    let reached = 0, died = 0;
+    for (let a = from; a < to; a++) {
+      for (const h of R.deathsByAttempt[a]) {
+        if (h < lo) continue;
+        reached++;
+        if (h < hi) died++;
+      }
+    }
+    return reached ? died / reached : NaN;
+  };
+  const early = rate(0, q);
+  const late = rate(R.attempts - q, R.attempts);
+  return { lo, hi, early, late, ratio: +(late / Math.max(1e-9, early)).toFixed(3) };
+}
+
 function report(R) {
   const S = SKILLS[R.skillName];
   const medDeath = R.deathsByAttempt.map((a) => median(a));
@@ -476,6 +509,25 @@ function report(R) {
     best5: { median: median(at(5, R.bestByAttempt)), over50: frac(at(5, R.bestByAttempt), 50) },
     best25: { median: median(at(25, R.bestByAttempt)), over150: frac(at(25, R.bestByAttempt), 150) },
 
+    // Acceptance test 12's QUESTION — does the late game run away from the early
+    // game — asked here so a config sweep can see it in seconds.
+    //
+    // Its THRESHOLD does not transfer. Test 12 runs a deliberately clumsy
+    // fixed-skill bot for 60 attempts and reads 1.00; these bots are far better
+    // and run fewer attempts, so they read 1.4-2.0 on the same tower purely
+    // because a competent player's median death height rises as corpses
+    // accumulate. That is progression, not collapse. Use this to compare one
+    // config against another, never against 1.35.
+    lateOverEarly: (() => {
+      const q4 = Math.max(1, Math.floor(R.attempts / 4));
+      const early = [], late = [];
+      for (let i = 0; i < q4; i++) early.push(...R.deathsByAttempt[i]);
+      for (let i = R.attempts - q4; i < R.attempts; i++) late.push(...R.deathsByAttempt[i]);
+      return +(median(late) / Math.max(1e-6, median(early))).toFixed(3);
+    })(),
+
+    hazards: [[200, 300], [400, 500], [700, 800]].map(([a, b]) => bandHazard(R, a, b)),
+
     // target 2 — a curve that keeps moving
     plateau5: plateau(medDeath, 5),
     plateau40: plateau(medDeath, 40),
@@ -509,6 +561,10 @@ function line(o) {
     `  best after 25    median ${p(o.best25.median)} m   >=150 m in ${(o.best25.over150 * 100).toFixed(1)}% of seeds`,
     `  best after ${String(o.attempts).padEnd(2)}    median ${p(o.finalBest.median)} m   ` +
       `p90 ${p(o.finalBest.p90)}   max ${p(o.finalBest.max)}   >=600 m in ${(o.over600 * 100).toFixed(1)}% of seeds`,
+    `  late/early       ${o.lateOverEarly}   (compare configs; not test 12's 1.35)`,
+    `  band hazard      ` + o.hazards.map((h) => (Number.isFinite(h.early) && Number.isFinite(h.late)
+      ? `${h.lo}-${h.hi}m ${(h.early * 100).toFixed(0)}%->${(h.late * 100).toFixed(0)}% (x${h.ratio})`
+      : `${h.lo}-${h.hi}m never reached`)).join('   '),
     `  median curve     ${p(o.medianDeathByAttempt[0])} -> ${p(o.medianDeathByAttempt.at(-1))} m ` +
       `(rise ${p(o.riseFirstToLast)} m)   longest 5 m stall ${o.plateau5.run} attempts at ${p(o.plateau5.at)} m` +
       `   longest 40 m stall ${o.plateau40.run} attempts`,
@@ -536,10 +592,18 @@ const args = Object.fromEntries(
 // the file it is searching over. Nothing here ships; the winning values are
 // copied into feel.js by hand and re-measured from the file.
 if (args.tune) {
-  const patch = JSON.parse(args.tune);
-  for (const [k, v] of Object.entries(patch)) {
-    if (!(k in FEEL.tower)) throw new Error(`unknown tower key: ${k}`);
-    FEEL.tower[k] = v;
+  // Keys are dotted paths into FEEL — "gapNear" is shorthand for "tower.gapNear"
+  // so the common case stays short, and "erosion.deepScale" reaches anywhere.
+  for (const [k, v] of Object.entries(JSON.parse(args.tune))) {
+    const path = k.includes('.') ? k.split('.') : ['tower', k];
+    let node = FEEL;
+    for (const seg of path.slice(0, -1)) {
+      if (!node[seg]) throw new Error(`unknown FEEL path: ${k}`);
+      node = node[seg];
+    }
+    const leaf = path[path.length - 1];
+    if (!(leaf in node)) throw new Error(`unknown FEEL path: ${k}`);
+    node[leaf] = v;
   }
 }
 

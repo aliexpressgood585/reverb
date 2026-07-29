@@ -135,6 +135,24 @@ numbers and `scripts/cairn-precision.mjs` for the harness.
 
 ---
 
+## Erosion does not fully hold, and test 12 cannot see it
+
+Test 12 above passes at ratio 1.00. It measures the height a fixed-skill bot
+reaches, early attempts against late — and a player getting *further* and a band
+of the tower getting *easier* both keep that ratio near 1.
+
+Measured the other way, in `BALANCE.md`: among attempts that reached 700 m, the
+share that died before 800 m falls from **22% to 8%** across a session for an
+expert, and from 45% to 19% for an average player. For a novice it does not move
+(×1.03) — they never survive long enough to build a staircase. So DECISIONS.md
+§16's flaw is **skill-dependent and partially present today**, which is exactly
+why sixty attempts of a deliberately clumsy bot never surfaced it.
+
+Not fixed here, and deliberately not papered over: the band-hazard table in
+`BALANCE.md` is now the guard that can see it.
+
+---
+
 ## Known-honest gaps
 
 These are open, not done, and not claimed:
@@ -152,6 +170,9 @@ These are open, not done, and not claimed:
   argument, not a measurement of an alternative.
 - **No human has played the retuned tower.** Three bots with gaussian error are
   not three people, and the novice model has no learning in it.
+- **The band-hazard softening above is measured, not fixed.** An expert's
+  mid-tower bands get 2-3x safer over a session. Whether that reads as healthy
+  progression or as the difficulty going soft is a question about a player.
 - **Aim tolerance is unmeasured for wall launches.** The precision survey's
   4,186 sampled jumps all leave from the ground, because that is what the bot
   does. The arc is proven honest from a cling; how much slop a cling launch

@@ -398,6 +398,66 @@ comfort, not challenge.
 
 ---
 
+## The plateau: what was tried, and why it did not ship
+
+The caveat under target 2 says the average player's median death height flattens
+around attempt 30 because erosion caps how many bridging corpses you can keep
+alive. The obvious lever is to let corpses far below the record age more slowly:
+the frontier is where the game is played, and the tower underneath it is a
+commute. `FEEL.erosion.deepSpan` / `deepScale` are that lever, **shipped as a
+no-op** (`deepScale: 1`).
+
+It works, on the numbers it was meant to move (expert, 60 seeds × 50 attempts):
+
+| `deepScale` | median best after 50 | median-curve rise |
+|---|---|---|
+| **1 (shipped)** | 1,776 m | 635 m |
+| 0.4 | 2,068 m | 1,031 m |
+
+The frontier is provably untouched: **attempt-1 median is 347.0 m at every
+setting**, to the decimal, because attempt one has no corpses in it at all.
+Acceptance test 12 passes either way — ratio 1.00 shipped, 0.89 at 0.4.
+
+And it did not ship, because test 12 cannot see what it costs.
+
+### The measurement that decided it
+
+DECISIONS.md §16 describes the flaw erosion exists to prevent: *"thirty attempts
+in, the lower tower is a staircase; sixty in, the band where you keep dying is
+trivial."* That is a claim about **one band of height getting easier within a
+session** — and no number in this file could see it. A rising median death
+height looks identical whether the player is getting further because they are
+better supplied, or because the first 400 m stopped being a climb.
+
+So: among attempts that reached the bottom of a band, what share died inside it?
+First quarter of a session against the last.
+
+| | 200–300 m | 400–500 m | 700–800 m |
+|---|---|---|---|
+| novice | 71% → 73% (×1.03) | 89% → 100% (×1.13) | never reached |
+| average | 14% → 10% (×0.69) | 31% → 21% (×0.67) | 45% → 19% (×0.41) |
+| expert | 7% → 2% (×0.33) | 17% → 8% (×0.47) | 22% → 8% (×0.38) |
+
+At `deepScale: 0.4` the expert row becomes ×0.33 / **×0.20** / **×0.18** — the
+softening roughly doubles. That is the §16 flaw, bought deliberately, and it is
+not worth 300 m of ceiling.
+
+### The finding that outlives the experiment
+
+Read the shipped row again. **Erosion does not fully hold today.** For an expert,
+a mid-tower band is already two to three times safer at the end of a session
+than at the start. For a novice it is not — their hazard is flat, because they
+never survive long enough to build a staircase — so the flaw is skill-dependent,
+which is why sixty attempts of a deliberately clumsy bot never surfaced it.
+
+**Acceptance test 12 reports ratio 1.00 and passes.** It measures height
+reached, and a player getting further and a band getting easier both keep that
+ratio near 1. It is the fourth thing in this repository to pass while blind to
+the state it claims to cover. The band-hazard table above is the guard that is
+not blind, and it should be read on every generation change.
+
+---
+
 ## What this does not tell you
 
 Open, not done, not claimed:
