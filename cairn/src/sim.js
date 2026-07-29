@@ -19,6 +19,46 @@ import { FEEL, COLUMN } from './feel.js';
 const { dt: DT } = FEEL.sim;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
+/**
+ * EROSION — the fix for the design flaw that killed the loop.
+ *
+ * Corpses used to be permanently solid. Thirty attempts in, the first 150 m is
+ * a staircase; sixty in, the exact band where you keep dying is trivial. The
+ * difficulty curve INVERTS — the game gets easier precisely where it should get
+ * harder — and the run stops meaning anything inside one session.
+ *
+ * Solidity decays. Presence does not. A corpse is measured in how many deaths
+ * have happened since it fell:
+ *
+ *   FRESH  0-6    full platform, full glow
+ *   THIN   7-14   45% width. A precise ledge, visibly cracked.
+ *   TOP    15-24  landable from above, but no longer a wall to cling to. Dim.
+ *   MEMORY 25+    no collision at all. Still drawn, faint and gold, forever.
+ *
+ * So the visible tower still holds every self you have ever left. The PLAYABLE
+ * tower is only the recent ones. The screenshot promise survives intact and the
+ * challenge comes back.
+ */
+export const EROSION = { FRESH: 0, THIN: 1, TOP: 2, MEMORY: 3 };
+export const EROSION_AGE = [7, 15, 25];
+
+export function erosionOf(solid, deaths) {
+  if (!solid.corpse) return EROSION.FRESH;
+  const age = deaths - solid.bornDeath;
+  if (age < EROSION_AGE[0]) return EROSION.FRESH;
+  if (age < EROSION_AGE[1]) return EROSION.THIN;
+  if (age < EROSION_AGE[2]) return EROSION.TOP;
+  return EROSION.MEMORY;
+}
+
+/** Half-width a corpse still offers as a landing, given its stage. */
+export function solidHalfWidth(solid, deaths) {
+  if (!solid.corpse) return solid.hw;
+  const st = erosionOf(solid, deaths);
+  if (st === EROSION.MEMORY) return 0;
+  return st === EROSION.FRESH ? solid.hw : solid.hw * 0.45;
+}
+
 // --------------------------------------------------------------------- rng
 
 /** xorshift32. A seed is a tower, on every device and every run. */
@@ -114,7 +154,7 @@ export class World {
     return s;
   }
 
-  corpse(x, y, rot, pose, at) {
+  corpse(x, y, rot, pose, at, deathIndex = 0) {
     const s = this._take();
     s.x = x; s.y = y;
     s.hw = FEEL.tower.corpseW * 0.5;
@@ -122,11 +162,47 @@ export class World {
     s.corpse = true;
     s.order = this.corpseCount++;
     s.bornAt = at;
+    s.bornDeath = deathIndex;
     s.rot = rot;
     s.pose = pose;
     s.glow = 1;
     this._index(s);
     return s;
+  }
+
+  /**
+   * THE SHIFTING ROOF.
+   *
+   * Everything above the player's all-time best is thrown away and regenerated
+   * from a fresh seed at the start of every attempt. Below that line the world
+   * is stable and the tower you built out of yourself is meaningful; above it,
+   * the terrain has never been climbed and your corpses cannot carry you there.
+   *
+   * The record line therefore stops being a number and becomes a frontier: new
+   * height is always earned on ground nobody has stood on.
+   *
+   * Corpses are never regenerated. They are history and history does not move.
+   */
+  regenerateAbove(y, seed) {
+    const keep = [];
+    for (let i = 0; i < this.solids.length; i++) {
+      const s = this.solids[i];
+      if (s.corpse || s.y <= y) keep.push(s);
+      else { s.live = false; this.pool.push(s); }
+    }
+    this.solids = keep;
+    this.buckets.clear();
+
+    let top = 0, topX = COLUMN * 0.5, topHw = 15;
+    for (let i = 0; i < keep.length; i++) {
+      const s = keep[i];
+      this._index(s);
+      if (!s.corpse && s.y > top) { top = s.y; topX = s.x; topHw = s.hw; }
+    }
+    this.builtTo = top;
+    this.lastX = topX;
+    this.lastHw = topHw;
+    this.rng = makeRng(seed);
   }
 
   /**
@@ -222,6 +298,11 @@ export class Sim {
 
   /** Restart the attempt while keeping every corpse in place. */
   respawn() {
+    // A fresh roof for every attempt, but a DETERMINISTIC one: the seed is a
+    // function of the world seed and the attempt number, so the same tower
+    // played the same way is still bit-identical on any device.
+    this.world.regenerateAbove(this.best, (this.world.seed ^ (this.deaths * 0x9e3779b1)) | 0);
+    this.world.generate(Math.max(this.best, 0) + FEEL.camera.viewH * 2.2);
     this._stand();
     this.runBest = 0;
     this.phase = PHASE.PLAY;
@@ -401,7 +482,9 @@ export class Sim {
       const s = solids[i];
       const top = s.y + s.hh;
       if (fromY < top || toY > top) continue;
-      const over = Math.abs(x - s.x) - (s.hw + half);
+      const hw = solidHalfWidth(s, this.deaths);
+      if (hw <= 0) continue;                       // a MEMORY is not a platform
+      const over = Math.abs(x - s.x) - (hw + half);
       if (over > FEEL.landing.forgiveness) continue;
       if (!best || top > best.y + best.hh || (over < bestSlack && top === best.y + best.hh)) {
         best = s; bestSlack = over;
@@ -415,7 +498,8 @@ export class Sim {
     const impact = Math.abs(b.vy);
     const top = s.y + s.hh;
     b.y = top;
-    b.x = clamp(b.x, s.x - s.hw - FEEL.landing.forgiveness, s.x + s.hw + FEEL.landing.forgiveness);
+    const lhw = solidHalfWidth(s, this.deaths);
+    b.x = clamp(b.x, s.x - lhw - FEEL.landing.forgiveness, s.x + lhw + FEEL.landing.forgiveness);
     b.vy = 0;
     b.vx *= FEEL.landing.friction;
     b.grounded = true;
@@ -446,9 +530,14 @@ export class Sim {
     const half = FEEL.body.w * 0.5;
     for (let i = 0; i < solids.length; i++) {
       const s = solids[i];
+      // From TOP onward a corpse is a shelf, not a wall: you can land on it,
+      // you can no longer cling to its side.
+      if (s.corpse && erosionOf(s, this.deaths) >= EROSION.TOP) continue;
       if (b.y > s.y + s.hh || b.y + FEEL.body.h < s.y - s.hh) continue;
       const dx = b.x - s.x;
-      const overlap = s.hw + half - Math.abs(dx);
+      const hw = solidHalfWidth(s, this.deaths);
+      if (hw <= 0) continue;
+      const overlap = hw + half - Math.abs(dx);
       if (overlap <= 0 || overlap > half) continue;
       const side = dx > 0 ? 1 : -1;
       b.x = s.x + side * (s.hw + half);
@@ -468,7 +557,7 @@ export class Sim {
     const b = this.body;
     const rot = (this.world.rng() - 0.5) * 1.1;
     const pose = Math.floor(this.world.rng() * 4);
-    this.world.corpse(b.peakX, b.peakY, rot, pose, this.time);
+    this.world.corpse(b.peakX, b.peakY, rot, pose, this.time, this.deaths);
     this.deaths++;
     this.hitStop = FEEL.juice.hitStopDeath;
     this.phase = PHASE.DYING;
@@ -503,7 +592,8 @@ export function predict(sim, vx, vy, outArc) {
     if (i % FEEL.aim.arcDotEvery === 0) outArc.push(p.x, p.y);
     if (r === 'die') { outArc.push(p.x, p.y); return null; }
     if (r) {
-      const lx = clamp(p.x, r.x - r.hw - FEEL.landing.forgiveness, r.x + r.hw + FEEL.landing.forgiveness);
+      const rhw = solidHalfWidth(r, sim.deaths);
+      const lx = clamp(p.x, r.x - rhw - FEEL.landing.forgiveness, r.x + rhw + FEEL.landing.forgiveness);
       outArc.push(lx, r.y + r.hh);
       return r;
     }

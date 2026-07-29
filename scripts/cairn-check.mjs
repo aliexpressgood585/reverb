@@ -18,6 +18,8 @@
  *   9  no scroll, zoom, selection or pull-to-refresh is possible
  *  10  the controls are discoverable with zero text
  *  11  the aim points where you drag — direct, never a slingshot
+ *  12  difficulty does not collapse as the corpse tower grows
+ *  13  the four erosion stages are distinguishable in a single still
  *
  * Three and four are the ones that would otherwise be assumed rather than
  * known, and both have already failed once during development.
@@ -425,6 +427,129 @@ const page = await newPage();
   const ok = r.up.vy > 0 && r.down.vy < 0 && r.right.vx > 0 && r.left.vx < 0;
   ok ? pass(11, `drag up launches up (vy ${r.up.vy.toFixed(0)}), down launches down (vy ${r.down.vy.toFixed(0)}), left/right follow the thumb`)
     : fail(11, `aim is inverted somewhere: up.vy=${r.up.vy.toFixed(1)} down.vy=${r.down.vy.toFixed(1)} right.vx=${r.right.vx.toFixed(1)} left.vx=${r.left.vx.toFixed(1)}`);
+}
+
+// ── 12. difficulty does not collapse ───────────────────────────────────────
+//
+// THE Phase-2 test. Corpses used to be permanently solid, so thirty attempts in
+// the lower tower was a staircase and the game got EASIER exactly where it
+// should get harder. Erosion plus the shifting roof is supposed to stop that.
+// A bot with fixed skill plays sixty attempts; if the design works, its height
+// per attempt must not run away late.
+{
+  const r = await page.evaluate(() => {
+    const { sim, FEEL } = window.CAIRN;
+    sim.reset(true); sim.phase = 1; sim.best = 0;
+    let seed = 20250728;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return (seed % 10000) / 10000; };
+    const g = FEEL.gravityRise;
+
+    // Play until SIXTY DEATHS, not sixty attempts. An earlier version capped by
+    // jump count, and the bot was good enough that attempts ended on the cap
+    // instead of on the ground — so no corpse ever aged, and the measurement
+    // was of nothing at all.
+    const heights = [];
+    let totalJumps = 0;
+    while (sim.deaths < 60 && totalJumps < 6000) {
+      const start = sim.deaths;
+      let guard = 0;
+      while (sim.deaths === start && guard++ < 40) {
+        let t = null;
+        for (const sol of sim.world.solids) {
+          if (sol === sim.body.standing) continue;
+          if (sol.y <= sim.body.y + 1) continue;
+          if (!t || sol.y < t.y) t = sol;
+        }
+        if (!t) break;
+        const dx = t.x - sim.body.x, dy = t.y - sim.body.y;
+        const r0 = Math.hypot(dx, dy) || 1e-6;
+        let vy = Math.sqrt(Math.max(1, 2 * g * (dy + r0 * 0.42)));
+        const tUp = vy / g;
+        const tt = tUp + Math.sqrt(Math.max(0.01, 2 * (vy * tUp - 0.5 * g * tUp * tUp - dy) / g));
+        let vx = dx / tt;
+        const sp = Math.hypot(vx, vy);
+        if (sp > FEEL.launch.maxSpeed) { const k = FEEL.launch.maxSpeed / sp; vx *= k; vy *= k; }
+        // Fixed skill, and clumsy enough to actually fall. Skill never improves,
+        // so any rise in height across the run comes from the world, not the bot.
+        const e1 = 1 + (rnd() - 0.5) * 1.3, e2 = 1 + (rnd() - 0.5) * 1.3;
+        sim.launch(vx * e1, vy * e2);
+        totalJumps++;
+        for (let f = 0; f < 1500 && !sim.body.grounded && sim.phase === 1; f++) sim.tick(0);
+        if (sim.body.y > sim.best) sim.best = sim.body.y;
+      }
+      heights.push(sim.runBest);
+      if (sim.phase !== 1) sim.respawn(); else { sim.deaths++; sim.respawn(); }
+    }
+
+    const med = (a) => { const b = a.slice().sort((x, y) => x - y); return b[b.length >> 1]; };
+    const n = heights.length;
+    const early = med(heights.slice(0, Math.max(5, n >> 2)));
+    const late = med(heights.slice(n - Math.max(5, n >> 2)));
+    let memory = 0, thin = 0, fresh = 0;
+    for (const sol of sim.world.solids) {
+      if (!sol.corpse) continue;
+      const age = sim.deaths - sol.bornDeath;
+      if (age >= 25) memory++; else if (age >= 7) thin++; else fresh++;
+    }
+    return { early: +early.toFixed(1), late: +late.toFixed(1), deaths: sim.deaths, attempts: n, fresh, thin, memory };
+  });
+  const ratio = r.early > 0 ? r.late / r.early : 99;
+  console.log(`      ${r.attempts} attempts, ${r.deaths} deaths — median height first quarter ${r.early}m, last quarter ${r.late}m, ratio ${ratio.toFixed(2)}`);
+  console.log(`      corpses after ${r.deaths} deaths: ${r.fresh} fresh, ${r.thin} eroded, ${r.memory} memory (non-solid)`);
+  (ratio <= 1.35 && r.memory > 0)
+    ? pass(12, `difficulty holds — late-game median is ${(ratio * 100 - 100).toFixed(0)}% off early, and ${r.memory} corpses have decayed to memory`)
+    : fail(12, `difficulty collapsed: late median ${r.late}m vs early ${r.early}m (ratio ${ratio.toFixed(2)}), memory corpses ${r.memory}`);
+}
+
+// ── 13. the four erosion stages are distinguishable in one still ───────────
+{
+  const r = await page.evaluate(async () => {
+    const { sim, camera, renderer } = window.CAIRN;
+    sim.reset(true); sim.phase = 1;
+    sim.deaths = 40;
+    // One corpse per stage, side by side at the same height.
+    const ages = [0, 10, 20, 34];
+    const xs = [22, 40, 60, 78];
+    for (let i = 0; i < 4; i++) {
+      const c = sim.world.corpse(xs[i], 60, 0, 1, 0, 40 - ages[i]);
+      c.glow = 0;
+    }
+    sim.body.x = sim.body.px = sim.body.rx = 50;
+    sim.body.y = sim.body.py = sim.body.ry = 60;
+    camera.x = 50; camera.y = 60; camera.zoom = 1; camera.viewH = 150;
+    renderer.trailN = 0;
+    renderer.draw(sim, camera, null, { started: true, squash: 0, stretch: 0 }, 1 / 60, false);
+    await new Promise((res) => requestAnimationFrame(res));
+    await new Promise((res) => requestAnimationFrame(res));
+
+    // Sample a box around each corpse off the scene canvas and describe it.
+    const cv = renderer.canvas;
+    const c2 = cv.getContext('2d', { willReadFrequently: true });
+    const sample = (wx) => {
+      const px = Math.round(renderer.X(wx) * renderer.dpr);
+      const py = Math.round(renderer.Y(60) * renderer.dpr);
+      const R = Math.round(16 * renderer.dpr);
+      const d = c2.getImageData(px - R, py - R, R * 2, R * 2).data;
+      let lum = 0, chroma = 0, lit = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        const L = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+        const ch = Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
+        lum += L; chroma += ch; if (L > 40) lit++; n++;
+      }
+      return { lum: +(lum / n).toFixed(1), chroma: +(chroma / n).toFixed(1), coverage: +((lit / n) * 100).toFixed(1) };
+    };
+    return xs.map(sample);
+  });
+  const names = ['FRESH', 'THIN', 'TOP', 'MEMORY'];
+  r.forEach((v, i) => console.log(`      ${names[i].padEnd(7)} lum ${String(v.lum).padStart(5)}  chroma ${String(v.chroma).padStart(5)}  lit-coverage ${v.coverage}%`));
+  // Each stage must differ from the next by a margin a human eye would catch.
+  let minGap = Infinity;
+  for (let i = 0; i < 3; i++) {
+    minGap = Math.min(minGap, Math.abs(r[i].lum - r[i + 1].lum) + Math.abs(r[i].coverage - r[i + 1].coverage));
+  }
+  minGap > 3
+    ? pass(13, `all four erosion stages separate in one frame (closest neighbouring pair differs by ${minGap.toFixed(1)})`)
+    : fail(13, `two erosion stages look the same (closest pair differs by only ${minGap.toFixed(1)})`);
 }
 
 await browser.close();

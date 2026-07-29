@@ -281,3 +281,73 @@ is the standard way to strand users on a dead deploy — a stale `index.html`
 points at content-hashed assets that no longer exist and the app never boots.
 Navigations are network-first now; hashed assets stay cache-first, where that
 strategy is actually safe.
+
+---
+
+## 16. Erosion and the shifting roof — solidity decays, presence does not
+
+The Phase 2 brief names the flaw exactly right: corpses were permanently solid,
+so thirty attempts in the lower tower is a staircase and sixty in the band where
+you keep dying is trivial. **The difficulty curve inverts.** The game gets easier
+precisely where it should get harder, and the loop dies inside one session.
+
+Two systems, both required, neither sufficient alone.
+
+**Erosion.** A corpse is measured in how many deaths have happened since it
+fell, not in seconds — so it decays at the rate the player is actually playing:
+
+| age | stage | collision | look |
+|---|---|---|---|
+| 0-6 | FRESH | full width | accent colour, full glow, bright shelf |
+| 7-14 | THIN | 45% width | visibly cracked, dimmer |
+| 15-24 | TOP | 45%, landable from above only — no wall cling | desaturated, thin rim |
+| 25+ | MEMORY | **none** | gold outline, no fill, permanent |
+
+The visible tower still holds every self you have ever left. The *playable*
+tower is only the recent ones. The screenshot promise survives intact and the
+challenge comes back.
+
+The read had to work without text, so form and colour say different things.
+**Colour** says how long ago this was you — accent when fresh, cooling toward
+gold. **Form** says whether it will still hold you: the bright bar on top of
+each corpse is drawn exactly as wide as the collision actually is, so a
+half-width shelf is not a stylistic choice, it is the hitbox. Test 13 confirms
+all four stages separate in a single still (closest neighbouring pair differs by
+31.7 on a combined luminance/coverage metric).
+
+**The shifting roof.** Everything above the all-time best is discarded and
+regenerated at the start of every attempt, so no corpse can ever carry you into
+new territory — but the seed is `worldSeed ^ (deaths × 0x9e3779b1)`, which keeps
+determinism exact. The same tower played the same way is still bit-identical on
+any device; it is fresh per *attempt*, not per *run*. The record line is drawn
+as a soft horizon rather than a tick, because it is now a frontier.
+
+**A regression this caused, worth recording:** erosion made `_surfaceUnder`
+depend on the eroded half-width, but `predict` still clamped the landing point
+with the raw one. The arc started lying again — by 1.43 u — through a completely
+new route, four commits after the single-integrator rule was introduced to
+prevent exactly that. Test 2 caught it in the same run that introduced it. The
+rule is not "write one integrator" but "every derived quantity has one source",
+and width is a derived quantity.
+
+---
+
+## 17. Direct aiming. The slingshot lost to one sentence of playtest
+
+"Pressing downward makes it jump, I want dragging upward to jump."
+
+A slingshot is legible when you aim an object *away from yourself* at a target
+on screen. Here you ARE the object and the camera is locked to you, so inverting
+the one thing the player does to themselves reads as the controls fighting them.
+It also explains the other half of the same report — "it jumps on every step" —
+because a gesture you have to invert in your head gets made twice.
+
+The drag vector is now the launch vector, which additionally makes the aim ray
+honest: it starts at the body and points exactly where the body is about to go,
+so the drag, the line and the flight are one straight thing.
+
+Dead zone went 8 px → 14 px in the same pass. A resting thumb drifts, and at
+8 px every micro-movement fired a launch.
+
+Test 11 pins the direction, because every other test in the suite passes
+identically under either mapping — a silent flip back would be invisible.

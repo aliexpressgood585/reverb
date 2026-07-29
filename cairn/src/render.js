@@ -1,5 +1,5 @@
 import { FEEL, COLUMN, biomeAt, newBiomeSlot, MEMORY_GOLD } from './feel.js';
-import { makeRng } from './sim.js';
+import { makeRng, erosionOf, EROSION } from './sim.js';
 
 /**
  * The scene, drawn in Canvas2D. The post chain lives in post.js; everything
@@ -460,22 +460,68 @@ export class Renderer {
         continue;
       }
 
-      // A corpse. Age runs 0 (freshest) → 1 (oldest visible in the tower).
+      // A corpse. Two independent things are being said at once:
+      //   COLOUR says how long ago this was you — accent when fresh, cooling to
+      //          gold as it recedes into history.
+      //   FORM says whether it will still hold your weight — full, narrowed and
+      //          cracked, a bare shelf, or an outline you will fall straight
+      //          through.
+      // The player learns the erosion rule by looking, never by being told.
+      const st = erosionOf(s, sim.deaths);
       const age = total > 1 ? 1 - s.order / (total - 1) : 0;
       const cool = clamp(age * 1.15, 0, 1);
       const cr = lerp(B.accent[0], MEMORY_GOLD[0], cool);
       const cg = lerp(B.accent[1], MEMORY_GOLD[1], cool);
       const cb = lerp(B.accent[2], MEMORY_GOLD[2], cool);
-      const base = 0.16 + (1 - cool) * 0.30;
       s.glow = Math.max(0, s.glow - 0.02);
       const rimlight = lit * 0.75 + s.glow * 0.4;
 
       ctx.save();
       ctx.translate(sx, sy);
       ctx.rotate(s.rot);
-      this._figure(ctx, s.hw * this.scale, s.hh * this.scale, s.pose,
-        `rgba(${cr | 0},${cg | 0},${cb | 0},${(base + rimlight * 0.55).toFixed(3)})`,
-        `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.10 + rimlight * 0.85).toFixed(3)})`);
+
+      if (st === EROSION.MEMORY) {
+        // Present, permanently. Load-bearing, never again. Pure gold outline,
+        // no fill at all — the read is "this is a picture, not a place".
+        ctx.strokeStyle = rgb(MEMORY_GOLD, 0.20 + lit * 0.16);
+        ctx.lineWidth = Math.max(0.7, this.dpr * 0.7);
+        this._figurePath(ctx, s.hw * this.scale, s.hh * this.scale, s.pose);
+        ctx.stroke();
+      } else {
+        const narrow = st === EROSION.FRESH ? 1 : 0.45;
+        const solidity = st === EROSION.FRESH ? 1 : st === EROSION.THIN ? 0.66 : 0.34;
+        const fill = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.10 + solidity * (0.22 + rimlight * 0.5)).toFixed(3)})`;
+        const rim = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.08 + solidity * (0.16 + rimlight * 0.8)).toFixed(3)})`;
+        const hwPx = s.hw * this.scale * narrow;
+        const hhPx = s.hh * this.scale;
+
+        this._figurePath(ctx, hwPx, hhPx, s.pose);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.strokeStyle = rim;
+        ctx.lineWidth = Math.max(0.8, this.dpr * (st === EROSION.TOP ? 0.6 : 0.9));
+        ctx.stroke();
+
+        // The load-bearing surface, drawn as a bright bar exactly as wide as the
+        // collision actually is. Fresh corpses get a full shelf; eroded ones a
+        // visibly shorter one. This is the tell that reads fastest.
+        ctx.fillStyle = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.30 + solidity * 0.55).toFixed(3)})`;
+        ctx.fillRect(-hwPx, -hhPx, hwPx * 2, Math.max(1, 1.4 * this.dpr));
+
+        if (st === EROSION.THIN) {
+          // Cracks. Three hairlines through the body, seeded off the pose so a
+          // given corpse always cracks the same way.
+          ctx.strokeStyle = `rgba(0,0,0,0.55)`;
+          ctx.lineWidth = Math.max(0.7, this.dpr * 0.6);
+          for (let k = 0; k < 3; k++) {
+            const t = -0.5 + (k + (s.pose & 3) * 0.17) * 0.42;
+            ctx.beginPath();
+            ctx.moveTo(-hwPx, hhPx * t);
+            ctx.lineTo(hwPx * 0.4, hhPx * (t + 0.22));
+            ctx.stroke();
+          }
+        }
+      }
       ctx.restore();
     }
   }
@@ -484,9 +530,8 @@ export class Renderer {
    * A frozen silhouette. Four poses, chosen at the moment of death and kept
    * forever, so no two corpses in the tower are the same shape.
    */
-  _figure(ctx, hw, hh, pose, fill, rim) {
-    const w = hw * 2, h = hh * 2;
-    ctx.fillStyle = fill;
+  _figurePath(ctx, hw, hh, pose) {
+    const w = hw * 2;
     ctx.beginPath();
     const tilt = [0, 0.22, -0.18, 0.34][pose & 3];
     ctx.moveTo(-hw * 0.55, hh);
@@ -496,10 +541,6 @@ export class Renderer {
     ctx.lineTo(-hw * 0.35, -hh * 0.86);
     ctx.lineTo(-hw * 0.80, hh * 0.1);
     ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = Math.max(0.8, this.dpr * 0.8);
-    ctx.stroke();
   }
 
   _rings(ctx, B) {
@@ -643,11 +684,20 @@ export class Renderer {
     if (sim.best <= 1) return;
     const d = Math.abs((sim.body.ry ?? sim.body.y) - sim.best);
     if (d > FEEL.bestLineFadeU) return;
-    const a = (1 - d / FEEL.bestLineFadeU) * 0.34;
+    const f = 1 - d / FEEL.bestLineFadeU;
     const y = this.Y(sim.best);
-    ctx.strokeStyle = rgb(MEMORY_GOLD, a);
+    // Above this line the world is regenerated every attempt and no corpse can
+    // carry you. It is a frontier, so it is drawn as a horizon rather than as a
+    // tick: a soft band of light with a hairline through it.
+    const g = ctx.createLinearGradient(0, y - 26 * this.dpr, 0, y + 26 * this.dpr);
+    g.addColorStop(0, rgb(MEMORY_GOLD, 0));
+    g.addColorStop(0.5, rgb(MEMORY_GOLD, f * 0.10));
+    g.addColorStop(1, rgb(MEMORY_GOLD, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, y - 26 * this.dpr, this.w, 52 * this.dpr);
+    ctx.strokeStyle = rgb(MEMORY_GOLD, f * 0.40);
     ctx.lineWidth = 1;
-    ctx.setLineDash([4 * this.dpr, 7 * this.dpr]);
+    ctx.setLineDash([3 * this.dpr, 9 * this.dpr]);
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.w, y); ctx.stroke();
     ctx.setLineDash([]);
   }
