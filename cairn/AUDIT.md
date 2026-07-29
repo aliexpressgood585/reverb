@@ -193,6 +193,12 @@ These are open, not done, and not claimed:
   that cannot collide with aiming, and nothing teaches it — in a game whose rule
   is that nothing is taught with text. The poster behind it is the game's primary
   share surface, so this is a growth problem, not a polish one.
-- **Persistence has no migration path and no corruption recovery**, and that got
-  worse: corpses are now placed deliberately, so a lost tower is lost decisions.
-  This is the single most severe open item.
+- ~~Persistence has no migration path and no corruption recovery~~ — **done**,
+  `scripts/cairn-store-check.mjs`. It also uncovered a shipped bug: schema 1 did
+  not store `bornDeath`, so every corpse came back at age = `deaths`, already
+  MEMORY. **A reload turned the staircase a player had built out of themselves
+  into scenery.** Test 8 passed throughout, because it checks that corpses exist
+  after a reload, not that they still hold weight — the fourth instance in this
+  file of a test blind to the state it claims to cover. v1 saves migrate exactly
+  rather than by guessing: every death creates one corpse and increments
+  `deaths`, so a corpse's birth index is its position in death order.

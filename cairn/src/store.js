@@ -1,17 +1,56 @@
-import { FEEL, BIOMES, biomeAt, newBiomeSlot } from './feel.js';
+import { FEEL, COLUMN, BIOMES, biomeAt, newBiomeSlot } from './feel.js';
 
 /**
  * Persistence and the share poster.
  *
- * The tower IS the game, so it has to survive a reload, a browser restart and a
- * phone that ran out of memory in the background. Corpses are stored as a flat
- * packed array with a schema version — the version is what lets the format
- * change later without silently loading nonsense into a physics engine.
+ * THE TOWER IS THE GAME. Every body in it was a decision — since some gaps
+ * cannot be crossed, a player chooses where to die — so losing a save is not
+ * losing a score, it is losing work. That makes this the highest-consequence
+ * file in the project and it is written accordingly:
+ *
+ *   - a MIGRATION CHAIN, so a format change never silently discards a tower
+ *   - a BACKUP SLOT, so a truncated or corrupt write costs one session, not all
+ *   - FIELD VALIDATION, so a bad row is dropped instead of being fed to the
+ *     physics engine. A corpse at x = 1e9 does not just look wrong; it poisons
+ *     the height buckets that every collision query walks.
+ *
+ * The key name can never change. It carries "v1" for historical reasons and the
+ * schema number inside the payload is what actually versions the format — the
+ * two are not the same thing, and renaming the key would orphan every existing
+ * save on every existing phone.
  */
 
 const KEY = 'cairn.v1';
-const SCHEMA = 1;
+const BAK = 'cairn.bak';
+const SCHEMA = 2;
 const MAX_STORED = 600;   // beyond this the tower is scenery, not gameplay
+
+/**
+ * SCHEMA HISTORY
+ *
+ * 1  x, y, rot, pose per corpse.
+ *    Missing `bornDeath`, which erosion measures age against — so every corpse
+ *    loaded from a v1 save came back with age = `deaths` and was therefore
+ *    already MEMORY: drawn, and not solid. A reload turned the staircase a
+ *    player had built out of themselves into scenery. Acceptance test 8 passed
+ *    throughout, because it checks that corpses EXIST after a reload, not that
+ *    they still hold weight.
+ *
+ * 2  adds bornDeath, five numbers per corpse.
+ *    v1 migrates exactly rather than by guessing: every death creates exactly
+ *    one corpse and increments `deaths`, so a corpse's birth index IS its
+ *    position in death order. For the i-th of n stored, allowing for the oldest
+ *    having been trimmed, bornDeath = deaths - n + i.
+ */
+
+const FIELDS = 5;
+
+function readSlot(key) {
+  let raw;
+  try { raw = localStorage.getItem(key); } catch { return null; }
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
 
 export function save(sim) {
   try {
@@ -24,37 +63,96 @@ export function save(sim) {
         Math.round(s.x * 100) / 100,
         Math.round(s.y * 100) / 100,
         Math.round(s.rot * 1000) / 1000,
-        s.pose,
+        s.pose | 0,
+        s.bornDeath | 0,
       );
     }
-    const trim = packed.length > MAX_STORED * 4 ? packed.slice(packed.length - MAX_STORED * 4) : packed;
-    localStorage.setItem(KEY, JSON.stringify({
+    const trim = packed.length > MAX_STORED * FIELDS
+      ? packed.slice(packed.length - MAX_STORED * FIELDS)
+      : packed;
+
+    const payload = JSON.stringify({
       v: SCHEMA,
       seed: sim.world.seed,
       best: Math.round(sim.best * 100) / 100,
       deaths: sim.deaths,
+      // `n` is how the loader detects a truncated write. A half-finished
+      // localStorage entry parses as valid JSON surprisingly often.
+      n: trim.length / FIELDS,
       corpses: trim,
-    }));
+    });
+
+    // Demote the current save to the backup slot before overwriting it, but only
+    // if it is intact — promoting a corrupt payload to the backup would destroy
+    // the one copy that could still be recovered.
+    const current = readSlot(KEY);
+    if (current && validate(current)) {
+      try { localStorage.setItem(BAK, JSON.stringify(current)); } catch { /* quota */ }
+    }
+    localStorage.setItem(KEY, payload);
   } catch { /* private mode, quota, whatever — the game still plays */ }
 }
 
-export function load(sim) {
-  let raw;
-  try { raw = localStorage.getItem(KEY); } catch { return false; }
-  if (!raw) return false;
-  let d;
-  try { d = JSON.parse(raw); } catch { return false; }
-  if (!d || d.v !== SCHEMA || !Array.isArray(d.corpses)) return false;
+/** Is this payload structurally sound enough to be worth migrating? */
+function validate(d) {
+  if (!d || typeof d !== 'object') return false;
+  if (!Number.isFinite(d.v) || d.v < 1 || d.v > SCHEMA) return false;
+  if (!Array.isArray(d.corpses)) return false;
+  const stride = d.v === 1 ? 4 : FIELDS;
+  if (d.corpses.length % stride !== 0) return false;
+  if (d.v >= 2 && Number.isFinite(d.n) && d.n !== d.corpses.length / stride) return false;
+  return true;
+}
 
-  sim.best = +d.best || 0;
-  sim.deaths = d.deaths | 0;
-  const c = d.corpses;
-  for (let i = 0; i + 3 < c.length; i += 4) {
-    sim.world.corpse(c[i], c[i + 1], c[i + 2], c[i + 3] | 0, 0);
+/** Bring any accepted payload up to the current schema. */
+function migrate(d) {
+  if (d.v === 1) {
+    const n = d.corpses.length / 4;
+    const deaths = d.deaths | 0;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      out.push(d.corpses[o], d.corpses[o + 1], d.corpses[o + 2], d.corpses[o + 3],
+               Math.max(0, deaths - n + i));
+    }
+    d = { ...d, v: 2, n, corpses: out };
   }
-  // Everything loaded is history: nothing should glow as if it just happened.
-  for (const s of sim.world.solids) if (s.corpse) s.glow = 0;
+  return d;
+}
+
+export function load(sim) {
+  // Main slot, then the backup. A tower is worth two attempts.
+  let d = null;
+  let from = '';
+  for (const [key, label] of [[KEY, 'main'], [BAK, 'backup']]) {
+    const cand = readSlot(key);
+    if (cand && validate(cand)) { d = migrate(cand); from = label; break; }
+  }
+  if (!d) return false;
+
+  sim.best = Number.isFinite(+d.best) ? Math.max(0, +d.best) : 0;
+  sim.deaths = Number.isFinite(+d.deaths) ? Math.max(0, d.deaths | 0) : 0;
+
+  // Every row is checked before it reaches the world. A single bad number costs
+  // one body, never the tower — and never the collision buckets.
+  const c = d.corpses;
+  let dropped = 0;
+  for (let i = 0; i + FIELDS - 1 < c.length; i += FIELDS) {
+    const x = +c[i], y = +c[i + 1], rot = +c[i + 2];
+    const pose = c[i + 3] | 0, born = c[i + 4] | 0;
+    if (!Number.isFinite(x) || x < -COLUMN || x > COLUMN * 2
+        || !Number.isFinite(y) || y < -64 || y > 1e6
+        || !Number.isFinite(rot) || Math.abs(rot) > Math.PI * 2) { dropped++; continue; }
+    const s = sim.world.corpse(
+      Math.min(Math.max(x, 0), COLUMN), Math.max(y, 0),
+      rot, pose & 3, 0, Math.min(Math.max(born, 0), sim.deaths),
+    );
+    s.glow = 0;   // everything loaded is history; nothing just happened
+  }
+
   sim.world.generate(Math.max(sim.best, 0) + FEEL.camera.viewH * 2.2);
+  load.lastSource = from;
+  load.lastDropped = dropped;
   return true;
 }
 

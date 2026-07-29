@@ -195,6 +195,8 @@ node scripts/cairn-monument-check.mjs
                                # CAIRN: monument view, framing, budget, poster
 node scripts/cairn-reach-check.mjs --from=481
                                # CAIRN: is there a route up, with or without a body
+node scripts/cairn-store-check.mjs
+                               # CAIRN: migration, backup slot, poisoned rows
 node scripts/smoke.mjs         # REVERB: state machine + 5 levels
 node scripts/nav-check.mjs     # REVERB: navigation, <1s, no GPU
 ```
@@ -233,6 +235,15 @@ a share of gaps are placed **beyond the physical reach envelope on purpose**:
 you cannot cross them, you die at the apex, and your corpse is the step. A third
 of an expert bot's deaths are now deliberate throws into a gap it knew it could
 not make, against 1.8% of a novice's.
+
+**The save file is schema 2 and has a backup slot.** Schema 1 did not store
+`bornDeath`, so a reload brought every corpse back at age = `deaths` — already
+MEMORY, drawn and not solid. The tower a player built out of themselves became
+scenery on restart, and test 8 passed the whole time because it checks corpses
+exist, not that they hold weight. `cairn.v1` is the key name and must never
+change; the schema number lives inside the payload. Rows are validated
+individually — a body at x=1e9 does not merely look wrong, it poisons the height
+buckets every collision query walks.
 
 **Uncrossable gaps are TOO HIGH, not too far.** The first version pushed them
 sideways and the 100 u column clamped them back into ordinary gaps — the
