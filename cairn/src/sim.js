@@ -143,7 +143,7 @@ export class World {
     this.lastX = COLUMN * 0.5;
     this.lastHw = 14;
     this.corpseCount = 0;
-    this.ledge(COLUMN * 0.5, 0, 30);
+    this.ledge(COLUMN * 0.5, 0, FEEL.tower.baseWidth);
   }
 
   ledge(x, y, w) {
@@ -206,28 +206,64 @@ export class World {
   }
 
   /**
-   * Grow the tower to `upTo`. Every ledge sits inside the reach envelope of a
-   * full-power launch — dy + |(dx,dy)| <= v²/g, scaled by `reachSafety` —
-   * minus half the ledge you might be standing on the far edge of. A gap is
-   * therefore tight and never impossible, and the harness proves it.
+   * Grow the tower to `upTo`.
+   *
+   * A REACHABLE ledge sits inside the reach envelope of a full-power launch —
+   * dy + |(dx,dy)| <= v²/g, scaled by `reachSafety` — minus half the ledge you
+   * might be standing on the far edge of. Most ledges are reachable.
+   *
+   * Some, deliberately, are not. See `tower.overreachFrom`: past a certain
+   * difficulty a share of gaps are placed beyond the envelope, and the only way
+   * across is to fail at one, freeze at the apex out in the middle of the gap,
+   * and stand on yourself next time. Making every gap crossable is what turned
+   * the corpse — the entire premise of the game — into scenery.
+   *
+   * Every number this function reads comes from FEEL.tower.
    */
   generate(upTo) {
     const T = FEEL.tower;
     const g = FEEL.gravityRise;
-    const reach = ((FEEL.launch.maxSpeed ** 2) / g) * T.reachSafety;
+    // The PHYSICAL envelope of a full-power launch, and the conservative one
+    // ordinary ledges are placed inside. The difference between the two used to
+    // be the whole of "difficulty", which is why nothing was ever hard: a gap at
+    // the safe limit is only 70% of a gap the body can actually clear.
+    const hard = (FEEL.launch.maxSpeed ** 2) / g;
+    const reach = hard * T.reachSafety;
+    // What the body brings to a landing before the ledge contributes anything.
+    const slack = FEEL.body.w * 0.5 + FEEL.landing.forgiveness;
 
     while (this.builtTo < upTo) {
       const h = this.builtTo;
-      const diff = clamp(h / 900, 0, 1);
-      const rise = T.minRise + this.rng() * (T.maxRise - T.minRise) * (0.6 + diff * 0.4);
+      // No ceiling. `clamp(h / 900, 0, 1)` had one and the tower above it was a
+      // flat, survivable constant; this approaches 1 and never reaches it.
+      const diff = 1 - Math.exp(-Math.max(0, h) / T.diffScale);
+      const rise = T.minRise + this.rng() * (T.maxRise - T.minRise)
+        * (T.riseEase + (1 - T.riseEase) * diff);
 
       const room = reach - rise;
       const maxDx = room > 0 ? Math.sqrt(Math.max(0, room * room - rise * rise)) : 0;
       const usable = Math.max(4, maxDx - this.lastHw);
-      const want = usable * (0.34 + diff * 0.46) * (0.55 + this.rng() * 0.45);
-      const dir = this.rng() < 0.5 ? -1 : 1;
+      const span = T.gapNear + (T.gapFar - T.gapNear) * diff;
 
-      const width = T.maxWidth - (T.maxWidth - T.minWidth) * diff * (0.5 + this.rng() * 0.5);
+      const width = T.maxWidth - (T.maxWidth - T.minWidth) * diff
+        * (T.widthEase + (1 - T.widthEase) * this.rng());
+
+      let want = usable * span * (1 - T.gapJitter + this.rng() * T.gapJitter);
+
+      // An impossible gap has to be measured against the physics, not against
+      // the safety margin. Standing on the near ledge's far edge and landing on
+      // the far ledge's near edge with every unit of forgiveness the game gives
+      // away, this is the shortest centre-to-centre gap that still cannot be
+      // crossed — and then a little further, because the apex hang buys real
+      // range the ideal envelope does not know about.
+      const hardRoom = hard - rise;
+      const hardDx = hardRoom > 0 ? Math.sqrt(Math.max(0, hardRoom * hardRoom - rise * rise)) : 0;
+      const over = Math.max(0, diff - T.overreachFrom) / Math.max(1e-6, 1 - T.overreachFrom);
+      if (this.rng() < over * T.overreachRate) {
+        want = (hardDx + this.lastHw + width * 0.5 + slack) * (1 + T.overreachAmount);
+      }
+
+      const dir = this.rng() < 0.5 ? -1 : 1;
       let nx = this.lastX + want * dir;
       const lo = T.edgePad + width * 0.5;
       const hi = COLUMN - T.edgePad - width * 0.5;

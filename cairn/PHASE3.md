@@ -10,7 +10,19 @@ already been tried and rejected once, with reasons.
 
 ---
 
-## 1 — Balance. The world is too easy, and it is measured
+## 1 — Balance. DONE — see `BALANCE.md`
+
+Measured, retuned and re-measured across 30,000 climbs. Three of the four
+targets below hold outright; the second holds to about attempt 30 and then
+flattens, for a reason recorded in `BALANCE.md` rather than smoothed over. The
+brief as originally written follows, unchanged, because the finding was worse
+than it assumed: the world did not merely have an easy curve, it had **no
+ceiling at all** — a fixed constant flattened difficulty above 900 m and 40 of
+40 expert runs climbed 84 km without dying once.
+
+### The brief, as it stood
+
+**The world is too easy, and it is measured**
 
 **Everything below is worth less until this is fixed.** A fixed-skill bot
 reaches a **721 m median across sixty deaths**. A game whose difficulty a naive
@@ -34,7 +46,7 @@ Write the curves into `BALANCE.md`. There is deliberately no `BALANCE.md` today
 because there is no honest data for one.
 
 **Done when:** the four targets hold across 10,000 climbs and the numbers are in
-the file.
+the file. — Done: 10,000 climbs per skill, 30,000 total, in `BALANCE.md`.
 
 ---
 

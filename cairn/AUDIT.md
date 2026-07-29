@@ -95,14 +95,19 @@ never improves, so any rise must come from the world:
 
 ```
 60 attempts, 60 deaths
-median height   first quarter 721.2 m
-                last  quarter 501.9 m      ratio 0.70
-corpses after 60 deaths: 3 fresh, 17 eroded, 25 memory (non-solid)
+median height   first quarter 243 m
+                last  quarter 243 m        ratio 1.00
+corpses after 60 deaths: 6 fresh, 18 eroded, 35 memory (non-solid)
 ```
 
-A ratio of 0.70 means late attempts reach **lower**, not higher. The inversion
-is gone, and erosion runs its full course — twenty-five selves have decayed to
-non-solid memory while remaining permanently drawn in the tower.
+A ratio of 1.00 means late attempts reach neither higher nor lower. The
+inversion is gone, and erosion runs its full course — thirty-five selves have
+decayed to non-solid memory while remaining permanently drawn in the tower.
+
+These numbers replace the ones this file carried at Phase 2, which were
+721.2 m / 501.9 m / ratio 0.70. The absolute heights fell by a factor of three
+because the generator was retuned; see `BALANCE.md`. The ratio is what this test
+asserts and it still passes.
 
 The first version of this test capped attempts by jump count instead of by
 death. The bot was good enough that attempts ended on the cap, no corpse ever
@@ -120,11 +125,15 @@ These are open, not done, and not claimed:
 - **No allocation audit of the frame loop.** Pools exist for particles, rings,
   trail, dust and solids, and the scratch bodies for prediction are allocated
   once. This was designed for, not verified with a heap profiler.
-- **Balance is unmeasured.** The fixed-skill bot reaching a 721 m median says
-  the world is currently too easy. Part 7 of the Phase 2 brief — 10,000 climbs
-  across novice/average/expert models, with generation retuned until the curves
-  hit their targets — has not been run. There is no BALANCE.md yet because
-  there is no honest data to put in one.
+- **Balance is measured, and one of its four targets is only partly met.**
+  30,000 climbs across novice/average/expert models are in `BALANCE.md`, with
+  the generator retuned. Three targets hold outright. The fourth — the average
+  player's median death height rising steadily — holds to about attempt 30 and
+  then flattens near 600 m, for a reason that argument says cannot be removed
+  without causing the difficulty collapse test 12 exists to catch. That is an
+  argument, not a measurement of an alternative.
+- **No human has played the retuned tower.** Three bots with gaussian error are
+  not three people, and the novice model has no learning in it.
 - **Most of Phase 2 is not built.** Chunked streaming generation, the
   reachability solver, the four new biome verbs, momentum, close calls, the
   first-60-seconds choreography, Daily Climb, ghosts, Monument View, milestones

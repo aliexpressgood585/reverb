@@ -145,6 +145,7 @@ cairn/
     audio.js      WebAudio, fully synthesised
     store.js      versioned persistence, share poster, procedural icon
   AUDIT.md        honest state, including what is NOT done
+  BALANCE.md      the difficulty curves, measured over 30,000 headless climbs
   DECISIONS.md    18 judgement calls with reasoning. Read before re-litigating.
   PHASE3.md       ranked next work
 ```
@@ -184,6 +185,8 @@ shelf you see is the hitbox. That is how the rule is taught without text.
 
 ```bash
 node scripts/cairn-check.mjs   # CAIRN: 14 acceptance tests, ~4 min
+node scripts/cairn-balance.mjs --all --seeds=200 --attempts=50
+                               # CAIRN: 30,000 headless climbs, ~2.5 min, no browser
 node scripts/smoke.mjs         # REVERB: state machine + 5 levels
 node scripts/nav-check.mjs     # REVERB: navigation, <1s, no GPU
 ```
@@ -211,11 +214,23 @@ synthesised audio, haptics, 14 passing tests.
 chunked streaming generation, the reachability solver, the four biome verbs
 (crumbling holds / updrafts / drifting platforms / darkness), momentum, close
 calls, the first-60-seconds choreography, Daily Climb, ghosts, Monument View,
-milestones, the instrumentation dashboard, and the 10,000-climb balance pass.
+milestones and the instrumentation dashboard.
 
-**Known-honest problem:** the world is **too easy**. A fixed-skill bot reaches a
-721 m median across sixty deaths. There is no `BALANCE.md` because there is no
-honest data to put in one yet. Start there — see `cairn/PHASE3.md`.
+**Balance is done and written down.** `cairn/BALANCE.md` has the curves from
+30,000 headless climbs. The short version: the world did not have an easy
+difficulty curve, it had **no ceiling** — `clamp(h / 900, 0, 1)` flattened
+difficulty above 900 m and 40 of 40 expert runs climbed 84 km without dying
+once. The generator now escalates without saturating, and past a certain height
+a share of gaps are placed **beyond the physical reach envelope on purpose**:
+you cannot cross them, you die at the apex, and your corpse is the step. A third
+of an expert bot's deaths are now deliberate throws into a gap it knew it could
+not make, against 1.8% of a novice's.
+
+**Known-honest problem:** every generation number now lives in
+`cairn/src/feel.js` under `tower`, and several of them (`diffScale`,
+`overreachRate`) move the whole curve. Re-run the balance harness after touching
+any of them — `cairn-check.mjs` will not catch a difficulty regression, because
+test 12 checks that difficulty does not *collapse*, not that it exists.
 
 ---
 

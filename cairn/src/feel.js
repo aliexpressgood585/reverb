@@ -132,15 +132,52 @@ export const FEEL = {
   },
 
   // ------------------------------------------------------------------ tower
+  //
+  // The generator used to keep its own numbers, which is how a difficulty curve
+  // that flat-lined at 900 m survived unnoticed: nobody reads a constant buried
+  // in a while-loop. Every knob that decides how hard the tower is now lives
+  // here, and BALANCE.md records what each one measured.
   tower: {
-    minRise: 16,
-    maxRise: 27,
-    minWidth: 11,
-    maxWidth: 26,
-    // Ledges are never placed outside the reach envelope of a full-power
-    // launch, scaled down by this, so a gap is tight but never impossible.
+    baseWidth: 30,        // the ledge you start on. Generous on purpose.
+    minRise: 15,
+    maxRise: 28,
+    minWidth: 6,
+    maxWidth: 17,
+    // Reachable ledges are never placed outside the reach envelope of a
+    // full-power launch — dy + |(dx,dy)| <= v²/g — scaled down by this.
     reachSafety: 0.70,
     edgePad: 6,           // keep ledges this far inside the column
+
+    // DIFFICULTY NEVER ARRIVES.
+    //
+    // This was `clamp(h / 900, 0, 1)`. Above 900 m the tower stopped changing,
+    // so the game had a hardest jump and it was not very hard: a bot with 1.1°
+    // of aim error climbed 84 km in a single attempt without dying once. An
+    // exponential approach has no last step — it keeps taking ground off the
+    // player for as long as the player keeps taking ground off it.
+    diffScale: 260,       // metres to reach 63% of the way to the ceiling
+
+    riseEase: 0.55,       // share of the rise range in play at zero height
+    gapNear: 0.42,        // share of the usable gap at zero height
+    gapFar: 1.00,         // ... and at full difficulty
+    gapJitter: 0.45,      // how much of a gap is left to the dice
+    widthEase: 0.45,      // share of the width loss that is not random
+
+    // THE GAPS YOU CANNOT CROSS.
+    //
+    // Every gap used to be crossable, which sounds kind and is actually the
+    // reason the loop was empty: a player who never has to fail never has to
+    // use the one mechanic the game is built on. Above `overreachFrom` a share
+    // of gaps are placed past the envelope on purpose. You cannot make them.
+    // You die at the apex, mid-gap, and the corpse you leave is the step.
+    //
+    // This is safe to do because the roof shifts: everything above your
+    // all-time best is re-rolled every attempt, so an unlucky gap is a bad
+    // hand and never a wall.
+    overreachFrom: 0.30,  // difficulty at which they start appearing
+    overreachRate: 0.35,  // their share of gaps at full difficulty
+    overreachAmount: 0.10, // how far past the envelope they sit
+
     // A corpse is a narrower perch than rock. That is what makes it a worse
     // platform than a ledge and an enormously better one than nothing.
     corpseW: 5.2,
