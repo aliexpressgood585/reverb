@@ -393,10 +393,6 @@ try {
   document.head.appendChild(fav);
 } catch { /* manifest is a nice-to-have, never a blocker */ }
 
-if ('serviceWorker' in navigator) {
-  addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
-}
-
 // The harness drives the real loop, never a copy of it.
 window.CAIRN = {
   sim, input, camera, renderer, audio, post, FEEL, Store, predict,

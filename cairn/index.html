@@ -11,6 +11,30 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="CAIRN" />
 <link rel="stylesheet" href="./style.css" />
+<script>
+/* Self-heal, first thing on the page and outside the module bundle so it runs
+   even if the bundle itself is the stale thing. An earlier build registered a
+   cache-first service worker that can pin a device to a dead deploy; this
+   unregisters every worker, purges every cache, and reloads once — but only if
+   a worker was actually controlling this page, so a clean device pays nothing. */
+(function () {
+  if (!('serviceWorker' in navigator)) return;
+  var had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.getRegistrations().then(function (rs) {
+    return Promise.all(rs.map(function (r) { return r.unregister(); }));
+  }).then(function () {
+    if (!window.caches) return null;
+    return caches.keys().then(function (ks) {
+      return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+    });
+  }).then(function () {
+    if (had && !sessionStorage.getItem('cairn.healed')) {
+      sessionStorage.setItem('cairn.healed', '1');
+      location.reload();
+    }
+  }).catch(function () {});
+})();
+</script>
 </head>
 <body>
 <canvas id="view"></canvas>

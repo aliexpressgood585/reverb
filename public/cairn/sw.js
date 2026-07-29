@@ -1,52 +1,38 @@
 /*
- * CAIRN offline. The whole game is a handful of small text files, so the
- * service worker caches everything it is asked for and serves cache-first
- * afterwards. Installed to the home screen, it launches with no network at all.
+ * TOMBSTONE.
  *
- * Cache-first is safe here because the build fingerprints every asset filename;
- * a new deploy is new URLs, and the version bump below sweeps the old ones.
+ * An earlier build of CAIRN shipped a service worker that served navigations
+ * cache-first. That is the standard way to strand a device on a dead deploy:
+ * the cached index.html points at content-hashed assets from the old build, and
+ * no amount of reloading gets the user a newer page, because the old worker
+ * answers every navigation from its own cache before the network is consulted.
+ *
+ * It stranded a real phone on the one build where the title card swallowed
+ * every touch — so the game could neither be started nor updated. That is the
+ * worst possible pair of bugs to ship together.
+ *
+ * This file is no longer a cache. It exists only to remove its predecessor:
+ * take control immediately, delete every cache, unregister itself, and reload
+ * whatever it was controlling so the page comes back from the network.
+ *
+ * Offline play is a feature. Being unable to update is not a trade worth making
+ * for it. A service worker returns to this game only behind a deploy pipeline
+ * that can prove it cannot strand anyone.
  */
-const CACHE = 'cairn-v2';
-
-self.addEventListener('install', (e) => {
-  self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html']).catch(() => {})));
-});
+self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    } catch { /* nothing cached, nothing to clear */ }
+    try { await self.registration.unregister(); } catch { /* already gone */ }
+    const clients = await self.clients.matchAll({ type: 'window' });
+    for (const c of clients) {
+      try { c.navigate(c.url); } catch { /* the page script also self-heals */ }
+    }
+  })());
 });
 
-self.addEventListener('fetch', (e) => {
-  const req = e.request;
-  if (req.method !== 'GET') return;
-
-  // Navigations go to the network first. Serving a cached index.html
-  // cache-first is the classic way to lock users onto a dead deploy: the stale
-  // HTML points at hashed assets that no longer exist and the app never boots.
-  // Assets are content-hashed, so THEY are safe to serve cache-first forever.
-  if (req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) {
-    e.respondWith(
-      fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-        return res;
-      }).catch(() => caches.match(req).then((hit) => hit || caches.match('./index.html')))
-    );
-    return;
-  }
-
-  e.respondWith(
-    caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-      if (res && res.status === 200 && res.type === 'basic') {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-      }
-      return res;
-    }).catch(() => caches.match('./index.html')))
-  );
-});
+// Never intercept anything. Every request goes straight to the network.

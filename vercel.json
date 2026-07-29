@@ -7,6 +7,13 @@
   "cleanUrls": true,
   "headers": [
     {
+      "comment": "HTML is never cached. Content-hashed assets are cached forever. Getting this backwards is how a deploy strands a device.",
+      "source": "/cairn(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, must-revalidate" }
+      ]
+    },
+    {
       "source": "/assets/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
