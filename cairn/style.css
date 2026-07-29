@@ -1,10 +1,20 @@
-/* CAIRN — the whole interface. Two numbers and three sentences that leave. */
+/*
+ * CAIRN — the whole stylesheet.
+ *
+ * Two jobs: make the page behave like an app rather than a document, and stay
+ * out of the way of the canvas. Every rule that kills a browser gesture is load
+ * bearing — a climbing game is one long drag, and a drag that the browser reads
+ * as a pull-to-refresh is a dead game on the first jump.
+ *
+ * Nothing in the input path has a transition. Latency is a feature you can only
+ * lose.
+ */
 
 :root {
-  --white: #dce3e8;
-  --stone: #6e7a84;
-  --warm: #e8894a;
-  --void: #05070a;
+  --ink: #dce3e8;
+  --gold: #c99a4a;
+  --void: #04060b;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -13,114 +23,154 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  position: fixed;
+  inset: 0;
   background: var(--void);
-  color: var(--white);
-  font: 400 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ink);
+  font: 300 13px/1.5 var(--mono);
   letter-spacing: 0.18em;
   -webkit-font-smoothing: antialiased;
-  /* A climbing game is one long drag. The browser must not read it as a pull
-     to refresh, a text selection, or a pinch. */
+  -webkit-text-size-adjust: 100%;
+
+  /* Kill every browser gesture: pull-to-refresh, rubber band, double-tap zoom,
+     text selection, and the long-press callout. */
   overscroll-behavior: none;
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-
-/* ---------------------------------------------------------------- the numbers */
-
-#hud {
+#view {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 18px);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* --------------------------------------------------------------- the number */
+
+#height {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
   left: 0;
   right: 0;
   text-align: center;
-  pointer-events: none;
-  z-index: 2;
-}
-
-#height {
-  font-size: 34px;
-  font-weight: 300;
-  letter-spacing: 0.06em;
-  color: var(--white);
-  opacity: 0.92;
+  font-size: 12px;
+  letter-spacing: 0.34em;
+  opacity: 0.42;
   font-variant-numeric: tabular-nums;
-}
-
-#height i {
-  font-style: normal;
-  font-size: 13px;
-  opacity: 0.4;
-  margin-left: 3px;
-}
-
-#toll {
-  margin-top: 4px;
-  font-size: 10px;
-  opacity: 0.34;
-  min-height: 1.4em;
-}
-
-/* ------------------------------------------------------------------ teaching */
-
-#teach {
-  position: fixed;
-  left: 24px;
-  right: 24px;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
-  text-align: center;
-  font-size: 11px;
-  opacity: 0;
   pointer-events: none;
   z-index: 2;
-  transition: opacity 0.55s ease;
 }
 
-#teach.show { opacity: 0.66; }
+/* ---------------------------------------------------------------- the cards */
 
-/* --------------------------------------------------------------- title card */
-
-#start {
+#card {
   position: fixed;
   inset: 0;
-  display: flex;
+  display: none;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 0 20px;
+  gap: 10px;
+  padding: 0 24px calc(env(safe-area-inset-bottom, 0px) + 24px);
   text-align: center;
-  background: var(--void);
-  z-index: 3;
-  transition: opacity 0.5s ease;
+  z-index: 4;
+  /* A scrim rather than a wall: the live scene stays visible behind the title,
+     which is the whole reason the title is a scene and not a picture. */
+  background:
+    radial-gradient(120% 70% at 50% 45%, rgba(4, 6, 11, 0.86) 0%, rgba(4, 6, 11, 0.55) 55%, rgba(4, 6, 11, 0.9) 100%);
 }
 
-#start.gone { opacity: 0; pointer-events: none; }
+#card.on { display: flex; }
 
-#start .idx { font-size: 10px; opacity: 0.4; margin-bottom: 6px; }
-
-/* Level names run to eleven characters at wide tracking. On a 390 px phone a
-   fixed 40 px ran off both edges of the screen — the title card has to scale
-   with the viewport, not with a number chosen on a desktop. */
-#start h1 {
-  font-size: clamp(20px, 7.6vw, 38px);
-  font-weight: 300;
-  letter-spacing: 0.2em;
-  text-indent: 0.2em;
+#card h1 {
+  font-size: clamp(30px, 12vw, 62px);
+  font-weight: 200;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
   max-width: 100%;
-  overflow-wrap: break-word;
+  font-variant-numeric: tabular-nums;
 }
 
-#start .tag { font-size: 11px; opacity: 0.5; max-width: 100%; }
+#card .idx { font-size: 10px; opacity: 0.45; letter-spacing: 0.4em; }
+#card .tag { font-size: 11px; opacity: 0.5; letter-spacing: 0.24em; }
 
-#start .go {
-  margin-top: 26px;
+#card .go {
+  margin-top: 30px;
   font-size: 11px;
-  opacity: 0.75;
-  animation: breathe 2.6s ease-in-out infinite;
+  letter-spacing: 0.34em;
+  animation: breathe 2.8s ease-in-out infinite;
 }
 
-@keyframes breathe { 0%, 100% { opacity: 0.28; } 50% { opacity: 0.85; } }
+@keyframes breathe { 0%, 100% { opacity: 0.26; } 50% { opacity: 0.86; } }
+
+#card .row { display: flex; gap: 12px; margin-top: 26px; }
+
+#card button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(220, 227, 232, 0.24);
+  color: var(--ink);
+  font: 300 11px/1 var(--mono);
+  letter-spacing: 0.3em;
+  padding: 14px 20px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+#card button:active { border-color: rgba(220, 227, 232, 0.7); }
+
+/* ---------------------------------------------------------------- fragments */
+
+#toast {
+  position: fixed;
+  left: 0; right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 74px);
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+#toast.on { opacity: 0.62; }
+
+#mute {
+  position: fixed;
+  right: calc(env(safe-area-inset-right, 0px) + 14px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  appearance: none;
+  background: none;
+  border: 0;
+  color: var(--ink);
+  opacity: 0.22;
+  font: 300 9px/1 var(--mono);
+  letter-spacing: 0.28em;
+  padding: 10px;
+  z-index: 5;
+  touch-action: none;
+}
+
+#debug {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 40px);
+  left: 12px;
+  display: none;
+  font: 300 10px/1.4 var(--mono);
+  letter-spacing: 0.06em;
+  color: #7de0b0;
+  opacity: 0.85;
+  pointer-events: none;
+  white-space: pre;
+  z-index: 9;
+}
+#debug.on { display: block; }
+
+@media (prefers-reduced-motion: reduce) {
+  #card .go { animation: none; opacity: 0.6; }
+}

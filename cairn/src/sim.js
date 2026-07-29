@@ -1,0 +1,512 @@
+import { FEEL, COLUMN } from './feel.js';
+
+/**
+ * The simulation. No DOM, no canvas, no audio — this file could run in a
+ * worker or in Node, and the headless acceptance harness drives exactly this
+ * code rather than a reimplementation of it.
+ *
+ * The one rule, which everything else exists to serve:
+ *
+ *   MISS A JUMP AND YOU FREEZE AT THE HIGHEST POINT YOU REACHED, AND WHAT IS
+ *   LEFT BEHIND IS SOLID.
+ *
+ * Determinism is a hard requirement, not an aspiration. Every tick is exactly
+ * FEEL.sim.dt seconds; the accumulator lives in the caller. Two identical
+ * launches from an identical world state produce bit-identical landings, and
+ * the harness asserts it.
+ */
+
+const { dt: DT } = FEEL.sim;
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+// --------------------------------------------------------------------- rng
+
+/** xorshift32. A seed is a tower, on every device and every run. */
+export function makeRng(seed) {
+  let s = (seed | 0) || 0x9e3779b9;
+  return () => {
+    s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+    return ((s >>> 0) % 1000000) / 1000000;
+  };
+}
+
+// ------------------------------------------------------------------ solids
+
+/**
+ * A solid is an axis-aligned slab you can stand on and, if it is a corpse, can
+ * also cling to the sides of. Pooled: the array only ever grows.
+ */
+function newSolid() {
+  return {
+    x: 0, y: 0, hw: 0, hh: 0,
+    corpse: false, live: false,
+    // corpse presentation state, carried here so the renderer needs no lookup
+    order: 0, bornAt: 0, rot: 0, pose: 0, glow: 0,
+  };
+}
+
+// Solids are bucketed by height so a collision query touches a handful of
+// candidates instead of every corpse in the tower. Without this the predicted
+// arc — which runs the real physics for up to two and a half seconds, several
+// times per aiming frame — is O(ticks x corpses) and falls off 60 fps somewhere
+// around the fortieth death, which is precisely when the game gets good.
+const BUCKET = 32;
+
+export class World {
+  constructor(seed = 0x1a2b3c) {
+    this.seed = seed;
+    this.rng = makeRng(seed);
+    this.solids = [];
+    this.pool = [];
+    this.buckets = new Map();
+    this.builtTo = 0;
+    this.lastX = COLUMN * 0.5;
+    this.lastHw = 14;
+    this.corpseCount = 0;
+    this._q = [];
+  }
+
+  _take() {
+    const s = this.pool.pop() || newSolid();
+    s.live = true;
+    this.solids.push(s);
+    return s;
+  }
+
+  _index(s) {
+    const k = Math.floor(s.y / BUCKET);
+    let arr = this.buckets.get(k);
+    if (!arr) { arr = []; this.buckets.set(k, arr); }
+    arr.push(s);
+  }
+
+  /** Candidates whose slab may intersect [lo, hi]. Reuses one scratch array. */
+  near(lo, hi) {
+    const out = this._q;
+    out.length = 0;
+    const k0 = Math.floor(lo / BUCKET) - 1;
+    const k1 = Math.floor(hi / BUCKET) + 1;
+    for (let k = k0; k <= k1; k++) {
+      const arr = this.buckets.get(k);
+      if (!arr) continue;
+      for (let i = 0; i < arr.length; i++) out.push(arr[i]);
+    }
+    return out;
+  }
+
+  reset(seed = this.seed) {
+    for (const s of this.solids) { s.live = false; this.pool.push(s); }
+    this.solids.length = 0;
+    this.buckets.clear();
+    this.rng = makeRng(seed);
+    this.builtTo = 0;
+    this.lastX = COLUMN * 0.5;
+    this.lastHw = 14;
+    this.corpseCount = 0;
+    this.ledge(COLUMN * 0.5, 0, 30);
+  }
+
+  ledge(x, y, w) {
+    const s = this._take();
+    s.x = x; s.y = y; s.hw = w * 0.5; s.hh = 2.4;
+    s.corpse = false;
+    this._index(s);
+    return s;
+  }
+
+  corpse(x, y, rot, pose, at) {
+    const s = this._take();
+    s.x = x; s.y = y;
+    s.hw = FEEL.tower.corpseW * 0.5;
+    s.hh = FEEL.tower.corpseH * 0.5;
+    s.corpse = true;
+    s.order = this.corpseCount++;
+    s.bornAt = at;
+    s.rot = rot;
+    s.pose = pose;
+    s.glow = 1;
+    this._index(s);
+    return s;
+  }
+
+  /**
+   * Grow the tower to `upTo`. Every ledge sits inside the reach envelope of a
+   * full-power launch — dy + |(dx,dy)| <= v²/g, scaled by `reachSafety` —
+   * minus half the ledge you might be standing on the far edge of. A gap is
+   * therefore tight and never impossible, and the harness proves it.
+   */
+  generate(upTo) {
+    const T = FEEL.tower;
+    const g = FEEL.gravityRise;
+    const reach = ((FEEL.launch.maxSpeed ** 2) / g) * T.reachSafety;
+
+    while (this.builtTo < upTo) {
+      const h = this.builtTo;
+      const diff = clamp(h / 900, 0, 1);
+      const rise = T.minRise + this.rng() * (T.maxRise - T.minRise) * (0.6 + diff * 0.4);
+
+      const room = reach - rise;
+      const maxDx = room > 0 ? Math.sqrt(Math.max(0, room * room - rise * rise)) : 0;
+      const usable = Math.max(4, maxDx - this.lastHw);
+      const want = usable * (0.34 + diff * 0.46) * (0.55 + this.rng() * 0.45);
+      const dir = this.rng() < 0.5 ? -1 : 1;
+
+      const width = T.maxWidth - (T.maxWidth - T.minWidth) * diff * (0.5 + this.rng() * 0.5);
+      let nx = this.lastX + want * dir;
+      const lo = T.edgePad + width * 0.5;
+      const hi = COLUMN - T.edgePad - width * 0.5;
+      if (nx < lo || nx > hi) nx = this.lastX - want * dir;
+      nx = clamp(nx, lo, hi);
+
+      this.builtTo = h + rise;
+      this.lastX = nx;
+      this.lastHw = width * 0.5;
+      this.ledge(nx, this.builtTo, width);
+    }
+  }
+}
+
+// ------------------------------------------------------------------- player
+
+export function newBody() {
+  return {
+    x: COLUMN * 0.5, y: 0,
+    px: COLUMN * 0.5, py: 0,     // previous tick, for render interpolation
+    vx: 0, vy: 0,
+    grounded: true,
+    standing: null,
+    onWall: 0,                   // -1 left contact, +1 right, 0 none
+    wallTimer: 0,
+    coyote: 0,
+    takeoff: 0,
+    peakX: 0, peakY: 0,
+    airTime: 0,
+    hangTimer: 0,
+  };
+}
+
+// --------------------------------------------------------------------- game
+
+export const PHASE = { TITLE: 0, PLAY: 1, DYING: 2, RESET: 3 };
+
+export class Sim {
+  constructor(seed) {
+    this.world = new World(seed);
+    this.body = newBody();
+    this.phase = PHASE.TITLE;
+    this.time = 0;
+    this.deaths = 0;
+    this.best = 0;
+    this.runBest = 0;
+    this.buffered = null;       // a launch queued in the air, spent on landing
+    this.bufferTimer = 0;
+    this.events = [];           // drained by the presentation layer each frame
+    this.hitStop = 0;
+    // The longest single sub-step ever taken, for the tunnelling test.
+    this.maxSubStep = 0;
+    // A full body used as the scratch for predicted flight, allocated once.
+    this._ghost = newBody();
+    this.reset(true);
+  }
+
+  emit(kind, a = 0, b = 0, c = 0) { this.events.push(kind, a, b, c); }
+
+  /** Full restart: bare rock, no history. Corpses are restored separately. */
+  reset(hard) {
+    this.world.reset(this.world.seed);
+    this.world.generate(FEEL.camera.viewH * 2.2);
+    this._stand();
+    this.runBest = 0;
+    if (hard) { this.deaths = 0; this.time = 0; }
+  }
+
+  /** Restart the attempt while keeping every corpse in place. */
+  respawn() {
+    this._stand();
+    this.runBest = 0;
+    this.phase = PHASE.PLAY;
+  }
+
+  /** Place the body standing on the surface of the base ledge, not inside it. */
+  _stand() {
+    const b = this.body;
+    const base = this.world.solids[0];
+    b.x = b.px = base.x;
+    b.y = b.py = base.y + base.hh;
+    b.vx = b.vy = 0;
+    b.grounded = true;
+    b.standing = base;
+    b.onWall = 0; b.wallTimer = 0; b.coyote = FEEL.coyoteTime;
+    b.airTime = 0; b.hangTimer = 0;
+    b.takeoff = b.y;
+  }
+
+  // ------------------------------------------------------------- the launch
+
+  canLaunch() {
+    const b = this.body;
+    return this.phase === PHASE.PLAY && (b.grounded || b.coyote > 0 || b.onWall !== 0);
+  }
+
+  /**
+   * Fire, or buffer. A launch requested up to `jumpBuffer` before touching
+   * down is honoured on contact, which removes the single most common source
+   * of "the game ate my input".
+   */
+  launch(vx, vy) {
+    if (this.phase !== PHASE.PLAY) return false;
+    if (!this.canLaunch()) {
+      this.buffered = this.buffered || { vx: 0, vy: 0 };
+      this.buffered.vx = vx; this.buffered.vy = vy;
+      this.bufferTimer = FEEL.jumpBuffer;
+      return false;
+    }
+    return this._fire(vx, vy);
+  }
+
+  _fire(vx, vy) {
+    const b = this.body;
+    if (b.onWall !== 0 && !b.grounded) vx += -b.onWall * FEEL.wall.kickX * 0.35;
+    b.vx = vx; b.vy = vy;
+    b.grounded = false;
+    b.coyote = 0;
+    b.onWall = 0;
+    b.wallTimer = 0;
+    b.takeoff = b.y;
+    b.peakX = b.x;
+    b.peakY = b.y;
+    b.airTime = 0;
+    b.hangTimer = 0;
+    this.buffered = null;
+    this.emit(EV.LAUNCH, Math.hypot(vx, vy));
+    return true;
+  }
+
+  // ------------------------------------------------------------ integration
+
+  /** Gravity for the current instant, including the apex hang. */
+  _gravity(b) {
+    const A = FEEL.apexHang;
+    let g = b.vy > 0 ? FEEL.gravityRise : FEEL.gravityFall;
+    if (Math.abs(b.vy) < A.vyBand && b.hangTimer < A.window * 2) g *= A.scale;
+    return g;
+  }
+
+  /**
+   * Advance a body ONE TICK OF FLIGHT against the world.
+   *
+   * This is the only place flight is ever integrated. The game calls it with
+   * the player; `predict` calls it with a scratch body. That is the entire
+   * reason the aim line is exact rather than approximately right — an earlier
+   * build had two integrators and they diverged by twenty-two units, which on
+   * a phone reads as "the jumps are not accurate" and not as "the preview is
+   * subtly wrong".
+   *
+   * Movement is swept: the delta is walked in sub-steps no longer than half the
+   * body, so nothing passes through a corpse between two frames however fast it
+   * is travelling.
+   *
+   * @returns the solid landed on, the string 'die', or null for still flying.
+   */
+  _flight(b, aimDir) {
+    // Subtle drift toward the aim. Enough to save a jump, never enough to make
+    // aiming optional.
+    if (aimDir !== 0) {
+      const cap = FEEL.launch.maxSpeed * FEEL.airControl;
+      const want = aimDir * cap;
+      if (Math.sign(want) !== Math.sign(b.vx) || Math.abs(b.vx) < Math.abs(want)) {
+        b.vx += Math.sign(want - b.vx) * FEEL.airControlAccel * DT;
+      }
+    }
+
+    const g = this._gravity(b);
+    if (Math.abs(b.vy) < FEEL.apexHang.vyBand) b.hangTimer += DT; else b.hangTimer = 0;
+    b.vy -= g * DT;
+    if (b.vy < -FEEL.maxFallSpeed) b.vy = -FEEL.maxFallSpeed;
+
+    let dx = b.vx * DT;
+    let dy = b.vy * DT;
+    const span = Math.hypot(dx, dy);
+    const limit = Math.min(FEEL.body.w, FEEL.body.h) * FEEL.body.sweepFraction;
+    const steps = clamp(Math.ceil(span / limit), 1, FEEL.sim.maxSubSteps);
+    dx /= steps; dy /= steps;
+    const stepLen = span / steps;
+    if (stepLen > this.maxSubStep) this.maxSubStep = stepLen;
+
+    const halfW = FEEL.body.w * 0.5;
+    for (let i = 0; i < steps; i++) {
+      const fromY = b.y;
+      b.x += dx;
+      b.y += dy;
+      if (b.y > b.peakY) { b.peakY = b.y; b.peakX = b.x; }
+
+      if (b.x < halfW) { b.x = halfW; if (b.vx < 0) b.vx = 0; this._wall(b, -1); }
+      else if (b.x > COLUMN - halfW) { b.x = COLUMN - halfW; if (b.vx > 0) b.vx = 0; this._wall(b, 1); }
+      else b.onWall = 0;
+
+      if (b.vy <= 0) {
+        const s = this._surfaceUnder(fromY, b.y, b.x);
+        if (s) return s;
+      }
+      this._sides(b);
+      if (b.vy < 0 && b.y < b.takeoff) return 'die';
+    }
+    return null;
+  }
+
+  /** One fixed tick of the whole game. */
+  tick(aimDir) {
+    this.time += DT;
+    if (this.hitStop > 0) { this.hitStop -= DT; return; }
+    if (this.phase !== PHASE.PLAY) return;
+
+    const b = this.body;
+    b.px = b.x; b.py = b.y;
+
+    if (this.bufferTimer > 0) {
+      this.bufferTimer -= DT;
+      if (this.bufferTimer <= 0) this.buffered = null;
+    }
+
+    if (b.grounded) {
+      b.vx *= FEEL.landing.friction;
+      if (Math.abs(b.vx) < 0.4) b.vx = 0;
+      b.coyote = FEEL.coyoteTime;
+      this.world.generate(b.y + FEEL.camera.viewH * 2.2);
+      return;
+    }
+
+    b.coyote -= DT;
+    b.airTime += DT;
+
+    const r = this._flight(b, aimDir);
+    if (r === 'die') { this._die(); return; }
+    if (r) { this._land(r); return; }
+
+    this.world.generate(b.y + FEEL.camera.viewH * 2.2);
+  }
+
+  /**
+   * The highest surface the body's feet crossed downward through, including
+   * `landing.forgiveness` of horizontal grace — a near miss while falling is
+   * pulled onto the ledge rather than punished, because a player who was
+   * clearly going for a platform meant to be on it.
+   */
+  _surfaceUnder(fromY, toY, x) {
+    const solids = this.world.near(toY - 4, fromY + 4);
+    const half = FEEL.body.w * 0.5;
+    let best = null;
+    let bestSlack = Infinity;
+    for (let i = 0; i < solids.length; i++) {
+      const s = solids[i];
+      const top = s.y + s.hh;
+      if (fromY < top || toY > top) continue;
+      const over = Math.abs(x - s.x) - (s.hw + half);
+      if (over > FEEL.landing.forgiveness) continue;
+      if (!best || top > best.y + best.hh || (over < bestSlack && top === best.y + best.hh)) {
+        best = s; bestSlack = over;
+      }
+    }
+    return best;
+  }
+
+  _land(s) {
+    const b = this.body;
+    const impact = Math.abs(b.vy);
+    const top = s.y + s.hh;
+    b.y = top;
+    b.x = clamp(b.x, s.x - s.hw - FEEL.landing.forgiveness, s.x + s.hw + FEEL.landing.forgiveness);
+    b.vy = 0;
+    b.vx *= FEEL.landing.friction;
+    b.grounded = true;
+    b.standing = s;
+    b.onWall = 0;
+    b.coyote = FEEL.coyoteTime;
+    if (b.y > this.runBest) this.runBest = b.y;
+    if (impact > FEEL.landing.hardImpactVy) this.hitStop = FEEL.juice.hitStopLand;
+    this.emit(EV.LAND, impact, b.x, b.y);
+    if (this.buffered && this.bufferTimer > 0) {
+      const q = this.buffered;
+      this._fire(q.vx, q.vy);
+    }
+  }
+
+  _wall(b, side) {
+    b.onWall = side;
+    b.wallTimer += DT;
+    if (b.wallTimer > FEEL.wall.grabWindow && b.vy < -FEEL.wall.slideSpeed) {
+      b.vy = -FEEL.wall.slideSpeed;
+    }
+  }
+
+  /** Cling to the vertical face of a ledge or a corpse. */
+  _sides(b) {
+    if (b.vy > 0) return;
+    const solids = this.world.near(b.y - 2, b.y + FEEL.body.h + 2);
+    const half = FEEL.body.w * 0.5;
+    for (let i = 0; i < solids.length; i++) {
+      const s = solids[i];
+      if (b.y > s.y + s.hh || b.y + FEEL.body.h < s.y - s.hh) continue;
+      const dx = b.x - s.x;
+      const overlap = s.hw + half - Math.abs(dx);
+      if (overlap <= 0 || overlap > half) continue;
+      const side = dx > 0 ? 1 : -1;
+      b.x = s.x + side * (s.hw + half);
+      if (Math.sign(b.vx) === -side) b.vx = 0;
+      this._wall(b, side);
+      return;
+    }
+  }
+
+  /**
+   * The one rule. You freeze at the apex of the arc — out in the gap and above
+   * the ledge you left — so a failed jump does not cost you the gap, it fills
+   * it. Every death therefore leaves a platform strictly above its own
+   * take-off, and the harness checks that on every single death.
+   */
+  _die() {
+    const b = this.body;
+    const rot = (this.world.rng() - 0.5) * 1.1;
+    const pose = Math.floor(this.world.rng() * 4);
+    this.world.corpse(b.peakX, b.peakY, rot, pose, this.time);
+    this.deaths++;
+    this.hitStop = FEEL.juice.hitStopDeath;
+    this.phase = PHASE.DYING;
+    this.emit(EV.DEATH, b.peakX, b.peakY, rot);
+  }
+}
+
+export const EV = { LAUNCH: 0, LAND: 1, DEATH: 2, BEST: 3, BIOME: 4 };
+
+/**
+ * Simulate a launch forward and report the arc and where it first lands, using
+ * THE SAME tick the game runs. Not an approximation of the physics — the
+ * physics. A predicted arc computed a second way is a predicted arc that lies,
+ * and an earlier build of this game shipped exactly that bug.
+ *
+ * Writes flat [x,y,...] into `outArc` and returns the landing solid or null.
+ */
+export function predict(sim, vx, vy, outArc) {
+  const b = sim.body;
+  const p = sim._ghost;
+  p.x = b.x; p.y = b.y; p.px = b.x; p.py = b.y;
+  p.vx = vx; p.vy = vy;
+  p.takeoff = b.y;
+  p.peakX = b.x; p.peakY = b.y;
+  p.hangTimer = 0; p.onWall = 0; p.wallTimer = 0;
+  p.grounded = false; p.standing = b.standing;
+
+  outArc.length = 0;
+  const ticks = Math.ceil(FEEL.aim.arcSeconds / DT);
+  for (let i = 0; i < ticks; i++) {
+    const r = sim._flight(p, 0);
+    if (i % FEEL.aim.arcDotEvery === 0) outArc.push(p.x, p.y);
+    if (r === 'die') { outArc.push(p.x, p.y); return null; }
+    if (r) {
+      const lx = clamp(p.x, r.x - r.hw - FEEL.landing.forgiveness, r.x + r.hw + FEEL.landing.forgiveness);
+      outArc.push(lx, r.y + r.hh);
+      return r;
+    }
+  }
+  return null;
+}

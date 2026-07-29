@@ -21,6 +21,8 @@ export default defineConfig({
       },
     },
   },
+  // The service worker must sit at the CAIRN scope root, unhashed.
+  publicDir: 'public',
   server: { host: '127.0.0.1', port: 5173 },
   preview: { host: '127.0.0.1', port: 4173 },
 });
