@@ -333,10 +333,21 @@ impossible" and "the game has a ceiling" cannot both be had from this mechanism.
 0.14 is the compromise: a third fewer walls than shipped before, still killable.
 It is not zero, and zero needs the generation-time route check PHASE3 §2 owes —
 verify each overreach gap as it is built and demote it to an ordinary gap when no
-route exists. Nothing here explains why roughly half of overreach gaps have no
-one-body route: it is independent of the rise (identical at every band tried),
-independent of the audit's sweep resolution (identical at 1 deg / 2 u), and
-untested for two-body routes and for wall launches off a corpse's side.
+route exists. **And the WALL number itself should be treated as suspect.** It sits at
+50/50 against BRIDGED and does not move for any physical parameter: not the rise
+(identical across 1.06x, 1.40x, 1.50x and 1.60x of full lift), not the rise
+spread, not the sweep resolution (identical at 1 deg / 2 u against 3 deg / 6 u).
+A measurement that ignores the physics it claims to measure is more likely
+describing the instrument than the world — and this audit has already invented
+two findings that way, once by deleting every ledge in the world and once by
+discarding the only usable body placements. Tuning the game against it was
+stopped for that reason rather than continued.
+
+What is actually known: a player hit a wall twice, so walls are real at SOME
+rate; ordinary gaps are provably fine at 964 of 964; and the rate knob does move
+the player-facing risk. `overreachRate` is 0.14 on that basis and not on the
+strength of the percentage. Untested: two-body routes, and wall launches off a
+corpse's side — which the game supports and no audit here has ever exercised.
 
 ### The cost, stated plainly
 
