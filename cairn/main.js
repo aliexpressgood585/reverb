@@ -58,6 +58,7 @@ const ui = {
   banner: 0,
   recordCrossed: false,
   bestAtRunStart: 0,
+  monument: false,
 };
 
 let dpr = 1;
@@ -73,6 +74,7 @@ const el = {
   best: document.getElementById('best'),
   debug: document.getElementById('debug'),
   mute: document.getElementById('mute'),
+  monshare: document.getElementById('monshare'),
 };
 
 function resize() {
@@ -188,7 +190,48 @@ function toast(msg) {
 
 // ------------------------------------------------------------------- input
 
-input.onTap = () => { if (!ui.started) begin(); };
+/**
+ * MONUMENT VIEW.
+ *
+ * Two fingers pull the camera all the way back to the whole lifetime tower —
+ * every body you have left, from the base. No HUD, no numbers, nothing to read.
+ * It is the emotional payoff of the corpse mechanic and it is the image that
+ * explains this game in three seconds without a word, which is why the share
+ * lives here.
+ *
+ * Only from the ground: opening it mid-flight would mean watching yourself die
+ * from orbit.
+ */
+function monument(on) {
+  if (on && ui.started && !sim.body.grounded) return;
+  if (on === ui.monument) return;
+  ui.monument = on;
+  input.locked = on;
+  camera.monTarget = on ? 1 : 0;
+  camera.monTop = Math.max(sim.best, sim.runBest, sim.body.y, 60);
+  document.body.className = on ? 'monument' : '';
+  clearTimeout(monShareTimer);
+  if (on) {
+    monShareTimer = setTimeout(() => { el.monshare.className = 'on'; },
+                               FEEL.monument.shareDelayMs);
+  } else {
+    el.monshare.className = '';
+  }
+}
+let monShareTimer = 0;
+
+input.onMonument = () => monument(!ui.monument);
+input.onTap = () => {
+  if (ui.monument) { monument(false); return; }
+  if (!ui.started) begin();
+};
+
+el.monshare.addEventListener('pointerdown', async (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const how = await Store.share(sim);
+  if (how !== 'shared') toast(how === 'copied' ? 'COPIED' : 'SAVED');
+});
 input.onChargeStart = () => { audio.charge(); buzz(8); };
 input.onRelease = (p) => { audio.release(p); buzz(14); };
 input.onLaunch = (vx, vy) => {
@@ -330,6 +373,7 @@ function frame(now) {
   // post chain grades it with everything else.
   const h = Math.max(0, Math.round(ui.started ? b.y : 0));
   if (h !== lastShown) { lastShown = h; el.small.textContent = ui.started ? `${h}m` : ''; }
+  if (ui.monument) camera.monTop = Math.max(sim.best, sim.runBest, sim.body.y, 60);
 
   if (debugOn) drawDebug(real);
 }
@@ -422,7 +466,7 @@ try {
 // The harness drives the real loop, never a copy of it.
 window.CAIRN = {
   sim, input, camera, renderer, audio, post, FEEL, Store, predict,
-  begin, frame, update, ui,
+  begin, frame, update, ui, monument,
   step(n) { for (let i = 0; i < n; i++) sim.tick(0); },
   fire(vx, vy) { return sim.launch(vx, vy); },
 };

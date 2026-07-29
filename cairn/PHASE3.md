@@ -117,7 +117,28 @@ the identical climb.
 
 ---
 
-## 6 — Monument View
+## 6 — Monument View. DONE — `scripts/cairn-monument-check.mjs`
+
+Two fingers pull the camera back to the whole lifetime tower; a single touch
+returns. No HUD, and the parallax ridges, light shafts, dust and the enormous
+background height all fade out with the pull-back — every one of them is sized
+against the view span, so at full zoom they stop being atmosphere and become
+clutter drawn across the monument.
+
+Against the "done when": **220 corpses, whole tower on one screen, 2.1 ms/frame
+scene pass** (CPU only, software rasteriser, same caveat as acceptance test 4),
+and **the poster exports in 1.14 s**. That last one needed a change: drawing the
+poster costs 7 ms and encoding it was the entire wait. On the same 1080x1920
+image — PNG 2225 ms / 458 KB, WebP 1033 ms / 137 KB, JPEG 1406 ms / 240 KB. It
+ships WebP with a PNG fallback, because Safari only gained canvas WebP encoding
+in 17 and JPEG bands the dark gradients this game is made of.
+
+Still open: **the gesture is not discoverable.** Two fingers is the only input
+that cannot collide with aiming — a swipe down IS a launch downward in a
+direct-aim game — but nothing teaches it, and this game's rule is that nothing
+is taught with text. Unsolved, not overlooked.
+
+### The brief, as it stood
 
 Pinch or swipe-down to pull all the way back to the whole lifetime tower, every
 corpse, from the base. Slow, cinematic, no HUD.

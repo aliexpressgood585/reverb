@@ -43,6 +43,11 @@ export class Camera {
     this.shakeX = 0;
     this.shakeY = 0;
     this.t = 0;
+
+    // Monument view: 0 is playing, 1 is the whole lifetime tower on one screen.
+    this.mon = 0;
+    this.monTarget = 0;
+    this.monTop = 0;        // the summit to frame, world units
   }
 
   kick(force) {
@@ -83,6 +88,26 @@ export class Camera {
     const s = this.shake;
     this.shakeX = (noise1(this.t * 21.7) - 0.5) * 2 * s;
     this.shakeY = (noise1(this.t * 18.3 + 40) - 0.5) * 2 * s;
+
+    // MONUMENT VIEW.
+    //
+    // Everything above is the playing camera. This blends it toward a single
+    // frame holding the entire tower — every body, from the base — and takes
+    // the shake and the impact roll out on the way, because the point of the
+    // shot is that it is still. It is applied here rather than in main.js so
+    // there is one place that decides where the camera is.
+    const M = FEEL.monument;
+    this.mon += (this.monTarget - this.mon) * Math.min(1, dt * M.ease);
+    if (this.mon < 0.0008) { this.mon = this.monTarget < 0.5 ? 0 : this.mon; return; }
+
+    const t = this.mon * this.mon * (3 - 2 * this.mon);       // smoothstep
+    const span = Math.max(this.monTop * M.pad, M.minSpan);
+    this.viewH = lerp(this.viewH, span, t);
+    this.x = lerp(this.x, COLUMN * 0.5, t);
+    this.y = lerp(this.y, span * M.centre, t);
+    this.rot *= 1 - t;
+    this.shakeX *= 1 - t;
+    this.shakeY *= 1 - t;
   }
 }
 
@@ -250,10 +275,24 @@ export class Renderer {
     this._setup(cam);
 
     this._background(ctx, B, cam);
-    this._bands(ctx, B, cam);
-    if (ui.started) this._bigNumber(ctx, B, Math.max(0, sim.body.ry ?? sim.body.y));
-    if (!reduced) this._shafts(ctx, B, cam);
-    this._dust(ctx, B, cam, dt);
+
+    // MONUMENT VIEW IS A PORTRAIT, NOT A PLACE.
+    //
+    // Parallax ridges, light shafts, drifting dust and the enormous background
+    // height all exist to give the PLAYING camera depth, and all of them are
+    // sized against the view span — so at full pull-back they stop being
+    // atmosphere and become clutter drawn straight across the monument. They
+    // fade out with the pull-back rather than cutting, so the move still reads
+    // as one gesture.
+    const depth = 1 - (cam.mon || 0);
+    if (depth > 0.01) {
+      ctx.globalAlpha = depth;
+      this._bands(ctx, B, cam);
+      if (ui.started) this._bigNumber(ctx, B, Math.max(0, sim.body.ry ?? sim.body.y));
+      if (!reduced) this._shafts(ctx, B, cam);
+      this._dust(ctx, B, cam, dt);
+      ctx.globalAlpha = 1;
+    }
 
     this._threads(ctx, B, sim);
     this._solids(ctx, B, sim, cam);

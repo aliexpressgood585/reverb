@@ -211,6 +211,22 @@ export const FEEL = {
     deepScale: 1,         // ageing rate down there, 1 = no slowdown
   },
 
+  // -------------------------------------------------------------- monument
+  // MONUMENT VIEW — pull all the way back to the whole lifetime tower.
+  //
+  // The camera framing is derived, not guessed: the renderer puts world y at
+  // `h * (0.5 - camera.playerOffsetY) - y * scale`, so to land the base near the
+  // bottom of the glass and the summit near the top, the view span has to be the
+  // tower's height times `pad` and the camera has to sit at `centre` of that
+  // span. Change `playerOffsetY` and these two follow it.
+  monument: {
+    ease: 2.4,            // how fast the pull-back converges, per second
+    pad: 1.24,            // view span as a multiple of the tower's top
+    centre: 0.245,        // camera height as a fraction of the span
+    minSpan: 260,         // never pull back past this on a short tower
+    shareDelayMs: 900,    // the pull-back finishes before anything is offered
+  },
+
   // ------------------------------------------------------------------- misc
   bestLineFadeU: 90,      // how near the best-height marker must be to show
   deathToPlayMs: 900,     // budget for the death → next attempt transition

@@ -54,6 +54,12 @@ export class Input {
     this.onChargeStart = null;
     this.onRelease = null;
     this.onTap = null;
+    this.onMonument = null;
+
+    // While the monument is up there is nothing to aim at — the player is not
+    // on screen at that scale — so the aim path is closed and the next touch
+    // means "put me back".
+    this.locked = false;
 
     this._snapTick = 0;
     this._scratch = [];
@@ -75,7 +81,24 @@ export class Input {
 
   _down(e) {
     e.preventDefault();
-    if (this.active) return;
+    // A SECOND FINGER IS NOT A SECOND AIM.
+    //
+    // Aiming is one thumb and always has been, so a second pointer is free to
+    // mean something else, and it cannot collide with a drag the way a
+    // swipe-down would — a swipe down IS a launch downward in a direct-aim
+    // game. Two fingers pulls the camera back to the whole tower.
+    if (this.active) {
+      this.abort();
+      if (this.onMonument) this.onMonument();
+      return;
+    }
+    // Locked means the monument is up. There is nothing to aim at from orbit,
+    // so the touch is not swallowed — it IS the gesture that puts you back, and
+    // it fires on DOWN like everything else in this file.
+    if (this.locked) {
+      if (this.onTap) this.onTap();
+      return;
+    }
     this.active = true;
     this.pointerId = e.pointerId;
     this.sx = this.cx = e.clientX;
@@ -87,6 +110,7 @@ export class Input {
   }
 
   _move(e) {
+    if (this.locked) return;
     if (!this.active || e.pointerId !== this.pointerId) return;
     e.preventDefault();
     this.cx = e.clientX;

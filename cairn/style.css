@@ -218,3 +218,37 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   #card .go { animation: none; opacity: 0.6; }
 }
+
+/* ------------------------------------------------------------- monument */
+
+/*
+ * Monument view is the whole lifetime tower on one screen and nothing else.
+ * Every reading surface goes away — the height, the record strip, the mute
+ * toggle — because the image is the point and a number on top of it is an
+ * apology for the image.
+ */
+body.monument #height,
+body.monument #best,
+body.monument #mute,
+body.monument #toast { opacity: 0; pointer-events: none; }
+
+#monshare {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 26px);
+  appearance: none;
+  background: none;
+  border: 1px solid rgba(201, 154, 74, 0.30);
+  color: rgba(201, 154, 74, 0.85);
+  font: 300 10px/1 var(--mono);
+  letter-spacing: 0.30em;
+  padding: 12px 20px;
+  z-index: 6;
+  touch-action: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Offered only once the pull-back has landed, never during it. */
+#monshare.on { opacity: 1; pointer-events: auto; }

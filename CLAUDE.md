@@ -191,6 +191,8 @@ node scripts/cairn-precision.mjs
                                # CAIRN: arc fidelity + aim tolerance, ~2 s, no browser
 node scripts/cairn-ghost-check.mjs
                                # CAIRN: the death preview is drawn, and at the apex
+node scripts/cairn-monument-check.mjs
+                               # CAIRN: monument view, framing, budget, poster
 node scripts/smoke.mjs         # REVERB: state machine + 5 levels
 node scripts/nav-check.mjs     # REVERB: navigation, <1s, no GPU
 ```
@@ -229,6 +231,16 @@ a share of gaps are placed **beyond the physical reach envelope on purpose**:
 you cannot cross them, you die at the apex, and your corpse is the step. A third
 of an expert bot's deaths are now deliberate throws into a gap it knew it could
 not make, against 1.8% of a novice's.
+
+**Monument View** (PHASE3 §6, done): two fingers pull all the way back to the
+whole lifetime tower, one touch returns. Two fingers because it is the only
+gesture that cannot collide with aiming — a swipe down IS a launch downward
+here. The atmosphere layers (bands, shafts, dust, big number) fade out with the
+pull-back; they are sized against the view span and become clutter at full zoom.
+The share poster encodes **WebP with a PNG fallback** — encoding was the entire
+2 s wait, and WebP halves it at a third of the bytes without banding the
+gradients. `FEEL.monument` holds the framing, and it is derived from
+`camera.playerOffsetY` rather than eyeballed.
 
 **When a launch cannot land, the game draws the body you would leave** at the
 apex, exact to 0.000 u against the corpse `_die` will create. Some gaps in this
