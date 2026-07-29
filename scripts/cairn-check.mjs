@@ -17,6 +17,7 @@
  *   8  the tower survives a hard reload
  *   9  no scroll, zoom, selection or pull-to-refresh is possible
  *  10  the controls are discoverable with zero text
+ *  11  the aim points where you drag — direct, never a slingshot
  *
  * Three and four are the ones that would otherwise be assumed rather than
  * known, and both have already failed once during development.
@@ -371,8 +372,9 @@ const page = await newPage();
       const at = (t, x, y) => v.dispatchEvent(new PointerEvent(t, {
         pointerId: 7, clientX: x, clientY: y, bubbles: true, cancelable: true, pointerType: 'touch',
       }));
-      at('pointerdown', 300, 720);
-      at('pointermove', 210, 800);
+      // Direct aim: drag UP and to the right to launch up and to the right.
+      at('pointerdown', 180, 700);
+      at('pointermove', 250, 560);
       input.update(1 / 60, innerHeight);
       const snap = { aiming: input.aiming, arc: input.arc.length >> 1, slowed: input.timeScale < 1 };
       at('pointerup', 210, 800);
@@ -392,6 +394,39 @@ const page = await newPage();
         `aiming=${drag.aiming} arc=${drag.arc} slowed=${drag.slowed} launched=${flew}`);
 }
 
+// ── 11. the aim points where you drag ──────────────────────────────────────
+//
+// Direct aim, pinned. This game shipped as a slingshot once and it read as the
+// controls fighting the player; a silent flip back would be invisible to every
+// other test here, because every one of them would still pass.
+{
+  const r = await page.evaluate(() => {
+    const { sim, input } = window.CAIRN;
+    sim.reset(true); sim.phase = 1;
+    const v = document.getElementById('view');
+    const at = (t, x, y) => v.dispatchEvent(new PointerEvent(t, {
+      pointerId: 11, clientX: x, clientY: y, bubbles: true, cancelable: true, pointerType: 'touch',
+    }));
+    const probe = (dx, dy) => {
+      at('pointerdown', 200, 600);
+      at('pointermove', 200 + dx, 600 + dy);
+      input.update(1 / 60, 844);
+      const out = { vx: input.vx, vy: input.vy };
+      at('pointerup', 200 + dx, 600 + dy);
+      return out;
+    };
+    return {
+      up: probe(0, -140),          // drag toward the top of the screen
+      down: probe(0, 140),
+      right: probe(140, -40),
+      left: probe(-140, -40),
+    };
+  });
+  const ok = r.up.vy > 0 && r.down.vy < 0 && r.right.vx > 0 && r.left.vx < 0;
+  ok ? pass(11, `drag up launches up (vy ${r.up.vy.toFixed(0)}), down launches down (vy ${r.down.vy.toFixed(0)}), left/right follow the thumb`)
+    : fail(11, `aim is inverted somewhere: up.vy=${r.up.vy.toFixed(1)} down.vy=${r.down.vy.toFixed(1)} right.vx=${r.right.vx.toFixed(1)} left.vx=${r.left.vx.toFixed(1)}`);
+}
+
 await browser.close();
 
 console.log('');
@@ -400,5 +435,5 @@ if (fails.length) {
   for (const f of [...new Set(fails)]) console.log(' -', f);
   process.exit(1);
 }
-console.log('all ten acceptance tests pass');
+console.log('all acceptance tests pass');
 process.exit(0);

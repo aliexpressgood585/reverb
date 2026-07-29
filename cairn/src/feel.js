@@ -47,10 +47,15 @@ export const FEEL = {
   maxFallSpeed: 300,
 
   // ---------------------------------------------------------------- launch
+  // Aiming is DIRECT, not a slingshot: the drag vector is the launch vector.
+  // Drag up-right, fly up-right. See input.js for why the slingshot lost.
   launch: {
     minSpeed: 45,
     maxSpeed: 130,
-    deadZonePx: 8,
+    // A resting thumb drifts. At 8 px every micro-movement fired a launch —
+    // reported as "it jumps on every step". 14 px is still well inside a
+    // deliberate flick and comfortably outside a shaky hold.
+    deadZonePx: 14,
     // Past this fraction of screen height the pull stops adding power and
     // starts refining angle only. This is the precision mechanic: park your
     // thumb far from the character and every degree costs you many pixels.

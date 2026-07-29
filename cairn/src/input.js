@@ -137,10 +137,21 @@ export class Input {
 
     if (!this.aiming) return;
 
-    // Pull away from the direction of travel, which is what every thumb
-    // already expects from a slingshot.
-    const dx = this.sx - this.cx;
-    const dy = this.cy - this.sy;
+    // DIRECT aim: the line you draw is the line you fly. Drag up and you go up.
+    //
+    // This was a slingshot — pull down to launch up — on the theory that every
+    // thumb already knows Angry Birds. Playtesting killed it in one sentence:
+    // "pressing downward makes it jump, I want dragging upward to jump". A
+    // slingshot is legible when you are aiming an object away from yourself at
+    // a target on screen. Here you ARE the object, the camera is locked to you,
+    // and inverting the one thing the player is doing to themselves reads as
+    // the controls fighting them rather than as a mechanic.
+    //
+    // Direct also makes the aim ray honest: it starts at the body and points
+    // exactly where the body is about to go, so the line, the drag and the
+    // flight are one straight thing instead of three related ones.
+    const dx = this.cx - this.sx;
+    const dy = this.sy - this.cy;
     const len = Math.hypot(dx, dy);
     if (len < 1e-4) return;
 
