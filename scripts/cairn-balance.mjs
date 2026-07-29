@@ -45,7 +45,8 @@
  * feel.js by hand and get re-measured from the file.
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { FEEL, COLUMN } from '../cairn/src/feel.js';
 import { Sim, PHASE, solidHalfWidth, predict } from '../cairn/src/sim.js';
 
@@ -54,7 +55,7 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 // --------------------------------------------------------------------- skill
 
-const SKILLS = {
+export const SKILLS = {
   novice: {
     // A first-session player. Roughly a thumb's width of angular slop at arm's
     // length and a power estimate that is right to about one part in eight.
@@ -86,7 +87,7 @@ const SKILLS = {
 // ----------------------------------------------------------------- utilities
 
 /** Deterministic float rng — mulberry32, independent of the world's xorshift. */
-function rng32(seed) {
+export function rng32(seed) {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -98,7 +99,7 @@ function rng32(seed) {
 }
 
 /** Box-Muller, one value per call, cached pair. */
-function gaussian(rnd) {
+export function gaussian(rnd) {
   let u = 0, v = 0;
   while (u === 0) u = rnd();
   while (v === 0) v = rnd();
@@ -130,7 +131,7 @@ const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
  * Exactness is not the point: every candidate is verified with `predict()`,
  * which IS the physics, and the best verified one is the one that flies.
  */
-function solve(dx, dy, margin) {
+export function solve(dx, dy, margin) {
   const peak = Math.max(dy + margin, 0.5);
   const vy = Math.sqrt(2 * FEEL.gravityRise * peak);
   const tUp = vy / FEEL.gravityRise;
@@ -140,7 +141,7 @@ function solve(dx, dy, margin) {
 }
 
 /** Fold a launch back into what a thumb can actually produce. */
-function legal(vx, vy) {
+export function legal(vx, vy) {
   const L = FEEL.launch;
   let sp = Math.hypot(vx, vy);
   if (sp < 1e-6) return { vx: 0, vy: L.minSpeed };
@@ -153,7 +154,7 @@ function legal(vx, vy) {
  * player gets this help on every launch; a bot that did not would measure a
  * harder game than the one that ships.
  */
-function assist(sim, vx, vy, scratch) {
+export function assist(sim, vx, vy, scratch) {
   const L = FEEL.launch;
   if (L.snapWindowDeg <= 0) return { vx, vy };
   const speed = Math.hypot(vx, vy);
@@ -182,7 +183,7 @@ function assist(sim, vx, vy, scratch) {
 const LIFT = (FEEL.launch.maxSpeed ** 2) / (2 * FEEL.gravityRise);
 
 /** Landable surfaces above the feet, nearest first. */
-function candidates(sim, out) {
+export function candidates(sim, out) {
   const b = sim.body;
   out.length = 0;
   const near = sim.world.near(b.y - 2, b.y + LIFT * 1.6);
@@ -202,7 +203,7 @@ function candidates(sim, out) {
  * Choose the launch. Returns { vx, vy, aimX } — `aimX` is where the plan
  * expects to come down, which is what a held thumb steers toward.
  */
-function plan(sim, S, cands, scratch) {
+export function plan(sim, S, cands, scratch) {
   const b = sim.body;
   let best = null;
   const n = Math.min(S.lookahead, cands.length);
@@ -269,7 +270,7 @@ const MAX_AIR_TICKS = 2400;
  * Returns the apex height of the death — where the body froze, which is the
  * height the corpse is left at and the honest answer to "how high did I get".
  */
-function climb(sim, S, rnd, scratch, cands, trace) {
+export function climb(sim, S, rnd, scratch, cands, trace) {
   let noGain = 0;
   let lastY = sim.body.y;
   // Was the fatal launch one the bot knew could not land? That separates "the
@@ -519,6 +520,11 @@ function line(o) {
 
 // ---------------------------------------------------------------------- main
 
+// Importable: scripts/cairn-precision.mjs reuses this bot to reach real game
+// states. The sweep only runs when this file is the process entry point.
+const isMain = process.argv[1]
+  && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => {
     const [k, v] = a.replace(/^--/, '').split('=');
@@ -544,7 +550,7 @@ const which = args.all ? ['novice', 'average', 'expert']
   : [args.skill ?? 'average'];
 
 const results = [];
-for (const s of which) {
+for (const s of isMain ? which : []) {
   const t0 = Date.now();
   const R = run(s, seeds, attempts, seed0, +(args.trace ?? 0));
   const o = report(R);
@@ -553,7 +559,7 @@ for (const s of which) {
   console.log(line(o) + `\n  ${o.wallSeconds}s`);
 }
 
-if (args.out) {
+if (isMain && args.out) {
   mkdirSync(args.out.replace(/\/[^/]*$/, ''), { recursive: true });
   writeFileSync(args.out, JSON.stringify(results, null, 1));
   console.log(`\nwrote ${args.out}`);

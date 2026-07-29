@@ -117,6 +117,24 @@ passes without touching the thing it claims to check.
 
 ---
 
+## The arc lied off a wall
+
+Recorded here with the other tests that passed while missing something, because
+it is the same shape as both of them.
+
+`_fire` added the wall kick to a launch off a cling — `wall.kickX * 0.35`,
+16 u/s sideways — and `predict()`, which draws the arc the player aims with,
+did not. Measured: 2,400 launches from the ground agreed exactly, 59 of 400 from
+a wall cling did not. Fixed by giving the kick one source, `Sim.launchVelocity`,
+called by both.
+
+**Test 2 asserts exactly this property and passed the whole time**, because all
+97 of its launches leave from the ground. It is the third instance in this file
+of a test that cannot fail in a state it never enters. See `BALANCE.md` for the
+numbers and `scripts/cairn-precision.mjs` for the harness.
+
+---
+
 ## Known-honest gaps
 
 These are open, not done, and not claimed:
@@ -134,6 +152,10 @@ These are open, not done, and not claimed:
   argument, not a measurement of an alternative.
 - **No human has played the retuned tower.** Three bots with gaussian error are
   not three people, and the novice model has no learning in it.
+- **Aim tolerance is unmeasured for wall launches.** The precision survey's
+  4,186 sampled jumps all leave from the ground, because that is what the bot
+  does. The arc is proven honest from a cling; how much slop a cling launch
+  forgives is not known.
 - **Most of Phase 2 is not built.** Chunked streaming generation, the
   reachability solver, the four new biome verbs, momentum, close calls, the
   first-60-seconds choreography, Daily Climb, ghosts, Monument View, milestones

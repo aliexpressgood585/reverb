@@ -187,6 +187,8 @@ shelf you see is the hitbox. That is how the rule is taught without text.
 node scripts/cairn-check.mjs   # CAIRN: 14 acceptance tests, ~4 min
 node scripts/cairn-balance.mjs --all --seeds=200 --attempts=50
                                # CAIRN: 30,000 headless climbs, ~2.5 min, no browser
+node scripts/cairn-precision.mjs
+                               # CAIRN: arc fidelity + aim tolerance, ~2 s, no browser
 node scripts/smoke.mjs         # REVERB: state machine + 5 levels
 node scripts/nav-check.mjs     # REVERB: navigation, <1s, no GPU
 ```
@@ -225,6 +227,14 @@ a share of gaps are placed **beyond the physical reach envelope on purpose**:
 you cannot cross them, you die at the apex, and your corpse is the step. A third
 of an expert bot's deaths are now deliberate throws into a gap it knew it could
 not make, against 1.8% of a novice's.
+
+**Jump accuracy is measured, not assumed** (`cairn/BALANCE.md`). The drawn arc
+matches the flight exactly — including off a wall cling, which it did **not**
+until `Sim.launchVelocity()` gave the wall kick one source; `_fire` applied it
+and `predict` did not, so the arc was 16 u/s wrong on every cling launch.
+Acceptance test 2 asserts that property and passed throughout, because all 97 of
+its launches leave from the ground. Aim resolution is nowhere near the limiting
+factor: a jump forgives ~20° and one pixel of thumb is 0.31°.
 
 **Known-honest problem:** every generation number now lives in
 `cairn/src/feel.js` under `tower`, and several of them (`diffScale`,

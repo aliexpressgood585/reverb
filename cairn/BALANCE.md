@@ -253,6 +253,104 @@ measurement made by a different bot in a real browser.
 
 ---
 
+---
+
+## Precision — is a jump aimable?
+
+Narrowing the ledges made this a fairness question rather than a curiosity, so
+it is measured too. `scripts/cairn-precision.mjs`, no browser, about two
+seconds.
+
+```
+node scripts/cairn-precision.mjs --seeds=120 --attempts=30 --every=2
+```
+
+### The arc used to lie when you launched off a wall
+
+`_fire` added the wall kick — `wall.kickX * 0.35`, 16 u/s sideways — and
+`predict()` did not know about it. So the arc the game draws while you aim,
+which is the only thing you have to aim with, was wrong by 16 u/s of horizontal
+velocity **every time you launched from a cling**.
+
+| | launches | disagreements |
+|---|---|---|
+| from the ground | 2,400 | **0** |
+| from a wall cling, before | 400 | **59** |
+| from a wall cling, after | 400 | **0** |
+
+Fixed by giving the kick one source: `Sim.launchVelocity()`, which `_fire` uses
+to move the body and `predict` uses to draw the arc. Worst landing error is now
+0.000 u in both cases.
+
+Acceptance test 2 asserts exactly this property and passed throughout, because
+its 97 launches all leave from the ground. A test that never enters the state
+cannot fail in it — the same failure mode this file's own audit records twice
+already.
+
+### How wrong can a launch be?
+
+4,186 jumps sampled from real towers on the expert line. Three thresholds,
+because they are three different questions:
+
+| | p1 | p5 | median | p95 |
+|---|---|---|---|---|
+| angle before you **die** | 10.42° | 15.16° | 23.96° | 34.31° |
+| angle before you **stop climbing** | 7.72° | 14.33° | 21.83° | 30.03° |
+| angle before you **miss the ledge aimed at** | 4.67° | 10.71° | 21.34° | 29.74° |
+
+Survival overstates the case — landing back on the ledge you left is not dying —
+so the middle row is the honest one.
+
+### Against what a thumb can express
+
+The aim ray **is** the drag vector, so angular resolution is pure geometry: one
+pixel at a drag radius of `r` is `(180/π)/r` degrees. On a 390×844 phone power
+saturates at 186 px of pull, and past that the drag refines angle only, which is
+the precision mechanic in `input.js` stated as a number:
+
+| drag radius | one pixel |
+|---|---|
+| 186 px (power saturated) | 0.309° |
+| 279 px | 0.206° |
+| 371 px | 0.154° |
+
+| power | one pixel of pull |
+|---|---|
+| 25% | 0.771 u/s (0.59% of max) |
+| 60% | 0.363 u/s (0.28% of max) |
+| 90% | 0.069 u/s (0.05% of max) |
+
+**Verdict: aim resolution is never the limiting factor.**
+
+| window narrower than | survival | still climbing |
+|---|---|---|
+| 1 px (0.31°) | 0.00% | 0.00% |
+| 3 px (0.93°) | 0.05% | 0.07% |
+| 10 px (3.09°) | 0.14% | 0.29% |
+
+Not one jump in 4,186 demanded finer aim than a single pixel of thumb travel,
+and 99.7% of them tolerate at least ten pixels. The window does tighten with
+altitude, and does not tighten anywhere near far enough to matter:
+
+```
+      0-200 m   n=1768   median climb window 24.26°   p5 18.25°   at max power  8%
+    200-400 m   n=1277   median 20.34°   p5 15.07°   at max power 16%
+    400-600 m   n= 703   median 19.02°   p5 11.20°   at max power 18%
+    600-800 m   n= 298   median 17.84°   p5 13.19°   at max power 17%
+   800-1000 m   n= 102   median 18.85°   p5 10.18°   at max power 25%
+  1000-1200 m   n=  36   median 18.55°   p5 11.36°   at max power 28%
+```
+
+The conclusion is worth stating plainly because it cuts against the design's own
+marketing: **CAIRN's difficulty is not precision.** A jump forgives roughly
+twenty degrees, and `landing.forgiveness` plus half a body is 5.1 u of that
+before the ledge contributes anything. The thing that kills you is a gap that
+cannot be crossed at all, which is why `overreachRate` moves the curve and
+`snapMaxDeg` does not. The elaborate aiming machinery in `input.js` is buying
+comfort, not challenge.
+
+---
+
 ## What this does not tell you
 
 Open, not done, not claimed:
@@ -272,3 +370,6 @@ Open, not done, not claimed:
   rather than a decision, and this file cannot tell the difference.
 - **Only one `seed0`.** 200 world seeds is a lot of towers but they all descend
   from `0x1a2b3c`. A second root has not been run.
+- **The precision survey never launches from a wall.** Section A proves the arc
+  is honest from a cling; section B's 4,186 sampled jumps all leave from the
+  ground, because that is what the bot does. Wall-launch tolerance is unmeasured.
