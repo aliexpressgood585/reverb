@@ -242,16 +242,25 @@ export class World {
     // the safe limit is only 70% of a gap the body can actually clear.
     const hard = (FEEL.launch.maxSpeed ** 2) / g;
     const reach = hard * T.reachSafety;
-    // What the body brings to a landing before the ledge contributes anything.
-    const slack = FEEL.body.w * 0.5 + FEEL.landing.forgiveness;
+    // Straight up, ignoring the apex hang, which only ever adds. A ledge above
+    // this cannot be reached however wide the column is — which is the point.
+    const lift = (FEEL.launch.maxSpeed ** 2) / (2 * g);
 
     while (this.builtTo < upTo) {
       const h = this.builtTo;
       // No ceiling. `clamp(h / 900, 0, 1)` had one and the tower above it was a
       // flat, survivable constant; this approaches 1 and never reaches it.
       const diff = 1 - Math.exp(-Math.max(0, h) / T.diffScale);
-      const rise = T.minRise + this.rng() * (T.maxRise - T.minRise)
-        * (T.riseEase + (1 - T.riseEase) * diff);
+
+      // THE GAPS YOU CANNOT CROSS — decided first, because a gap that is too
+      // high changes every number below it.
+      const over = Math.max(0, diff - T.overreachFrom) / Math.max(1e-6, 1 - T.overreachFrom);
+      const unreachable = this.rng() < over * T.overreachRate;
+
+      const rise = unreachable
+        ? lift * (T.overreachLift + this.rng() * T.overreachLiftSpan)
+        : T.minRise + this.rng() * (T.maxRise - T.minRise)
+          * (T.riseEase + (1 - T.riseEase) * diff);
 
       const room = reach - rise;
       const maxDx = room > 0 ? Math.sqrt(Math.max(0, room * room - rise * rise)) : 0;
@@ -261,20 +270,11 @@ export class World {
       const width = T.maxWidth - (T.maxWidth - T.minWidth) * diff
         * (T.widthEase + (1 - T.widthEase) * this.rng());
 
-      let want = usable * span * (1 - T.gapJitter + this.rng() * T.gapJitter);
-
-      // An impossible gap has to be measured against the physics, not against
-      // the safety margin. Standing on the near ledge's far edge and landing on
-      // the far ledge's near edge with every unit of forgiveness the game gives
-      // away, this is the shortest centre-to-centre gap that still cannot be
-      // crossed — and then a little further, because the apex hang buys real
-      // range the ideal envelope does not know about.
-      const hardRoom = hard - rise;
-      const hardDx = hardRoom > 0 ? Math.sqrt(Math.max(0, hardRoom * hardRoom - rise * rise)) : 0;
-      const over = Math.max(0, diff - T.overreachFrom) / Math.max(1e-6, 1 - T.overreachFrom);
-      if (this.rng() < over * T.overreachRate) {
-        want = (hardDx + this.lastHw + width * 0.5 + slack) * (1 + T.overreachAmount);
-      }
+      // An unreachable ledge stays nearly overhead, so the body left below it is
+      // a step toward it rather than a body stranded out in a gap.
+      const want = unreachable
+        ? usable * T.overreachDrift * this.rng()
+        : usable * span * (1 - T.gapJitter + this.rng() * T.gapJitter);
 
       const dir = this.rng() < 0.5 ? -1 : 1;
       let nx = this.lastX + want * dir;

@@ -255,6 +255,78 @@ measurement made by a different bot in a real browser.
 
 ---
 
+## The route audit, and the bug it found in the mechanic
+
+`scripts/cairn-reach-check.mjs`, prompted by a real player at 481 m asking
+whether the tower above them was real. It asks the only question that matters
+about a tower with deliberately uncrossable gaps in it: **for every ledge, is
+there a way up — in one jump, or in one jump plus the body you leave failing
+it?** Three verdicts, all decided with the real physics:
+
+| | |
+|---|---|
+| DIRECT | one launch lands on the next ledge |
+| BRIDGED | no launch lands, but a corpse left at a reachable apex bridges it |
+| WALL | neither. Only the shifting roof re-rolling the terrain saves you |
+
+### What it found
+
+The overreach mechanic was barely working. Audited from 481 m: **2.21% bridged,
+2.95% wall** — against a knob set to make 27% of gaps unreachable at that
+height. Almost every "impossible" gap was in fact crossable.
+
+The cause: overreach pushed gaps sideways past the horizontal envelope, and **the
+column is only 100 u wide.** A gap long enough to be uncrossable does not fit in
+it, so `nx` clamped back inside the walls and the gap came out ordinary. The
+mechanic was being defeated by the level's own width. BALANCE.md's earlier claim
+that a third of an expert's deaths were deliberate throws was measured on the
+bot's *behaviour* — it throws whenever its own limited plan search finds nothing
+— not on the terrain being genuinely unbridgeable.
+
+### The fix: too high, not too far
+
+Height has no wall. A full-power launch straight up lifts about 34 u; a ledge
+above that cannot be reached however wide the column is. And unlike the sideways
+version it is **bridgeable by design**: throw slightly under full power, the apex
+lands lower, the corpse's surface stays inside reach, you land on yourself, and
+the rest is a short hop. *Throw yourself where you can follow* is the whole game
+in one sentence.
+
+| from 481 m | DIRECT | BRIDGED | WALL |
+|---|---|---|---|
+| horizontal overreach (shipped before) | 94.8% | 2.2% | 3.0% |
+| vertical, rate 0.35 | 69.8% | 14.5% | 15.8% |
+| **vertical, rate 0.22 (shipped)** | **78.9%** | **10.7%** | **10.4%** |
+
+A bridged gap is worth **40 m** of height, up from 17.
+
+### The cost, stated plainly
+
+**10.4% of gaps above 481 m have no route even with a body in them.** Over the
+~15 ledges between 481 m and 1081 m that is a dead end on most attempts. It only
+ever costs one attempt — the roof re-rolls everything above your best, death to
+playable is 900 ms — and it is invisible to the player, because a wall and a
+bridgeable gap look identical until you throw. Both read as "this needs bodies".
+
+It is still the honest weak point of the design: roughly half of all
+uncrossable gaps cannot be bridged with one corpse, and nothing here explains
+why. Two corpses were not tested.
+
+### Two bugs in the audit itself, both worth recording
+
+The first version cleaned up its test corpse with `regenerateAbove(-1e9)`, which
+keeps only corpses — it deleted every ledge in the world, so every gap after the
+first hard one scored as a dead end. It reported **23.89% walls that were its own
+doing.**
+
+The second sorted candidate body placements by closeness to the target, which
+puts the *highest* apexes first — exactly the ones whose corpse cannot be landed
+on, since a corpse's surface sits 3 u above the apex reached. Cutting that list
+short discarded the useful bodies. Both failures had the same shape: a measuring
+tool reporting the world as more hostile than it is.
+
+---
+
 ## Precision — is a jump aimable?
 
 Narrowing the ledges made this a fairness question rather than a curiosity, so

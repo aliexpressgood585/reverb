@@ -193,6 +193,8 @@ node scripts/cairn-ghost-check.mjs
                                # CAIRN: the death preview is drawn, and at the apex
 node scripts/cairn-monument-check.mjs
                                # CAIRN: monument view, framing, budget, poster
+node scripts/cairn-reach-check.mjs --from=481
+                               # CAIRN: is there a route up, with or without a body
 node scripts/smoke.mjs         # REVERB: state machine + 5 levels
 node scripts/nav-check.mjs     # REVERB: navigation, <1s, no GPU
 ```
@@ -231,6 +233,14 @@ a share of gaps are placed **beyond the physical reach envelope on purpose**:
 you cannot cross them, you die at the apex, and your corpse is the step. A third
 of an expert bot's deaths are now deliberate throws into a gap it knew it could
 not make, against 1.8% of a novice's.
+
+**Uncrossable gaps are TOO HIGH, not too far.** The first version pushed them
+sideways and the 100 u column clamped them back into ordinary gaps — the
+mechanic fired on 2.2% of gaps against a knob set for 27%. Height has no wall,
+and it is bridgeable by design: throw under full power so the apex is low enough
+that the corpse can be landed on. Audited from 481 m: 78.9% direct, 10.7%
+bridged, **10.4% with no route at all**, which is the honest cost and is
+recorded in BALANCE.md rather than smoothed over.
 
 **Monument View** (PHASE3 §6, done): two fingers pull all the way back to the
 whole lifetime tower, one touch returns. Two fingers because it is the only

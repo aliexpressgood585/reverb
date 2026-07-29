@@ -50,7 +50,18 @@ the file. — Done: 10,000 climbs per skill, 30,000 total, in `BALANCE.md`.
 
 ---
 
-## 2 — The reachability solver
+## 2 — The reachability solver. PARTLY DONE — `scripts/cairn-reach-check.mjs`
+
+The audit exists and found a real bug: overreach gaps were being clamped back
+inside the 100 u column and coming out crossable, so the corpse mechanic fired on
+2.2% of gaps against a knob set for 27%. Overreach is now vertical, which no
+column width can defeat. See BALANCE.md.
+
+Not done: the solver does not run inside generation and regenerate a bad chunk,
+and **10.4% of gaps above 481 m still have no route with one body.** Two-corpse
+routes are untested.
+
+### The brief, as it stood
 
 Generation currently keeps every ledge inside the projectile reach envelope
 (`dy + |(dx,dy)| ≤ v²/g`, scaled by `FEEL.tower.reachSafety`). That proves a gap

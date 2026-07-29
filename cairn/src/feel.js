@@ -174,15 +174,42 @@ export const FEEL = {
     // Every gap used to be crossable, which sounds kind and is actually the
     // reason the loop was empty: a player who never has to fail never has to
     // use the one mechanic the game is built on. Above `overreachFrom` a share
-    // of gaps are placed past the envelope on purpose. You cannot make them.
-    // You die at the apex, mid-gap, and the corpse you leave is the step.
+    // of gaps cannot be made. You die at the apex and the body is the step.
     //
-    // This is safe to do because the roof shifts: everything above your
-    // all-time best is re-rolled every attempt, so an unlucky gap is a bad
-    // hand and never a wall.
+    // THEY ARE TOO HIGH, NOT TOO FAR, and that took two attempts to get right.
+    //
+    // The first version pushed them sideways past the horizontal envelope. The
+    // column is only 100 u wide, so a gap long enough to be uncrossable does not
+    // fit in it: `nx` clamped back inside the walls and the gap came out
+    // crossable. Audited from 481 m, 27% of gaps were rolled as unreachable and
+    // 2% actually were. The mechanic was being defeated by the level's own
+    // width.
+    //
+    // Height has no such wall. A full-power launch straight up lifts the body
+    // `maxSpeed^2 / 2g` plus what the apex hang adds — about 34 u. A ledge above
+    // that cannot be reached however wide the column is.
+    //
+    // And it is bridgeable BY DESIGN, which the sideways version was not. Throw
+    // slightly under full power: the apex lands lower, so the corpse's surface
+    // (`peakY + corpseH/2`) stays inside reach, you land on yourself, and the
+    // rest of the climb is a short hop. "Throw yourself where you can follow" is
+    // a real thing to learn, and it is the whole game in one sentence.
     overreachFrom: 0.30,  // difficulty at which they start appearing
-    overreachRate: 0.35,  // their share of gaps at full difficulty
-    overreachAmount: 0.10, // how far past the envelope they sit
+    // 0.35 was tuned when overreach was horizontal and mostly failed to bite;
+    // vertical gaps genuinely cannot be crossed, so the same rate produced 14%
+    // dead ends. This is the knee of the trade, audited from 481 m: 10.7% of
+    // gaps need a body to bridge them, 10.4% have no route even with one, and
+    // the expert model still passes 600 m on only 3.3% of first attempts. Lower
+    // and the mechanic stops mattering; higher and the terrain does the killing.
+    overreachRate: 0.22,  // their share of gaps at full difficulty
+    // Rise as a multiple of the ideal full-power lift. The floor must clear what
+    // the apex hang actually buys (~1.05) or the gap is merely hard; the ceiling
+    // must stay close enough that a corpse left below it finishes the job.
+    overreachLift: 1.12,
+    overreachLiftSpan: 0.26,
+    // Overreach gaps stay nearly vertical so the body lands under the ledge it
+    // is meant to reach rather than out in a gap it cannot help with.
+    overreachDrift: 0.30,
 
     // A corpse is a narrower perch than rock. That is what makes it a worse
     // platform than a ledge and an enormously better one than nothing.
