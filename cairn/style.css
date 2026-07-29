@@ -72,6 +72,12 @@ html, body {
 #card {
   position: fixed;
   inset: 0;
+  /* The card is a SCRIM, not a wall. It covers the whole screen so the title
+     can sit over the live scene, which means without this it swallows every
+     touch and the game cannot be started at all — which is precisely what
+     shipped. Only its buttons take input; everything else falls through to the
+     canvas underneath. */
+  pointer-events: none;
   display: none;
   flex-direction: column;
   align-items: center;
@@ -112,6 +118,7 @@ html, body {
 #card .row { display: flex; gap: 12px; margin-top: 26px; }
 
 #card button {
+  pointer-events: auto;
   appearance: none;
   background: transparent;
   border: 1px solid rgba(220, 227, 232, 0.24);

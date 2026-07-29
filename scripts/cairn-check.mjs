@@ -332,30 +332,64 @@ const page = await newPage();
     : fail(9, `gesture lockdown incomplete: ${JSON.stringify(r)}`);
 }
 
-// ── 10. discoverable with zero text ────────────────────────────────────────
+// ── 10. discoverable with zero text, through the REAL touch pipeline ───────
+//
+// This test used to dispatch a PointerEvent directly at the canvas, which skips
+// hit-testing. It passed while the title card — a full-screen scrim with no
+// `pointer-events: none` — swallowed every genuine touch, so the shipped game
+// could not be started at all. Everything below now goes through
+// page.touchscreen, which hit-tests exactly like a thumb.
 {
-  // The claim is that a first touch teaches the control, so the test is: does
-  // dragging anywhere on screen — not on the character — immediately produce
-  // an aim, an exact predicted arc, and a landing reticle, with no text?
-  const r = await page.evaluate(async () => {
-    const { input, camera } = window.CAIRN;
-    const send = (type, x, y) => document.getElementById('view').dispatchEvent(
-      new PointerEvent(type, { pointerId: 1, clientX: x, clientY: y, bubbles: true, cancelable: true })
-    );
-    send('pointerdown', 300, 700);           // far from the player, deliberately
-    send('pointermove', 240, 760);
-    input.update(1 / 60, innerHeight);
-    const arcPts = input.arc.length >> 1;
-    const aiming = input.aiming;
-    const slowed = input.timeScale < 1;
-    send('pointerup', 240, 760);
-    const words = document.body.innerText.replace(/\s+/g, ' ').trim();
-    return { arcPts, aiming, slowed, words };
+  const p2 = await browser.newPage({ viewport: PHONE, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  p2.on('pageerror', (e) => fails.push('pageerror: ' + e.message));
+  await p2.goto(URL_, { waitUntil: 'load' });
+  await p2.waitForFunction(() => !!window.CAIRN);
+
+  // a) nothing over the canvas may eat a touch
+  const blocking = await p2.evaluate(() => {
+    const pts = [[195, 120], [195, 420], [195, 700], [60, 500], [330, 500]];
+    return pts.map(([x, y]) => {
+      const e = document.elementFromPoint(x, y);
+      if (!e) return 'null';
+      return getComputedStyle(e).pointerEvents === 'none' ? 'pass-through' : (e.id || e.tagName);
+    }).filter((k) => k !== 'pass-through' && k !== 'view');
   });
-  const noInstructions = !/DRAG|PULL|SWIPE|TAP TO JUMP|HOLD/i.test(r.words);
-  (r.aiming && r.arcPts > 4 && r.slowed && noInstructions)
-    ? pass(10, `a drag anywhere aims (${r.arcPts}-point exact arc, time slowed), with no instruction text`)
-    : fail(10, `discoverability: aiming=${r.aiming} arc=${r.arcPts} slowed=${r.slowed} text="${r.words.slice(0, 60)}"`);
+
+  // b) a real tap starts the game
+  await p2.touchscreen.tap(195, 500);
+  await delay(250);
+  const started = await p2.evaluate(() => window.CAIRN.ui.started && window.CAIRN.sim.phase === 1);
+
+  // c) a real drag aims, predicts an exact arc, and launches on release
+  await p2.evaluate(() => { window.CAIRN.sim.reset(true); window.CAIRN.sim.phase = 1; });
+  const before = await p2.evaluate(() => window.CAIRN.sim.body.y);
+  await p2.touchscreen.tap(300, 700);          // wake the touch pipeline
+  const drag = await p2.evaluate(async () => {
+    const { input } = window.CAIRN;
+    return new Promise((res) => {
+      const v = document.getElementById('view');
+      const at = (t, x, y) => v.dispatchEvent(new PointerEvent(t, {
+        pointerId: 7, clientX: x, clientY: y, bubbles: true, cancelable: true, pointerType: 'touch',
+      }));
+      at('pointerdown', 300, 720);
+      at('pointermove', 210, 800);
+      input.update(1 / 60, innerHeight);
+      const snap = { aiming: input.aiming, arc: input.arc.length >> 1, slowed: input.timeScale < 1 };
+      at('pointerup', 210, 800);
+      setTimeout(() => res(snap), 30);
+    });
+  });
+  await delay(200);
+  const flew = await p2.evaluate((y0) => window.CAIRN.sim.body.y !== y0 || !window.CAIRN.sim.body.grounded, before);
+
+  const words = await p2.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').trim());
+  const noInstructions = !/DRAG|PULL|SWIPE|TAP TO JUMP|HOLD/i.test(words);
+  await p2.close();
+
+  const ok = blocking.length === 0 && started && drag.aiming && drag.arc > 4 && drag.slowed && flew && noInstructions;
+  ok ? pass(10, `a real tap starts it, a real drag aims (${drag.arc}-point exact arc, time slowed) and launches, no instruction text`)
+    : fail(10, `real-input flow broken: blocking=${JSON.stringify(blocking)} started=${started} ` +
+        `aiming=${drag.aiming} arc=${drag.arc} slowed=${drag.slowed} launched=${flew}`);
 }
 
 await browser.close();

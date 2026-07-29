@@ -357,6 +357,10 @@ el.mute.addEventListener('pointerdown', (e) => {
 });
 el.mute.textContent = localStorage.getItem('cairn.mute') === '1' ? 'SOUND OFF' : 'SOUND ON';
 
+// A last-resort starter. The canvas listener is the real path, but a touch
+// anywhere on the document must never be able to do nothing at all.
+addEventListener('pointerdown', () => { if (!ui.started) begin(); }, { passive: true });
+
 // ---------------------------------------------------------------------- boot
 
 Store.load(sim);

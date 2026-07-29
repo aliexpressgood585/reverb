@@ -244,3 +244,40 @@ overlay: triple-tap the top-left corner for fps, frame time, entity counts and
 physics sub-steps.
 
 Also not measured: whether it is fun. That one needs a person.
+
+---
+
+## 15. The bug the tests could not see, and what changed because of it
+
+The first deploy of this build **could not be started at all.** Tapping did
+nothing, on any device.
+
+`#card` is a full-screen scrim — deliberately, so the title sits over the live
+scene rather than a flat picture. It had no `pointer-events: none`, so it
+swallowed every touch before the canvas ever saw one.
+
+Ten acceptance tests passed on it. Test 10 dispatched a `PointerEvent` straight
+at `#view`, and dispatching an event at an element **bypasses hit-testing
+entirely** — the overlay was never consulted. The test was asserting that the
+input handler worked, which it did, while the input could not physically reach
+it.
+
+Two things changed:
+
+- The scrim passes touches through; only its buttons take input. There is also
+  a document-level fallback starter, because a touch anywhere must never be
+  able to do nothing at all.
+- **Test 10 now drives `page.touchscreen`, which hit-tests like a thumb**, and
+  additionally asserts that nothing over the canvas at five sample points eats a
+  touch, that one real tap starts the game, and that a real drag produces an aim
+  and then actually moves the body. Synthetic dispatch is banned from that test.
+
+The general lesson, and it is not a small one: **a test that reaches past the
+browser's own machinery is testing your code, not your game.** Anything on the
+input path has to go through the real pipeline or it is not being tested.
+
+Fixed in the same pass: the service worker served navigations cache-first, which
+is the standard way to strand users on a dead deploy — a stale `index.html`
+points at content-hashed assets that no longer exist and the app never boots.
+Navigations are network-first now; hashed assets stay cache-first, where that
+strategy is actually safe.
