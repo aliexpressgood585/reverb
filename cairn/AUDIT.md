@@ -177,7 +177,22 @@ These are open, not done, and not claimed:
   4,186 sampled jumps all leave from the ground, because that is what the bot
   does. The arc is proven honest from a cling; how much slop a cling launch
   forgives is not known.
-- **Most of Phase 2 is not built.** Chunked streaming generation, the
+- **Much of Phase 2 is still not built.** Chunked streaming generation, the
   reachability solver, the four new biome verbs, momentum, close calls, the
-  first-60-seconds choreography, Daily Climb, ghosts, Monument View, milestones
-  and the instrumentation dashboard are all untouched.
+  first-60-seconds choreography, Daily Climb, ghosts, milestones and the
+  instrumentation dashboard are untouched. Balance (PHASE3 §1) and Monument View
+  (§6) are done and have their own harnesses.
+- **The reachability solver's specification is now wrong.** PHASE3 §2 says
+  "zero impossible or single-solution chunks across 10,000 seeds". A share of
+  gaps are now placed past the envelope deliberately, so that criterion fails by
+  design. What it has to prove instead is that every chunk has a route GIVEN AT
+  MOST N CORPSES. Today the shifting roof is the only thing standing between a
+  bad roll and a permanent wall, and that protection is argued in BALANCE.md, not
+  proven.
+- **Monument View's gesture is not discoverable.** Two fingers is the only input
+  that cannot collide with aiming, and nothing teaches it — in a game whose rule
+  is that nothing is taught with text. The poster behind it is the game's primary
+  share surface, so this is a growth problem, not a polish one.
+- **Persistence has no migration path and no corruption recovery**, and that got
+  worse: corpses are now placed deliberately, so a lost tower is lost decisions.
+  This is the single most severe open item.
