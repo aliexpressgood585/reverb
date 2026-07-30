@@ -93,6 +93,10 @@ function newSolid() {
   return {
     x: 0, y: 0, hw: 0, hh: 0,
     corpse: false, live: false,
+    // Was this ledge cut out of a flight rather than placed by the curve? Only
+    // an audit reads it, and an audit that has to guess which gaps are the hard
+    // ones is an audit that cannot prove they are all crossable.
+    hard: false,
     // corpse presentation state, carried here so the renderer needs no lookup
     order: 0, bornAt: 0, rot: 0, pose: 0, glow: 0,
   };
@@ -104,6 +108,11 @@ function newSolid() {
 // times per aiming frame — is O(ticks x corpses) and falls off 60 fps somewhere
 // around the fortieth death, which is precisely when the game gets good.
 const BUCKET = 32;
+
+// Half-height of a rock ledge. A ledge's LANDABLE SURFACE is `y + hh`, and the
+// hard-gap constructor has to place a surface at a height the physics reached,
+// so this needed a name rather than being written out twice.
+const LEDGE_HH = 2.4;
 
 export class World {
   constructor(seed = 0x1a2b3c) {
@@ -169,8 +178,9 @@ export class World {
 
   ledge(x, y, w) {
     const s = this._take();
-    s.x = x; s.y = y; s.hw = w * 0.5; s.hh = 2.4;
+    s.x = x; s.y = y; s.hw = w * 0.5; s.hh = LEDGE_HH;
     s.corpse = false;
+    s.hard = false;
     this._index(s);
     return s;
   }
@@ -268,6 +278,19 @@ export class World {
       // overreach gap near 92 m, but a curve is a number and this is a promise.
       const unreachable = h >= T.openingSpan && this.rng() < over * T.overreachRate;
 
+      // THE GAPS A BODY MAKES EASY. Rolled here, next to the mechanic it
+      // replaced, and never on the on-ramp.
+      //
+      // The roll is drawn UNCONDITIONALLY and tested afterwards. `&&`
+      // short-circuits, so folding it into the condition would make the number of
+      // random draws depend on `overreachRate` and on height — and the tower is
+      // the random stream. It would still be deterministic; it would just quietly
+      // become a different tower the next time someone touches an unrelated knob.
+      const hardRoll = this.rng();
+      const hardT = Math.max(0, diff - T.hardFrom) / Math.max(1e-6, 1 - T.hardFrom);
+      const hardGap = !unreachable && h >= T.openingSpan
+        && hardRoll < hardT * T.hardRate;
+
       const rise = unreachable
         ? lift * (T.overreachLift + this.rng() * T.overreachLiftSpan)
         : T.minRise + this.rng() * (T.maxRise - T.minRise)
@@ -302,7 +325,32 @@ export class World {
 
       this.builtTo = h + rise;
       const from = this.lastLedge;
+
+      // A HARD GAP IS NOT PLACED AND THEN CHECKED. IT IS CUT OUT OF A FLIGHT.
+      //
+      // Overreach placed a ledge past the envelope and asked afterwards whether a
+      // body could bridge it; roughly half the time nothing could, and that is
+      // where every wall this game ever had came from. This asks the opposite
+      // question first: fly the real physics off the worst footing on the ledge
+      // below, and put the new surface exactly where the body was, at the far end
+      // of the arc. A jump that lands it is then not a hope, it is the flight the
+      // ledge was cut from — and the arc the player aims with is that same
+      // integrator, so what they see is what was measured.
+      //
+      // `hardSlack` pulls it a few units back from the end, because a gap at the
+      // exact limit forgives only launches that fall short.
+      let cut = false;
+      if (hardGap && this.step && from) {
+        const p = this.step(from, rise * T.hardRiseScale, width, dir)
+          || this.step(from, rise * T.hardRiseScale, width, -dir);
+        // Strictly higher than the ledge below, or it is not a rise at all: the
+        // constructed surface lands on a tick boundary and can sit up to one
+        // tick of fall under the height that was asked for.
+        if (p && p.y - LEDGE_HH > h) { nx = p.x; this.builtTo = p.y - LEDGE_HH; cut = true; }
+      }
+
       const led = this.ledge(nx, this.builtTo, width);
+      led.hard = cut;
 
       // THE PROMISE: NO LEDGE YOU CANNOT LEAVE.
       //
@@ -377,7 +425,11 @@ export class Sim {
     this.predictPeak = { x: 0, y: 0, dies: false };
     // A second scratch body, for proving routes while the player is in the air.
     this._probe = newBody();
+    // Where a constructed hard gap puts its landing surface. Allocated once,
+    // because generation runs inside `tick`.
+    this._hs = { x: 0, y: 0 };
     this.world.verify = (from, to) => this.routeExists(from, to);
+    this.world.step = (from, rise, width, dir) => this.hardStep(from, rise, width, dir);
     this.reset(true);
   }
 
@@ -434,6 +486,124 @@ export class Sim {
   }
 
   /**
+   * Fly the probe and report the tick-end at which it first FALLS PAST `atY`.
+   *
+   * That point is landable by construction: put a surface there and the very
+   * same tick of the very same integrator crosses it downward, so `_surfaceUnder`
+   * catches it. Returns null if the flight ended first, or if the apex never got
+   * that high — in which case the point would be an apex, not a descent, and the
+   * gap would be a different gap from the one asked for.
+   */
+  _descendTo(x, y, vx, vy, atY) {
+    const p = this._probe;
+    p.x = p.px = x; p.y = p.py = y;
+    p.vx = vx; p.vy = vy;
+    p.takeoff = y; p.peakX = x; p.peakY = y;
+    p.hangTimer = 0; p.onWall = 0; p.wallTimer = 0;
+    p.grounded = false; p.standing = null;
+    for (let i = 0; i < 360; i++) {
+      if (this._flight(p, 0)) return null;      // landed on something, or died
+      if (p.vy < 0 && p.y <= atY) return p.peakY < atY ? null : p;
+    }
+    return null;
+  }
+
+  /**
+   * THE HARD GAP — cut out of a flight rather than placed and hoped for.
+   *
+   * Launches off the WORST footing on `from`: the far edge, the side away from
+   * where the ledge is going. That is deliberate and it is the whole safety
+   * argument. A gap verified from the near edge is a gap that becomes unleavable
+   * whenever the player happens to land on the wrong end of the perch, which is
+   * exactly the report — "I could not get off this ledge" — that this game has
+   * already been through once.
+   *
+   * Of every legal launch that gets high enough, take the one that ends up
+   * FURTHEST away. The ledge goes there, minus `hardSlack`. So the jump is at the
+   * edge of what the body can do, one launch in a narrow fan makes it, and the
+   * failure is not a wall: you freeze at the apex, out in the gap and below the
+   * ledge, which is the step.
+   *
+   * Returns the LANDING SURFACE height and centre, or null when no launch this
+   * side of the column can produce one.
+   */
+  hardStep(from, wantRise, width, dir) {
+    const L = FEEL.launch;
+    const T = FEEL.tower;
+    const fx = from.x - dir * from.hw;
+    const fy = from.y + from.hh;
+    const atY = fy + wantRise;
+    const lo = T.edgePad + width * 0.5;
+    const hi = COLUMN - T.edgePad - width * 0.5;
+
+    let bx = 0, by = 0, bvx = 0, bvy = 0, bd = -1;
+    for (let f = 1; f >= 0.84; f -= 0.08) {
+      const sp = L.minSpeed + (L.maxSpeed - L.minSpeed) * f;
+      for (let a = 30; a <= 78; a += 4) {
+        const th = a * Math.PI / 180;
+        const vx = Math.cos(th) * sp * dir, vy = Math.sin(th) * sp;
+        const p = this._descendTo(fx, fy, vx, vy, atY);
+        if (!p) continue;
+        // Back off the very end of the arc, and only then ask whether the point
+        // is a legal ledge centre — a pulled-back point can be legal where the
+        // end of the arc was against the wall.
+        const px = p.x - dir * T.hardSlack;
+        if (px < lo || px > hi) continue;
+        const d = Math.abs(px - fx);
+        if (d > bd) { bd = d; bx = px; by = p.y; bvx = vx; bvy = vy; }
+      }
+    }
+    if (bd < 0) return null;
+
+    // THE PROOF, TAKEN BACK.
+    //
+    // Pulling the surface `hardSlack` sideways means the flight it was cut from no
+    // longer ends on it, so the construction is an argument again and arguments
+    // are what put walls in this game. Fly it: the winning launch off the worst
+    // footing has to land on the ledge that is actually there, and from the near
+    // footing — where the same launch overshoots by the width of the perch — some
+    // weaker launch on the same line has to land on it too. Anything this cannot
+    // demonstrate goes back to being an ordinary gap.
+    const led = this.world.ledge(bx, by - LEDGE_HH, width);
+    const nx = from.x + dir * from.hw;
+    let ok = this._probeFlight(fx, fy, bvx, bvy, from) === led;
+    if (ok) {
+      ok = false;
+      for (let k = 1; k >= 0.76 && !ok; k -= 0.02) {
+        if (Math.hypot(bvx, bvy) * k < L.minSpeed) break;
+        ok = this._probeFlight(nx, fy, bvx * k, bvy * k, from) === led;
+      }
+    }
+    // THE SECOND ROUTE IS NOT A CONDITION OF BEING HARD, AND THAT WAS MEASURED
+    // RATHER THAN ASSUMED.
+    //
+    // Requiring `_bodyRoute` to prove a two-jump route here as well looked
+    // obviously right — "one hard jump or two easy ones" is the design sentence.
+    // It destroys the mechanic. The gaps a single apex body can bridge are the
+    // SHORT ones, so the filter kept those and threw away the long ones: median
+    // span fell 42.6 u to 25.7 u, the surviving gaps forgave more angular error
+    // than ordinary gaps did, and the average model's landings on its own bodies
+    // fell from 6.54% to 3.45%. The requirement selected against the thing it was
+    // meant to guarantee.
+    //
+    // It is also not needed for safety. The promise this mechanic has to keep is
+    // that no ledge is ever unleavable, and that is carried entirely by the direct
+    // proof above. The body is measured, not decreed:
+    // `scripts/cairn-bodies-check.mjs` reports what share of hard gaps a body
+    // bridges, and reports the share of landings that actually happen on one.
+    this.world._unindex(led);
+    const at = this.world.solids.indexOf(led);
+    if (at >= 0) this.world.solids.splice(at, 1);
+    led.live = false;
+    this.world.pool.push(led);
+    if (!ok) return null;
+
+    const out = this._hs;
+    out.x = bx; out.y = by;
+    return out;
+  }
+
+  /**
    * Is there a way from `from` to `to` — directly, or by dying once and standing
    * on the body it leaves? Installed on the world as `verify`.
    */
@@ -441,11 +611,23 @@ export class Sim {
     const edge = from.x + Math.sign(to.x - from.x || 1) * from.hw;
     const y = from.y + from.hh;
     if (this._reaches(edge, y, from, to)) return true;
+    return this._bodyRoute(from, edge, y, to);
+  }
 
-    // Leave a body and try again from it. The throw that goes FURTHEST is not
-    // the useful one — a corpse's surface sits at the apex reached, so a body
-    // placed at maximum height leaves nothing above it to aim for. Shorter,
-    // steeper throws come first for exactly that reason.
+  /**
+   * Can `to` be reached from `from` by DYING ONCE — leaving a body in the gap and
+   * standing on it?
+   *
+   * Called by `routeExists`, which asks it about a gap no launch can cross, and
+   * by `hardStep`, which asks it about a gap a launch CAN cross and wants the
+   * second route to exist anyway. Same question, one implementation: the shortcut
+   * and the rescue are the same geometry, and two copies of it would drift.
+   *
+   * The throw that goes FURTHEST is not the useful one — a corpse's surface sits
+   * at the apex reached, so a body placed at maximum height leaves nothing above
+   * it to aim for. Shorter, steeper throws come first for exactly that reason.
+   */
+  _bodyRoute(from, edge, y, to) {
     const L = FEEL.launch;
     for (let a = 88; a >= 40; a -= 8) {
       for (let f = 0.55; f <= 1.001; f += 0.15) {

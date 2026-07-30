@@ -10,12 +10,14 @@ already been tried and rejected once, with reasons.
 
 ---
 
-## 1 — Balance. DONE — see `BALANCE.md`
+## 1 — Balance. DONE, with target 3 failing — see `BALANCE.md`
 
-Measured, retuned and re-measured across 30,000 climbs. Three of the four
-targets below hold outright; the second holds to about attempt 30 and then
-flattens, for a reason recorded in `BALANCE.md` rather than smoothed over. The
-brief as originally written follows, unchanged, because the finding was worse
+Measured, retuned and re-measured. Targets 1, 2 and 4 hold. **Target 3 does not:**
+an expert passes 600 m on 83% of first attempts, against "but not on a first
+attempt". It failed at `c1bf734` too, at 95%, and it is recorded as failing rather
+than reported as improved.
+
+The brief as originally written follows, unchanged, because the finding was worse
 than it assumed: the world did not merely have an easy curve, it had **no
 ceiling at all** — a fixed constant flattened difficulty above 900 m and 40 of
 40 expert runs climbed 84 km without dying once.
@@ -50,16 +52,31 @@ the file. — Done: 10,000 climbs per skill, 30,000 total, in `BALANCE.md`.
 
 ---
 
-## 2 — The reachability solver. PARTLY DONE — `scripts/cairn-reach-check.mjs`
+## 2 — The reachability solver. DONE — `cairn-reach-check.mjs`, `cairn-bodies-check.mjs`
 
-The audit exists and found a real bug: overreach gaps were being clamped back
-inside the 100 u column and coming out crossable, so the corpse mechanic fired on
-2.2% of gaps against a knob set for 27%. Overreach is now vertical, which no
-column width can defeat. See BALANCE.md.
+The solver runs inside generation now, in both directions.
 
-Not done: the solver does not run inside generation and regenerate a bad chunk,
-and **10.4% of gaps above 481 m still have no route with one body.** Two-corpse
-routes are untested.
+**Downward:** `Sim.routeExists` flies a probe through the real physics and demotes
+any ledge it cannot prove a route to. It is a permanent guard rather than a
+repair, because `overreachRate` is 0.
+
+**Upward, which is the part that was missing:** `Sim.hardStep` does not verify a
+placement, it *derives* one. It flies the physics off the worst footing on the
+ledge below and puts the new landing surface at the far end of the arc, so a hard
+gap's direct route is true by construction and the failure mode that produced
+every wall this game ever had cannot occur. Audited at **4,506 gaps from 0 to
+3,000 m, 100% DIRECT, zero walls**, and separately at **766 of 766 constructed
+hard gaps crossable in one launch from the worst footing** under an independent
+sweep the generator cannot afford to run.
+
+The original "done when" — zero impossible or single-solution chunks — is met on
+the first half and deliberately not on the second: a gap with exactly one solution
+is now the *point*, and the solution is a 5.0%-of-full-power window rather than an
+aim. See BALANCE.md and DECISIONS.md §19.
+
+Still open: **two-body routes are unmeasured.** 33 of 76 sampled hard gaps are
+crossable in exactly two jumps over one body; the rest take the direct jump or
+more than one body, and nothing has measured which.
 
 ### The brief, as it stood
 

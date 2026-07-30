@@ -382,3 +382,58 @@ Test 14 pins it: forty record-beating landings must produce zero blocking
 overlays and zero cards. It checks `elementFromPoint` at the centre of the
 screen on every landing, because that is the question — not "was a card shown"
 but "was anything in the player's way".
+
+---
+
+## 19. A hard gap is CUT OUT OF A FLIGHT, never placed and then checked
+
+Closing every dead end (§ BALANCE.md, `overreachRate: 0`) was right and it cost
+the premise. Measured: the average model landed on one of its own bodies on
+**1.92%** of landings and the expert on **0.02%**. If every gap is crossable in
+one jump, nobody ever needs to stand on themselves, and the title card's EVERY
+DEATH LEAVES A STONE stops being true of the game.
+
+The two mechanics look symmetrical and are not:
+
+| | overreach | hard gap |
+|---|---|---|
+| how the ledge is positioned | pushed past the reach envelope | placed **on a trajectory the physics flew** |
+| direct route | none, by design | proven, from the **worst footing** |
+| what happens when nothing bridges it | **a wall** | cannot arise |
+| what it demands | that you die | that you pull hard and exactly |
+
+`Sim.hardStep` flies the probe off the far end of the perch — the side away from
+where the ledge is going — over a fan of legal launches, and puts the landing
+surface where the arc that ended up furthest away was, minus `hardSlack`. The
+launch that makes the jump is then not a hope, it is the flight the ledge was cut
+from. **A physics-verified positive cannot be false**, which is the same argument
+`routeExists` is built on, applied at the point where it is cheap.
+
+Three things about this were wrong on the first pass and all three were caught by
+measuring rather than reading:
+
+**It is a demand for power, not aim.** A hard gap forgives 23.0° of angular error
+against an ordinary gap's 21.5° — *more* — because it sits near the angle of
+maximum range, where range is stationary in angle. The window is in the pull:
+**5.0% of full power against 13.5%**, and the average model's hand is off by 5.5%.
+That is why it is fair: the arc is drawn from the same integrator in time slowed
+to 15%, and power saturation means one pixel at 90% power is 0.05% of full.
+
+**Requiring the body route as well destroys the mechanic.** "One hard jump or two
+easy ones" is the design sentence, so proving the second route at generation time
+looked obviously correct. The gaps a single apex body can bridge are the *short*
+ones, so the filter kept those: median span fell 42.4 u → 25.7 u, the surviving
+gaps forgave more error than ordinary ones, and body landings fell 6.53% → 3.45%.
+The requirement selected against what it was meant to guarantee. The body is
+measured, not decreed — and the no-wall promise never depended on it.
+
+**The roll is drawn unconditionally.** `&&` short-circuits, so folding it into the
+condition would make the number of random draws depend on `overreachRate` and on
+height — still deterministic, but a tower that silently changes the next time
+somebody touches an unrelated knob.
+
+`scripts/cairn-bodies-check.mjs` is the permanent gate, and it is built to be
+falsifiable: `--tune='{"hardSlack":-14}'` and `--tune='{"hardRate":0}'` both turn
+it red. Its third test is the control — with every corpse forced non-solid the
+same count must read exactly 0.00% — because five tests in this repository have
+passed while blind to the state they claimed to cover.

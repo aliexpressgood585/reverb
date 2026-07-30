@@ -48,7 +48,7 @@
 import { writeFileSync, mkdirSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { FEEL, COLUMN } from '../cairn/src/feel.js';
-import { Sim, PHASE, solidHalfWidth, predict } from '../cairn/src/sim.js';
+import { Sim, PHASE, solidHalfWidth, predict, erosionOf } from '../cairn/src/sim.js';
 
 const DEG = Math.PI / 180;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -277,6 +277,16 @@ export function climb(sim, S, rnd, scratch, cands, trace) {
   // tower asked for a corpse" from "the hand missed", which are different games.
   let lastThrown = false;
   let launched = 0;
+  // DID THE PLAYER STAND ON THEMSELVES?
+  //
+  // The title card promises EVERY DEATH LEAVES A STONE, and a stone nobody ever
+  // steps on is scenery. Nothing in this repository measured that until now: the
+  // four PHASE3 targets are all about height, and a tower where every gap is
+  // crossable in one jump scores identically on all four whether corpses are
+  // load-bearing or decorative.
+  let landings = 0;
+  let bodyLandings = 0;
+  const byStage = [0, 0, 0, 0];
 
   for (let k = 0; k < MAX_LAUNCHES && sim.phase === PHASE.PLAY; k++) {
     // Settle on the ledge for a tick so friction and world generation run
@@ -323,7 +333,15 @@ export function climb(sim, S, rnd, scratch, cands, trace) {
         : 0;
       sim.tick(dir);
       if (sim.phase !== PHASE.PLAY) break;
-      if (sim.body.grounded) break;
+      if (sim.body.grounded) {
+        // The solid the body is standing on IS the landing — asked of the game
+        // rather than inferred, so a change to what counts as a platform shows up
+        // here instead of being modelled twice.
+        const s = sim.body.standing;
+        landings++;
+        if (s && s.corpse) { bodyLandings++; byStage[erosionOf(s, sim)]++; }
+        break;
+      }
     }
     if (sim.phase !== PHASE.PLAY) break;
 
@@ -338,7 +356,8 @@ export function climb(sim, S, rnd, scratch, cands, trace) {
   // A climb that hit the launch cap without dying is a harness failure, not a
   // result. Report it as such rather than folding it into the numbers.
   if (sim.phase === PHASE.PLAY) return null;
-  return { h: sim.body.peakY, thrown: lastThrown, launches: launched };
+  return { h: sim.body.peakY, thrown: lastThrown, launches: launched,
+           landings, bodyLandings, byStage };
 }
 
 // ---------------------------------------------------------------- the sweep
@@ -356,12 +375,19 @@ function run(skillName, seeds, attempts, seed0, trace = 0) {
   let stuck = 0;
   let thrownDeaths = 0;
   let launchTotal = 0;
+  let landTotal = 0;
+  let bodyLandTotal = 0;
+  const bodyStages = [0, 0, 0, 0];
+  // How many seeds ever produced a single corpse landing. A share can be carried
+  // by a handful of towers; this says whether the mechanic happens to everyone.
+  let seedsWithBody = 0;
 
   for (let s = 0; s < seeds; s++) {
     const worldSeed = (seed0 + s * 0x9e3779b1) | 0;
     const sim = new Sim(worldSeed);
     const rnd = rng32((worldSeed ^ 0x5bf03635) >>> 0);
     sim.phase = PHASE.PLAY;
+    let seedBody = 0;
 
     for (let a = 0; a < attempts; a++) {
       const r = climb(sim, S, rnd, scratch, cands, trace);
@@ -376,6 +402,10 @@ function run(skillName, seeds, attempts, seed0, trace = 0) {
       const h = r.h;
       if (r.thrown) thrownDeaths++;
       launchTotal += r.launches;
+      landTotal += r.landings;
+      bodyLandTotal += r.bodyLandings;
+      seedBody += r.bodyLandings;
+      for (let i = 0; i < 4; i++) bodyStages[i] += r.byStage[i];
       deathsByAttempt[a].push(h);
       allDeaths.push(h);
       if (a === 0) firstAttempt.push(h);
@@ -383,10 +413,12 @@ function run(skillName, seeds, attempts, seed0, trace = 0) {
       sim.respawn();
     }
     finalBest.push(sim.best);
+    if (seedBody > 0) seedsWithBody++;
   }
 
   return { skillName, seeds, attempts, deathsByAttempt, bestByAttempt,
-           allDeaths, firstAttempt, finalBest, stuck, thrownDeaths, launchTotal };
+           allDeaths, firstAttempt, finalBest, stuck, thrownDeaths, launchTotal,
+           landTotal, bodyLandTotal, bodyStages, seedsWithBody };
 }
 
 // ----------------------------------------------------------------- the targets
@@ -489,6 +521,18 @@ function report(R) {
     // deaths on a launch the bot knew could not land — the tower demanding a corpse
     thrownShare: R.thrownDeaths / Math.max(1, R.allDeaths.length),
 
+    // THE PREMISE, MEASURED. Share of all landings that were onto one of the
+    // player's own bodies, and how far those bodies had eroded when they took the
+    // weight. A tower where this is near zero is a tower whose title card lies.
+    body: {
+      landings: R.landTotal,
+      onBody: R.bodyLandTotal,
+      share: R.bodyLandTotal / Math.max(1, R.landTotal),
+      perClimb: +(R.bodyLandTotal / Math.max(1, R.allDeaths.length)).toFixed(2),
+      seedsEver: R.seedsWithBody / Math.max(1, R.seeds),
+      stages: R.bodyStages,
+    },
+
     deathHeight: {
       median: median(R.allDeaths),
       p10: quantile(R.allDeaths, 0.10),
@@ -571,6 +615,9 @@ function line(o) {
     `  worst 10 m band  ${o.band.top}-${o.band.top + 10} m holds ${(o.band.share * 100).toFixed(2)}% of deaths`,
     `  heaviest bands   ${o.band.heaviest.map(([m, p]) => `${m}m ${p}%`).join('  ')}`,
     `  jumps per climb  ${o.launchesPerClimb}   deaths thrown into an impossible gap ${(o.thrownShare * 100).toFixed(1)}%`,
+    `  stood on itself  ${(o.body.share * 100).toFixed(2)}% of ${o.body.landings} landings   ` +
+      `${o.body.perClimb}/climb   in ${(o.body.seedsEver * 100).toFixed(0)}% of seeds   ` +
+      `stages fresh ${o.body.stages[0]} thin ${o.body.stages[1]} top ${o.body.stages[2]}`,
   ].join('\n');
 }
 

@@ -238,6 +238,36 @@ export const FEEL = {
     // The verifier in generate() stays regardless: it is now a permanent guard
     // rather than a repair, and it costs nothing while this is zero.
     overreachRate: 0,     // their share of gaps at full difficulty
+
+    // THE GAPS A BODY MAKES EASY — the answer to what turning `overreachRate`
+    // off cost.
+    //
+    // With every gap crossable in one jump, nobody ever needs to stand on
+    // themselves, and the measurement says so: the average model landed on one of
+    // its own bodies on 1.7% of landings and the expert on 0.02%. The title card
+    // promises EVERY DEATH LEAVES A STONE and the tower had stopped asking for
+    // one.
+    //
+    // An overreach gap cannot be crossed at all, which is what produced walls. A
+    // HARD gap is the opposite construction and it cannot produce one: the ledge
+    // is placed ON A TRAJECTORY THE PHYSICS ACTUALLY FLEW, from the worst footing
+    // on the ledge below, so a single launch provably lands it. It is placed at
+    // the far end of that trajectory, so the launch that makes it is nearly the
+    // only launch that does — and the body you leave failing it lands in the gap
+    // below the ledge, from where the rest is a hop.
+    //
+    // One hard jump, or two easy ones over your own corpse. The corpse is a
+    // shortcut, never a rescue, and there is nothing to be rescued from.
+    hardFrom: 0.32,       // difficulty at which hard gaps start appearing
+    hardRate: 0.45,       // their share of gaps at full difficulty
+    // How far short of the physical limit the ledge is pulled back. The
+    // constructed gap sits exactly at the end of a real trajectory, which leaves
+    // slack on the short side only; a few units of give makes the window
+    // two-sided without making the jump ordinary.
+    hardSlack: 3,
+    // Rise as a share of the ordinary roll. A hard gap that also rises the full
+    // amount is two demands at once, and distance is the one being made.
+    hardRiseScale: 0.85,
     // Rise as a multiple of the ideal full-power lift. The floor must clear what
     // the apex hang actually buys (~1.05) or the gap is merely hard; the ceiling
     // must stay close enough that a corpse left below it finishes the job.

@@ -151,8 +151,8 @@ cairn/
 ```
 
 **Renderer:** Canvas2D scene → one WebGL post pass. **Three.js was deleted** —
-120 KB gzipped of 3D engine for a 2D art direction. Total payload **18.6 KB
-gzipped** against a 400 KB budget.
+120 KB gzipped of 3D engine for a 2D art direction. Total payload **23.4 KB
+gzipped** (21.0 JS + 1.3 CSS + 1.1 HTML) against a 400 KB budget.
 
 **Units:** virtual, never pixels. Column is 100 u wide; camera shows
 `FEEL.camera.viewH` of height. Pixels appear in exactly one place — `input.js`
@@ -203,6 +203,9 @@ node scripts/cairn-first-minute.mjs
                                # CAIRN: the on-ramp and the teaching beat
 node scripts/cairn-daily-check.mjs
                                # CAIRN: daily seed, UTC rollover, slot isolation
+node scripts/cairn-bodies-check.mjs
+                               # CAIRN: does anyone stand on their own corpse, and
+                               # is a hard gap ever a wall. ~60 s, no browser
 node scripts/smoke.mjs         # REVERB: state machine + 5 levels
 node scripts/nav-check.mjs     # REVERB: navigation, <1s, no GPU
 ```
@@ -212,6 +215,14 @@ altitudes distinguishable · no flat grey · death→playable <1.2 s · persiste
 gesture lockdown · discoverable through real touch · **aim direction** ·
 **difficulty doesn't collapse** · **erosion stages readable** · **nothing blocks
 a climb**.
+
+**Two gates flip on container noise rather than on code, and both cost time to
+attribute** (see `cairn/AUDIT.md`). `cairn-device-check.mjs`'s sub-linearity gate
+divides two sub-millisecond numbers and prints anything from `-11x` to `+17x` on
+identical code. `cairn-monument-check.mjs`'s "one tap returns" waits a fixed
+1,400 ms for a camera ease that depends on frame rate — seen at 0.06 once against
+a 0.05 gate, then 0.007-0.011 on three consecutive re-runs. Re-run before
+believing either.
 
 Numbers are reported, not asserted. Test 4 measures **CPU** cost only — this
 container's software rasteriser is 20–40× slower than a phone GPU, so the GPU
@@ -266,13 +277,38 @@ individually — a body at x=1e9 does not merely look wrong, it poisons the heig
 buckets every collision query walks.
 
 **There are no unleavable ledges. `FEEL.tower.overreachRate` is 0** and audited
-at 4,226 gaps from 0-3000 m, 100% directly crossable. A player hit three walls at
+at 4,506 gaps from 0-3000 m, 100% directly crossable. A player hit three walls at
 391, 481 and 567 m; every wall this game ever produced came from that mechanic.
 `Sim.routeExists` stays as a permanent guard — the generator flies a probe body
 through the real physics and demotes any ledge it cannot prove a route to. Turn
 the rate up and it will catch you; do not turn it up without re-running
-`cairn-reach-check.mjs`. The cost is recorded in BALANCE.md: a 1.1-degree bot no
-longer dies, and the difficulty curve is unverified for expert humans.
+`cairn-reach-check.mjs`.
+
+**A HARD GAP IS CUT OUT OF A FLIGHT, NOT PLACED AND THEN CHECKED.** That is what
+gave the corpse its job back after `overreachRate` went to zero and took it away.
+Measured: with every gap crossable in one jump, the average model stood on one of
+its own bodies on **1.92%** of landings and the expert on **0.02%** — the title
+card promises EVERY DEATH LEAVES A STONE and the stone was scenery. Now 6.53% and
+2.73%, and **the expert is killable again** (60 of 60 seeds hit the launch cap
+before, 0 now).
+
+`Sim.hardStep` flies the probe off the **worst footing** on the ledge below — the
+far end of the perch — and puts the new landing surface at the far end of the arc
+it flew, minus `hardSlack`. So the direct route is true by construction and a wall
+cannot arise, which is exactly what overreach could not promise. Two things about
+it are counter-intuitive and both are measured, in BALANCE.md:
+
+- **It demands POWER, not aim.** A hard gap forgives 23.0° against an ordinary
+  gap's 21.5° — *more*, because it sits near the angle of maximum range where
+  range is stationary in angle. The window is 5.0% of full power against 13.5%,
+  and the average model's hand is off by 5.5%.
+- **Making the generator prove the body route as well destroys the mechanic.** It
+  selects for the short gaps a single apex body can bridge: span 42.4 u → 25.7 u
+  and body landings 6.53% → 3.45%. Do not re-add it. The no-wall promise never
+  depended on it.
+
+`cairn-bodies-check.mjs` is the gate, and it is falsifiable —
+`--tune='{"hardRate":0}'` and `--tune='{"hardSlack":-14}'` both turn it red.
 
 **Historical, and why the knob exists: uncrossable gaps were TOO HIGH, not too far.** The first version pushed them
 sideways and the 100 u column clamped them back into ordinary gaps — the
@@ -316,9 +352,16 @@ doubles the softening.
 
 **Known-honest problem:** every generation number now lives in
 `cairn/src/feel.js` under `tower`, and several of them (`diffScale`,
-`overreachRate`) move the whole curve. Re-run the balance harness after touching
-any of them — `cairn-check.mjs` will not catch a difficulty regression, because
-test 12 checks that difficulty does not *collapse*, not that it exists.
+`overreachRate`, `hardRate`, `hardSlack`) move the whole curve. Re-run the balance
+harness AND `cairn-bodies-check.mjs` after touching any of them —
+`cairn-check.mjs` will not catch a difficulty regression, because test 12 checks
+that difficulty does not *collapse*, not that it exists.
+
+**Known-honest problem: PHASE3 §1 target 3 does not hold.** An expert passes 600 m
+on **83%** of first attempts against "but not on a first attempt". It failed at
+`c1bf734` too, at 95%. Closing it needs gaps that cannot be crossed at all, which
+is the mechanic that stopped a real player three times. Recorded as failing rather
+than reported as improved.
 
 ---
 

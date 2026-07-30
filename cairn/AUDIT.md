@@ -153,6 +153,70 @@ Not fixed here, and deliberately not papered over: the band-hazard table in
 
 ---
 
+## The premise was never measured, and for a while it was not true
+
+Every number in this file and in BALANCE.md is about height. **Nothing counted how
+often a player lands on one of their own bodies** — so a tower where the corpse is
+load-bearing and a tower where it is scenery scored identically on all four PHASE3
+§1 targets, on acceptance test 12, and on the route audit.
+
+Counted (`scripts/cairn-bodies-check.mjs`, 60 seeds × 50 attempts), it was
+scenery for two of the three models:
+
+| | at `c1bf734` | now |
+|---|---|---|
+| novice | 32.60% of landings | 32.41% |
+| average | **1.92%** | **6.53%** |
+| expert | **0.02%** | **2.73%** |
+
+The cause was the fix for the dead ends: with `overreachRate` at zero every gap is
+crossable in one jump, so nobody ever needs a body. The same commit also left
+**60 of 60 expert seeds hitting the harness's launch cap without dying** — the
+empty loop this project has now been round twice.
+
+Fixed by a gap that is **cut out of a flight instead of placed and then checked**
+(DECISIONS.md §19): the generator flies the real physics off the worst footing on
+the ledge below and puts the new surface at the far end of the arc, so the direct
+route is proven by construction and a wall cannot arise. 4,506 gaps from 0–3,000 m
+audit 100% DIRECT, and 766 of 766 constructed hard gaps are crossable in one
+launch from the worst footing under an independent sweep at 1° × 1.5 u/s.
+
+Three findings from doing it, all of the shape this file keeps recording:
+
+- **The first hardness metric measured itself.** Counting the share of a fixed fan
+  of throws that landed reported hard gaps as *more* forgiving than ordinary ones,
+  because full-power throws land 42 u away more often than 22 u away. The real
+  number: a hard gap demands **power** (5.0% of full against 13.5%) and is if
+  anything *more* tolerant of angle (23.0° against 21.5°).
+- **Making the generator also prove the body route destroyed the mechanic**, by
+  selecting for exactly the short gaps a single apex body can bridge. Numbers in
+  BALANCE.md.
+- **The new gate is falsifiable and has been seen to fail.** `--tune` turns it red
+  two ways, and its "unleavable" counter was exercised against deliberately
+  sabotaged towers — 347 of 450 caught — because a counter nobody has watched fire
+  proves nothing.
+
+---
+
+## Two gates that flip on container noise, not on code
+
+Recorded because both cost time to attribute and neither is a regression.
+
+**`cairn-device-check.mjs`'s sub-linearity gate is meaningless as written.** It
+divides by `(t130 - t0)`, two sub-millisecond numbers that this container returns
+in any order, so the same code prints `-0.05x`, `-11.00x` and `+17.00x` across
+runs and the gate passes on a negative denominator and fails on a small positive
+one. The measurement it is protecting is real; the arithmetic gating it is not.
+
+**`cairn-monument-check.mjs`'s "one tap returns" test is timing-bound.** It waits
+1,400 ms for `camera.mon` to ease below 0.05, which depends on how many frames the
+software rasteriser managed. Seen at 0.06 once and at 0.007–0.011 on three
+consecutive re-runs of the same build.
+
+Same family as test 13, which swung between 0.7 and 53.5 on identical code.
+
+---
+
 ## Known-honest gaps
 
 These are open, not done, and not claimed:
@@ -167,20 +231,20 @@ These are open, not done, and not claimed:
   there is no leak. The whole frame including the grade is reported and not
   gated: 4 fps at 1x here, 3 fps at 4x throttle, software-rasterised and 20-40x
   slower than a phone GPU.
-- **Dead ends still exist, and the requirement to remove them is in direct
-  tension with the game having a ceiling.** See BALANCE.md. Ordinary gaps are
-  100% crossable across 964 audited; every wall comes from the deliberate
-  overreach mechanic, and turning it off makes 30 of 30 expert seeds immortal at
-  24-75 km. The rate is now 0.14 — 6.3% of gaps above 391 m need a body, 6.3%
-  have no route with one. Closing that properly needs the generation-time route
-  check that PHASE3 §2 still owes.
-- **Balance is measured, and one of its four targets is only partly met.**
-  30,000 climbs across novice/average/expert models are in `BALANCE.md`, with
-  the generator retuned. Three targets hold outright. The fourth — the average
-  player's median death height rising steadily — holds to about attempt 30 and
-  then flattens near 600 m, for a reason that argument says cannot be removed
-  without causing the difficulty collapse test 12 exists to catch. That is an
-  argument, not a measurement of an alternative.
+- ~~Dead ends still exist~~ — **gone, and the ceiling came back with them.**
+  `overreachRate` is 0 and 4,506 gaps from 0–3,000 m audit 100% DIRECT. Turning it
+  off did make the expert immortal, which is what the hard gap above fixes: 60 of
+  60 expert seeds hit the launch cap at `c1bf734`, 0 do now, and not one gap in the
+  tower is uncrossable. The two requirements were held to be in direct tension and
+  they were only in tension for **one** mechanism.
+- **Balance is measured, and one of its four targets does not hold.** The curves
+  are in `BALANCE.md`. Three hold: the novice reaches 50 m by attempt 5 and 150 m
+  by 25 in 100% of seeds, the average player's median curve rises 345 m with no
+  40 m stall longer than 3 attempts, and no 10 m band holds more than 1.9% of any
+  model's deaths. **Target 3 fails** — an expert passes 600 m on 83% of first
+  attempts against a target of "not on a first attempt". It failed at `c1bf734`
+  too, at 95%, and closing it needs gaps that cannot be crossed at all, which is
+  the mechanic that stopped a real player three times.
 - **No human has played the retuned tower.** Three bots with gaussian error are
   not three people, and the novice model has no learning in it.
 - **The band-hazard softening above is measured, not fixed.** An expert's

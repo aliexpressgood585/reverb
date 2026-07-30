@@ -561,6 +561,156 @@ novice and average play, which is where retention is decided.
 
 ---
 
+## What the dead ends cost, measured: nobody stood on themselves any more
+
+The section above closed every wall and said the cost was a bot that no longer
+dies. The cost was larger than that, and it took a measurement this repository
+did not have to see it.
+
+**Nothing here had ever counted how often a player lands on one of their own
+bodies.** All four targets above are about height, and a tower where every gap is
+crossable in one jump scores identically on all four whether the corpse mechanic
+is load-bearing or decorative. `scripts/cairn-bodies-check.mjs` counts it now,
+and the balance harness reports it on every run.
+
+At `c1bf734` — every gap crossable, zero walls — 60 seeds × 50 attempts:
+
+| | share of landings onto a body | per climb |
+|---|---|---|
+| novice | 32.60% | 2.45 |
+| average | **1.92%** | 1.49 |
+| expert | **0.02%** | 0.31 |
+
+A novice builds a staircase because a novice dies constantly in a 300 m tower. An
+average player did it twice a session. An expert never did it. The title card
+promises EVERY DEATH LEAVES A STONE and for two of the three models the stone was
+scenery — which is exactly the flaw DECISIONS.md §16 was written about, arriving
+by the opposite route.
+
+Worth stating plainly because it is not what the earlier sections predicted: at
+that commit **60 of 60 expert seeds hit the harness's 4,000-launch cap without
+dying**, so every expert number above the dead-ends section describes a bot the
+tower could not kill, and the "Where it landed" table's expert row is from before
+`overreachRate` went to zero.
+
+---
+
+## The hard gap, and why it cannot become a wall
+
+An overreach gap was placed past the envelope and asked afterwards whether a body
+could bridge it. About half the time nothing could, and every wall this game ever
+had came from that. The construction is now the other way round, which is the
+whole safety argument:
+
+> **A hard gap is not placed and then checked. It is cut out of a flight.**
+
+`Sim.hardStep` launches the probe off the **worst footing** on the ledge below —
+the far end of the perch, the side away from where the ledge is going — flies the
+real physics over a fan of legal launches, and puts the new landing surface
+exactly where the body was on the arc that ended up furthest away, minus
+`hardSlack`. Then it takes the proof back: the winning launch has to land on the
+ledge that is actually there, and a weaker launch off the near footing has to as
+well. Anything that cannot be demonstrated goes back to being an ordinary rise.
+
+The worst footing is not a detail. A gap verified from the near edge becomes
+unleavable whenever the player happens to land on the wrong half of a ledge, and
+"I could not get off this ledge" is the report this mechanic was rebuilt around.
+
+### It is a demand for POWER, not for aim
+
+This came out the opposite of the expectation and it is the most useful thing the
+audit produced. Sampled over 30 towers to 1,500 m:
+
+| | angle you can be wrong by | power you can be wrong by |
+|---|---|---|
+| ordinary gap | 21.5° | **13.5% of full** |
+| hard gap | 23.0° | **5.0% of full** |
+| the average model's hand | 3.2° | **5.5%** |
+
+A hard gap forgives *more* angular error than an ordinary one. It has to: it sits
+at the far end of a trajectory, which is near the angle of maximum range, and
+range is stationary in angle there — a few degrees cost almost nothing. Range
+goes as v², so the entire difficulty lives in the pull.
+
+That agrees with this file's own earlier conclusion rather than contradicting it —
+**CAIRN's difficulty is not precision** — and it is why the mechanic is fair. The
+arc the player aims with is drawn from the same integrator, in time slowed to
+15%, and past 22% of screen height the drag stops adding power and refines angle
+only, so one pixel at 90% power is 0.05% of full. A careful hand can make these.
+A hurried one cannot, and the average model's 5.5% is wider than the 5.0% window.
+
+### The first version of that table was measuring itself
+
+It counted the share of a fixed fan of throws that landed, and reported hard gaps
+as **more forgiving than ordinary ones (7.3% against 2.8%)** — because a fan of
+full-power throws comes down 42 u away far more often than 22 u away. It was
+measuring how far the target was, not how hard it was to hit. A number that comes
+out backwards is usually describing the instrument, and this file now records
+three of those.
+
+### Requiring the body route destroyed the mechanic
+
+"One hard jump, or two easy ones over your own body" is the design sentence, so
+the obvious move was to make the generator prove the second route too, with the
+same search `routeExists` uses. Measured, it selects against the thing it is
+meant to guarantee: **the gaps a single apex body can bridge are the short ones.**
+
+| | hard gaps | median span | angle window | average stands on itself |
+|---|---|---|---|---|
+| direct proof only (shipped) | 33.5% of gaps | **42.4 u** | 23.0° | **6.53%** |
+| direct + body route required | 17.4% | **25.7 u** | 23.5° | **3.45%** |
+
+The filter kept the short gaps, the surviving "hard" gaps forgave more error than
+ordinary ones, and the gated number fell below its target. So the body route is
+measured, not decreed — and it is not needed for safety, because the no-wall
+promise is carried entirely by the direct proof.
+
+**What a body is actually worth, then:** 33 of 76 sampled hard gaps can be
+crossed in exactly two jumps over one body. The rest take either the direct jump
+or more than one body, and **two-body routes are still unmeasured**, the same gap
+this file recorded against the overreach mechanic.
+
+### Where it landed
+
+60 seeds × 50 attempts per skill, 9,000 climbs, against the same run at
+`c1bf734`:
+
+| | body landings | median death | attempt 1 | best after 50 | jumps/climb |
+|---|---|---|---|---|---|
+| novice | 32.60% → **32.41%** | 114 → **121 m** | 155 → **147 m** | 381 → **373 m** | 8.5 → **8.7** |
+| average | 1.92% → **6.53%** | 1,269 → **682 m** | 1,069 → **536 m** | 4,887 → **1,700 m** | 79 → **38** |
+| expert | 0.02% → **2.73%** | 32,821 → **2,023 m** | 27,941 → **1,445 m** | 86,637 → **6,566 m** | 1,643 → **112** |
+
+**The expert is killable again: 60 of 60 seeds hit the launch cap before, 0 do
+now.** That was not the goal and it is the clearest evidence the tower has a
+ceiling that is not a wall — every one of those 4,506 gaps is crossable in one
+launch from the worst footing.
+
+### The four targets, re-read
+
+| | before | after | |
+|---|---|---|---|
+| 1 — novice 50 m by attempt 5 / 150 m by 25 | 100% / 100% | **100% / 100%** | holds |
+| 2 — average median curve keeps moving | rise 65 m, longest 40 m stall 5 attempts | **rise 345 m, stall 3 attempts** | holds, and better |
+| 3 — expert passes 600 m, not on attempt 1 | **95.12% on attempt 1** | **83.33%** | **does not hold, and did not before** |
+| 4 — no 10 m band over 12% of deaths | 6.73 / 1.03 / 1.44% | **6.27 / 1.87 / 0.97%** | holds |
+
+Target 3 is stated as failing rather than reported as improved. It broke when
+`overreachRate` went to zero — an expert who can reach every ledge in one jump
+climbs until they get bored — and hard gaps move it 12 points in the right
+direction without fixing it. Closing it needs gaps that genuinely cannot be
+crossed, which is the mechanic that produced three unleavable ledges for a real
+player. **That trade has already been decided in this repository and this section
+does not reopen it.**
+
+The band-hazard rows are worth reading too, because the absolute numbers moved
+much more than the ratios: for the average model the 700–800 m band went from
+killing 7% of the attempts that reached it to killing 30% early in a session and
+16% late. The ×0.55 softening is unchanged — erosion still does not fully hold —
+but the band is a real obstacle now rather than a formality.
+
+---
+
 ## The plateau: what was tried, and why it did not ship
 
 The caveat under target 2 says the average player's median death height flattens
@@ -639,6 +789,15 @@ Open, not done, not claimed:
   about a person, and no bot in this repository can answer it.
 - **Only one `seed0`.** 200 world seeds is a lot of towers but they all descend
   from `0x1a2b3c`. A second root has not been run.
+- **Nothing here knows whether a hard gap is fun to be stopped by.** It is proven
+  crossable, proven to demand power rather than aim, and proven to be used — the
+  average model stands on its own bodies 2.44 times a climb. Whether a person
+  reads a gap they failed twice as a decision about where to leave a body or as
+  the game refusing them is a question about a person.
+- **Two-body routes are still unmeasured**, so "33 of 76 hard gaps are bridged by
+  one body" is a floor on how often the shortcut exists, not the number.
+- **Target 3 does not hold** and is recorded as failing above rather than folded
+  into the improvement.
 - **The precision survey never launches from a wall.** Section A proves the arc
   is honest from a cling; section B's 4,186 sampled jumps all leave from the
   ground, because that is what the bot does. Wall-launch tolerance is unmeasured.
