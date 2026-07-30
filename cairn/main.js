@@ -1,10 +1,15 @@
 import { FEEL, COLUMN, BIOME_SPAN } from './src/feel.js';
-import { Sim, PHASE, EV, predict } from './src/sim.js';
+import { Sim, PHASE, EV, predict, solidHalfWidth } from './src/sim.js';
 import { Input } from './src/input.js';
 import { Renderer, Camera } from './src/render.js';
 import { Post } from './src/post.js';
 import { Audio } from './src/audio.js';
 import * as Store from './src/store.js';
+import * as Progress from './src/progress.js';
+import * as Money from './src/money.js';
+import { initLang, t, height as fmtHeight } from './src/i18n.js';
+import { Panel } from './src/panel.js';
+import { track, EVENTS } from './src/analytics.js';
 
 /**
  * CAIRN — the loop.
@@ -84,6 +89,11 @@ const ui = {
   /** @type {Record<string, number>} */
   beats: {},
   taught: false,
+  // What THIS attempt did, for the marks that ask about a run rather than a
+  // lifetime. Reset by `finishDeath`, read by `checkMarks`.
+  runStood: 0,
+  runLaunches: 0,
+  runFloor: 0,
 };
 
 let dpr = 1;
@@ -98,7 +108,9 @@ const el = {
   toast: need('toast'),
   best: need('best'),
   debug: need('debug'),
-  mute: /** @type {HTMLButtonElement} */ (need('mute')),
+  streak: need('streak'),
+  menu: /** @type {HTMLButtonElement} */ (need('menu')),
+  panel: /** @type {HTMLElement} */ (need('panel')),
   monshare: /** @type {HTMLButtonElement} */ (need('monshare')),
   daily: /** @type {HTMLButtonElement} */ (need('daily')),
 };
@@ -116,8 +128,12 @@ addEventListener('orientationchange', () => setTimeout(resize, 120));
 // ---------------------------------------------------------------- haptics
 
 /** @param {number|number[]} pattern */
+let haptics = true;
+try { haptics = localStorage.getItem('cairn.haptics') !== '0'; } catch { /* private */ }
+
+/** @param {number|number[]} pattern */
 function buzz(pattern) {
-  if (reduced) return;
+  if (reduced || !haptics) return;
   try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* iOS: silent */ }
 }
 
@@ -139,7 +155,21 @@ function begin() {
   sim.phase = PHASE.PLAY;
   ui.bestAtRunStart = sim.best;
   ui.recordCrossed = false;
+  ui.runFloor = sim.body.y;
+  Money.newRun();
   hideCard();
+  track(EVENTS.RUN_START, { daily: !!ui.daily });
+
+  // THE STREAK ROLLS ON THE FIRST RUN OF A UTC DAY, not at boot. Opening the app
+  // and closing it is not playing, and a streak you can keep without climbing is
+  // a streak that means nothing.
+  const day = Store.dailyDate();
+  const { rolled, streak } = Progress.touchDay(day);
+  if (rolled) {
+    Progress.flush();
+    track(EVENTS.STREAK, { days: streak });
+    if (streak > 1) showStreak(streak);
+  }
 }
 
 /**
@@ -160,13 +190,48 @@ function handleDeath() {
 function finishDeath() {
   ui.dead = 0;
   const beat = sim.best > ui.bestAtRunStart + 0.5;
+
+  // Bank the run BEFORE respawning, while the numbers still describe it.
+  const apex = sim.body.peakY;
+  Progress.record({
+    best: sim.best,
+    stones: 1,
+    stood: ui.runStood,
+    launches: ui.runLaunches,
+    climbed: Math.max(0, apex - ui.runFloor),
+  });
+  track(EVENTS.DEATH, {
+    height: Math.round(apex), stood: ui.runStood,
+    launches: ui.runLaunches, daily: !!ui.daily,
+  });
+  let solid = 0;
+  for (const s of sim.world.solids) if (s.corpse && solidHalfWidth(s, sim) > 0) solid++;
+  const won = Progress.checkMarks({
+    height: apex, stood: ui.runStood, launches: ui.runLaunches,
+    daily: !!ui.daily, bodiesAlive: solid,
+  });
+  Progress.flush();
+
   sim.respawn();
   renderer.trailN = 0;
   Store.save(sim);
   ui.bestAtRunStart = sim.best;
   ui.recordCrossed = false;
+  ui.runStood = 0;
+  ui.runLaunches = 0;
+  ui.runFloor = sim.body.y;
+  Money.newRun();
+
   // The summary lands AFTER control has come back, so the retry is never gated.
   if (beat) showBanner();
+  // A mark is a fragment, not a modal — same strip as everything else, and it
+  // waits for the record card so two things never speak at once.
+  for (const m of won) track(EVENTS.MARK, { id: m.id });
+  const first = won[0];
+  if (first) {
+    setTimeout(() => toast(t('toast.unlocked', { name: Progress.markName(first) }), 'mark'),
+               beat ? 1200 : 200);
+  }
 }
 
 /**
@@ -189,10 +254,20 @@ function crossedRecord() {
 
 // ------------------------------------------------------------------ cards
 
+let introShown = false;
 function showTitle() {
-  el.card.className = 'on';
-  el.card.innerHTML =
-    `<h1>CAIRN</h1><p class="tag">EVERY DEATH LEAVES A STONE</p><p class="go">TOUCH TO BEGIN</p>`;
+  el.card.className = introShown ? 'on' : 'on intro';
+  introShown = true;
+  el.card.replaceChildren();
+  const h = document.createElement('h1');
+  h.textContent = t('menu.title');
+  const tag = document.createElement('p');
+  tag.className = 'tag';
+  tag.textContent = t('title.tagline');
+  const go = document.createElement('p');
+  go.className = 'go';
+  go.textContent = t('title.begin');
+  el.card.append(h, tag, go);
 }
 function hideCard() { el.card.className = ''; }
 
@@ -202,9 +277,28 @@ function hideCard() { el.card.className = ''; }
  * in it that takes a touch, and ignoring it costs nothing.
  */
 function showBanner() {
-  el.best.innerHTML =
-    `<span class="k">NEW HIGH</span><b>${Math.round(sim.best)}m</b>` +
-    `<span class="k">${sim.deaths} STONES</span><button id="share">SHARE</button>`;
+  el.best.replaceChildren();
+  /**
+   * @param {string} tag
+   * @param {string} cls
+   * @param {string} text
+   * @returns {HTMLElement}
+   */
+  const mk = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    e.textContent = text;
+    return e;
+  };
+  const share = /** @type {HTMLButtonElement} */ (mk('button', '', t('run.share')));
+  share.id = 'share';
+  share.type = 'button';
+  el.best.append(
+    mk('span', 'k', t('run.best')),
+    mk('b', '', fmtHeight(sim.best)),
+    mk('span', 'k', t('run.stones', { n: sim.deaths })),
+    share,
+  );
   el.best.className = 'on';
   ui.banner = 4.2;
   const shareBtn = /** @type {HTMLButtonElement} */ (el.best.querySelector('#share'));
@@ -213,17 +307,29 @@ function showBanner() {
     e.stopPropagation();
     ui.banner = 4.2;
     const how = await Store.share(sim);
-    toast(how === 'copied' ? 'COPIED TO CLIPBOARD'
-      : how === 'downloaded' ? 'SAVED' : how === 'shared' ? '' : 'COULD NOT SHARE');
+    track(EVENTS.SHARE, { how, height: Math.round(sim.best) });
+    toast(how === 'copied' ? t('toast.copied')
+      : how === 'downloaded' ? t('toast.saved') : how === 'shared' ? '' : t('toast.failed'));
   };
 }
 
 /** @param {string} msg */
-function toast(msg) {
+/**
+ * @param {string} msg
+ * @param {string} [kind]
+ */
+function toast(msg, kind) {
   if (!msg) return;
   el.toast.textContent = msg;
-  el.toast.className = 'on';
+  el.toast.className = kind ? `on ${kind}` : 'on';
   ui.toast = 2.2;
+}
+
+/** @param {number} days */
+function showStreak(days) {
+  el.streak.textContent = t('toast.streak', { n: days });
+  el.streak.className = 'on';
+  setTimeout(() => { el.streak.className = ''; }, 3200);
 }
 
 // ------------------------------------------------------------------- input
@@ -314,8 +420,9 @@ function setMode(daily) {
   renderer.trailN = 0;
   ui.bestAtRunStart = sim.best;
   ui.recordCrossed = false;
-  el.daily.className = daily ? 'on' : '';
-  el.daily.textContent = daily ? `DAILY ${date.slice(5)}` : 'DAILY';
+  el.daily.className = daily ? 'corner on' : 'corner';
+  el.daily.textContent = daily ? t('hud.daily.on', { date: date.slice(5) }) : t('hud.daily');
+  track(EVENTS.MODE, { daily });
   try { localStorage.setItem('cairn.mode', daily ? 'daily' : ''); } catch { /* private */ }
 }
 
@@ -335,7 +442,8 @@ el.monshare.addEventListener('pointerdown', async (e) => {
   e.preventDefault();
   e.stopPropagation();
   const how = await Store.share(sim);
-  if (how !== 'shared') toast(how === 'copied' ? 'COPIED' : 'SAVED');
+  track(EVENTS.SHARE, { how, height: Math.round(sim.best) });
+  if (how !== 'shared') toast(how === 'copied' ? t('toast.copied') : t('toast.saved'));
 });
 input.onChargeStart = () => { audio.charge(); buzz(8); };
 input.onRelease = /** @param {number} p */ (p) => { audio.release(p); buzz(14); };
@@ -362,6 +470,7 @@ function drainEvents() {
       handleDeath();
     } else if (kind === EV.LAUNCH) {
       beat('firstLaunch');
+      ui.runLaunches++;
       ui.squashVel += 5;
     }
   }
@@ -417,10 +526,17 @@ function update(real) {
     if (!ui.recordCrossed) { ui.recordCrossed = true; crossedRecord(); }
   }
 
-  // Standing on yourself: the beat, and the one lesson the game teaches.
+  // Standing on yourself: the beat, the lesson, and the counter the marks read.
   if (sim.phase === PHASE.PLAY && b.grounded && b.standing && b.standing.corpse) {
     beat('firstCorpse');
+    if (b.standing !== lastStoodOn) {
+      lastStoodOn = b.standing;
+      ui.runStood++;
+      track(EVENTS.STOOD_ON_SELF, { height: Math.round(b.y) });
+    }
     teach();
+  } else if (b.grounded) {
+    lastStoodOn = null;
   }
 
   // Title: a live scene, drifting slowly up whatever tower this player has.
@@ -492,7 +608,10 @@ function frame(now) {
   // The small readable counter. The huge one is drawn inside the scene so the
   // post chain grades it with everything else.
   const h = Math.max(0, Math.round(ui.started ? b.y : 0));
-  if (h !== lastShown) { lastShown = h; el.small.textContent = ui.started ? `${h}m` : ''; }
+  if (h !== lastShown) {
+    lastShown = h;
+    el.small.textContent = ui.started ? t('hud.metres', { n: h }) : '';
+  }
   if (ui.monument) camera.monTop = Math.max(sim.best, sim.runBest, sim.body.y, 60);
 
   if (debugOn) drawDebug(real);
@@ -500,16 +619,20 @@ function frame(now) {
 
 let lastShown = -1;
 let lastSteps = 0;
+/** The body most recently stood on, so one landing counts once. */
+let lastStoodOn = /** @type {import('./src/types.js').Solid|null} */ (null);
 
 // -------------------------------------------------------------------- pause
 
 document.addEventListener('visibilitychange', () => {
   paused = document.hidden;
   audio.duck(document.hidden);
-  if (document.hidden) { input.abort(); audio.stopCharge(); Store.save(sim); }
+  if (document.hidden) {
+    input.abort(); audio.stopCharge(); Store.save(sim); Progress.flush();
+  }
   else { lastFrame = performance.now(); accum = 0; }
 });
-addEventListener('pagehide', () => Store.save(sim));
+addEventListener('pagehide', () => { Store.save(sim); Progress.flush(); });
 
 // -------------------------------------------------------------------- debug
 
@@ -539,18 +662,66 @@ function drawDebug(real) {
 
 // ---------------------------------------------------------------------- mute
 
-el.mute.addEventListener('pointerdown', (e) => {
+/**
+ * THE PANEL. Reached from a corner, never raised by the game.
+ *
+ * It pauses, which nothing else in this product is allowed to do — and it is
+ * allowed to because the player asked for it by touching a control in the corner
+ * where their thumb already is. Test 14's rule is that nothing blocks the middle
+ * of the screen DURING a climb, and this obeys it by construction.
+ */
+const panel = new Panel(el.panel, {
+  onClose: () => { paused = false; lastFrame = performance.now(); accum = 0; },
+  onLangChange: () => { applyLang(); },
+  onWipe: () => {
+    Store.wipe();
+    Progress.reset();
+    sim.best = 0;
+    sim.deaths = 0;
+    sim.reset(true);
+    camera.y = 0;
+    renderer.trailN = 0;
+    ui.started = false;
+    showTitle();
+  },
+  getAudio: () => audio,
+  getHaptics: () => haptics,
+  setHaptics: (on) => {
+    haptics = on;
+    try { localStorage.setItem('cairn.haptics', on ? '1' : '0'); } catch { /* private */ }
+    if (on) buzz(12);
+  },
+});
+
+el.menu.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   e.stopPropagation();
   audio.unlock();
-  audio.setMuted(!audio.muted);
-  el.mute.textContent = audio.muted ? 'SOUND OFF' : 'SOUND ON';
+  if (panel.open) { panel.hide(); return; }
+  paused = true;
+  input.abort();
+  audio.stopCharge();
+  Store.save(sim);
+  Progress.flush();
+  panel.show('menu');
 });
-el.mute.textContent = localStorage.getItem('cairn.mute') === '1' ? 'SOUND OFF' : 'SOUND ON';
+
+/** Re-render every string in place after a language change. */
+function applyLang() {
+  el.daily.textContent = ui.daily
+    ? t('hud.daily.on', { date: Store.dailyDate().slice(5) })
+    : t('hud.daily');
+  el.monshare.textContent = t('hud.share');
+  if (!ui.started) showTitle();
+}
 
 // A last-resort starter. The canvas listener is the real path, but a touch
 // anywhere on the document must never be able to do nothing at all.
-addEventListener('pointerdown', () => { if (!ui.started) begin(); }, { passive: true });
+addEventListener('pointerdown', (e) => {
+  if (panel.open) return;
+  if (/** @type {Element} */ (e.target)?.closest?.('button')) return;
+  if (!ui.started) begin();
+}, { passive: true });
 
 // ---------------------------------------------------------------------- boot
 
@@ -565,13 +736,14 @@ if (bootDaily) {
   sim.world.seed = Store.dailySeed(d);
   Store.setSlot(`daily.${d}`);
   sim.reset(true);
-  el.daily.className = 'on';
-  el.daily.textContent = `DAILY ${d.slice(5)}`;
-} else {
-  el.daily.textContent = 'DAILY';
+  el.daily.className = 'corner on';
 }
+initLang();
+Progress.load();
+Money.countSession();
 Store.load(sim);
 resize();
+applyLang();
 showTitle();
 camera.y = 0;
 requestAnimationFrame(frame);

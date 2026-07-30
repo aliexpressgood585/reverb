@@ -1,21 +1,57 @@
 /*
  * CAIRN — the whole stylesheet.
  *
- * Two jobs: make the page behave like an app rather than a document, and stay
- * out of the way of the canvas. Every rule that kills a browser gesture is load
- * bearing — a climbing game is one long drag, and a drag that the browser reads
- * as a pull-to-refresh is a dead game on the first jump.
+ * Three jobs: make the page behave like an app rather than a document, stay out
+ * of the way of the canvas, and express DESIGN.md exactly.
  *
- * Nothing in the input path has a transition. Latency is a feature you can only
- * lose.
+ * Every rule that kills a browser gesture is load-bearing — a climbing game is
+ * one long drag, and a drag the browser reads as pull-to-refresh is a dead game
+ * on the first jump.
+ *
+ * NOTHING IN THE INPUT PATH HAS A TRANSITION. Latency is a feature you can only
+ * lose, and a 90 ms ease on something that fires a launch is 90 ms of lie.
+ *
+ * RTL: every inline offset is written with `inset-inline-start/end`, `margin-
+ * inline` and `padding-inline`, so setting `dir="rtl"` on <html> mirrors the
+ * whole interface without a second stylesheet. Three things deliberately do NOT
+ * mirror and are marked where they appear: the canvas, the height numeral, and
+ * anything showing a number with a unit.
  */
 
 :root {
-  --ink: #dce3e8;
-  --gold: #c99a4a;
-  --void: #04060b;
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  /* ---- palette. Named for what it IS in the world. See DESIGN.md. ---- */
+  --void: #05070c;      /* the shaft */
+  --rime: #8fa3b0;      /* cold air on stone */
+  --quartz: #e8eff3;    /* fresh rock, lit */
+  --ember: #ff6b35;     /* a body that fell recently */
+  --memory: #c99a4a;    /* a body that has been there a long time */
+  --fault: #4a5b6b;     /* the line between rock and air. NEVER text. */
+
+  /* ---- type ---- */
+  --font-display: ui-sans-serif, -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-ui: ui-sans-serif, -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-num: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  --track-display: 0.42em;
+  --track-ui: 0.22em;
+
+  /* ---- motion. The input path uses none of these. ---- */
+  --t-instant: 90ms;
+  --t-quick: 180ms;
+  --t-slow: 420ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ---- space ---- */
+  --gap: 14px;
+  --edge: 16px;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-s: env(safe-area-inset-left, 0px);
+  --safe-e: env(safe-area-inset-right, 0px);
 }
+
+/* Hebrew letterforms do not take Latin tracking. */
+:root:lang(he) { --track-display: 0.12em; --track-ui: 0.06em; }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -26,9 +62,9 @@ html, body {
   position: fixed;
   inset: 0;
   background: var(--void);
-  color: var(--ink);
-  font: 300 13px/1.5 var(--mono);
-  letter-spacing: 0.18em;
+  color: var(--quartz);
+  font: 300 13px/1.5 var(--font-ui);
+  letter-spacing: var(--track-ui);
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
 
@@ -42,6 +78,8 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* THE CANVAS NEVER MIRRORS. The tower is a physical space; a climb that goes
+   right in English does not go left in Hebrew. */
 #view {
   position: fixed;
   inset: 0;
@@ -49,19 +87,26 @@ html, body {
   height: 100%;
   display: block;
   touch-action: none;
+  direction: ltr;
 }
 
 /* --------------------------------------------------------------- the number */
 
+/* A number with a unit. Stays LTR in both languages — "120m" reversed is not a
+   Hebrew convention, it is a bug. Sits in the top 20% because it is glanceable
+   and never touched; nothing that must be TOUCHED goes up here, where a reaching
+   hand covers the screen. */
 #height {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 14px);
-  left: 0;
-  right: 0;
+  top: calc(var(--safe-t) + 14px);
+  inset-inline: 0;
   text-align: center;
+  direction: ltr;
+  font-family: var(--font-num);
   font-size: 12px;
   letter-spacing: 0.34em;
-  opacity: 0.42;
+  color: var(--rime);
+  opacity: 0.55;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
   z-index: 2;
@@ -72,88 +117,91 @@ html, body {
 #card {
   position: fixed;
   inset: 0;
-  /* The card is a SCRIM, not a wall. It covers the whole screen so the title
-     can sit over the live scene, which means without this it swallows every
-     touch and the game cannot be started at all — which is precisely what
-     shipped. Only its buttons take input; everything else falls through to the
-     canvas underneath. */
+  /* The card is a SCRIM, not a wall. It covers the whole screen so the title can
+     sit over the live scene, which means without this it swallows every touch
+     and the game cannot be started at all — which is precisely what shipped
+     once. Only its buttons take input. */
   pointer-events: none;
   display: none;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 0 24px calc(env(safe-area-inset-bottom, 0px) + 24px);
+  padding: 0 24px calc(var(--safe-b) + 24px);
   text-align: center;
   z-index: 4;
-  /* A scrim rather than a wall: the live scene stays visible behind the title,
-     which is the whole reason the title is a scene and not a picture. */
-  background:
-    radial-gradient(120% 70% at 50% 45%, rgba(4, 6, 11, 0.86) 0%, rgba(4, 6, 11, 0.55) 55%, rgba(4, 6, 11, 0.9) 100%);
+  background: radial-gradient(120% 70% at 50% 45%,
+    rgba(5, 7, 12, 0.86) 0%, rgba(5, 7, 12, 0.55) 55%, rgba(5, 7, 12, 0.92) 100%);
 }
 
 #card.on { display: flex; }
 
 #card h1 {
+  font-family: var(--font-display);
   font-size: clamp(30px, 12vw, 62px);
   font-weight: 200;
-  letter-spacing: 0.3em;
-  text-indent: 0.3em;
+  letter-spacing: var(--track-display);
+  text-indent: var(--track-display);
   max-width: 100%;
-  font-variant-numeric: tabular-nums;
+  color: var(--quartz);
 }
 
-#card .idx { font-size: 10px; opacity: 0.45; letter-spacing: 0.4em; }
-#card .tag { font-size: 11px; opacity: 0.5; letter-spacing: 0.24em; }
+/* The load sequence: the wordmark's tracking settles, then the rest arrives.
+   900 ms total, once. */
+#card.intro h1 { animation: settle 900ms var(--ease) both; }
+#card.intro .tag { animation: rise var(--t-slow) var(--ease) 500ms both; }
+#card.intro .go { animation: rise var(--t-slow) var(--ease) 760ms both; }
+
+@keyframes settle {
+  from { letter-spacing: 0.66em; text-indent: 0.66em; opacity: 0; }
+  to   { letter-spacing: var(--track-display); text-indent: var(--track-display); opacity: 1; }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+#card .tag {
+  font-size: 11px;
+  letter-spacing: var(--track-ui);
+  color: var(--rime);
+  opacity: 0.72;
+}
 
 #card .go {
   margin-top: 30px;
   font-size: 11px;
   letter-spacing: 0.34em;
+  color: var(--rime);
   animation: breathe 2.8s ease-in-out infinite;
 }
 
 @keyframes breathe { 0%, 100% { opacity: 0.26; } 50% { opacity: 0.86; } }
 
-#card .row { display: flex; gap: 12px; margin-top: 26px; }
-
-#card button {
-  pointer-events: auto;
-  appearance: none;
-  background: transparent;
-  border: 1px solid rgba(220, 227, 232, 0.24);
-  color: var(--ink);
-  font: 300 11px/1 var(--mono);
-  letter-spacing: 0.3em;
-  padding: 14px 20px;
-  cursor: pointer;
-  touch-action: none;
-}
-
-#card button:active { border-color: rgba(220, 227, 232, 0.7); }
-
 /* ---------------------------------------------------------------- fragments */
 
 #toast {
   position: fixed;
-  left: 0; right: 0;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 74px);
+  inset-inline: 0;
+  bottom: calc(var(--safe-b) + 74px);
   text-align: center;
   font-size: 10px;
-  letter-spacing: 0.3em;
+  letter-spacing: var(--track-ui);
+  color: var(--rime);
   opacity: 0;
   pointer-events: none;
-  z-index: 5;
+  z-index: 7;
+  transition: opacity var(--t-quick) var(--ease);
 }
-#toast.on { opacity: 0.62; }
+#toast.on { opacity: 0.8; }
+#toast.mark { color: var(--memory); }
 
 /* The record banner. It reports and leaves; it never gates the retry. Only the
-   SHARE chip takes a touch — everything else falls through to the canvas so a
-   player mid-flow never has to dismiss anything. */
+   SHARE chip takes a touch. */
 #best {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 40px);
-  left: 0; right: 0;
+  top: calc(var(--safe-t) + 40px);
+  inset-inline: 0;
   display: none;
   align-items: center;
   justify-content: center;
@@ -161,52 +209,78 @@ html, body {
   pointer-events: none;
   z-index: 5;
   opacity: 0;
-  transition: opacity 0.35s ease;
+  transition: opacity var(--t-slow) ease;
 }
 #best.on { display: flex; opacity: 1; }
-#best .k { font-size: 9px; letter-spacing: 0.3em; opacity: 0.4; }
+#best .k { font-size: 9px; letter-spacing: var(--track-ui); color: var(--rime); opacity: 0.7; }
 #best b {
+  font-family: var(--font-num);
   font-weight: 300;
   font-size: 19px;
   letter-spacing: 0.1em;
   font-variant-numeric: tabular-nums;
-  color: var(--gold);
+  unicode-bidi: isolate;
+  color: var(--memory);
 }
 #best button {
   pointer-events: auto;
   appearance: none;
   background: none;
   border: 1px solid rgba(201, 154, 74, 0.35);
-  color: var(--gold);
-  font: 300 9px/1 var(--mono);
-  letter-spacing: 0.26em;
+  color: var(--memory);
+  font: 300 9px/1 var(--font-ui);
+  letter-spacing: var(--track-ui);
   padding: 7px 10px;
   touch-action: none;
 }
 
-#mute {
+/* --------------------------------------------------------- corner controls */
+
+/* The thumb lives in the bottom 45%. Everything touchable is down here. */
+.corner {
   position: fixed;
-  right: calc(env(safe-area-inset-right, 0px) + 14px);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  bottom: calc(var(--safe-b) + 10px);
   appearance: none;
   background: none;
   border: 0;
-  color: var(--ink);
-  opacity: 0.22;
-  font: 300 9px/1 var(--mono);
-  letter-spacing: 0.28em;
-  padding: 10px;
+  color: var(--rime);
+  opacity: 0.32;
+  font: 300 9px/1 var(--font-ui);
+  letter-spacing: var(--track-ui);
+  padding: 12px;
+  min-width: 44px;
+  min-height: 44px;   /* the smallest thing a thumb should have to find */
   z-index: 5;
   touch-action: none;
 }
+#daily { inset-inline-start: calc(var(--safe-s) + 8px); }
+#menu  { inset-inline-end: calc(var(--safe-e) + 8px); }
+#daily.on { opacity: 0.8; color: var(--memory); }
+
+#streak {
+  position: fixed;
+  bottom: calc(var(--safe-b) + 12px);
+  inset-inline: 0;
+  text-align: center;
+  font: 300 9px/1 var(--font-ui);
+  letter-spacing: var(--track-ui);
+  color: var(--memory);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity var(--t-quick) var(--ease);
+}
+#streak.on { opacity: 0.55; }
 
 #debug {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 40px);
-  left: 12px;
+  top: calc(var(--safe-t) + 40px);
+  inset-inline-start: 12px;
   display: none;
-  font: 300 10px/1.4 var(--mono);
+  font: 300 10px/1.4 var(--font-num);
   letter-spacing: 0.06em;
+  direction: ltr;
+  text-align: start;
   color: #7de0b0;
   opacity: 0.85;
   pointer-events: none;
@@ -215,64 +289,193 @@ html, body {
 }
 #debug.on { display: block; }
 
-@media (prefers-reduced-motion: reduce) {
-  #card .go { animation: none; opacity: 0.6; }
+/* ------------------------------------------------------------------ panels */
+
+/*
+ * Menu, statistics, marks and settings. One element, one layout, four contents —
+ * a game with four separately styled screens is a game with four things to keep
+ * in step, and this one has an interface small enough not to need them.
+ *
+ * A panel PAUSES. It is the only thing in the product that is allowed to.
+ */
+#panel {
+  position: fixed;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  z-index: 8;
+  background: linear-gradient(180deg, rgba(5, 7, 12, 0.97), rgba(5, 7, 12, 0.99));
+  padding: calc(var(--safe-t) + 20px) calc(var(--safe-e) + var(--edge))
+           calc(var(--safe-b) + 20px) calc(var(--safe-s) + var(--edge));
 }
+#panel.on { display: flex; animation: panelIn var(--t-quick) var(--ease) both; }
+@keyframes panelIn { from { opacity: 0; } to { opacity: 1; } }
+
+#panel h2 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 300;
+  letter-spacing: var(--track-display);
+  color: var(--rime);
+  opacity: 0.8;
+  margin-bottom: 18px;
+  flex: 0 0 auto;
+}
+
+#panel .body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;      /* the ONE place a scroll is allowed */
+}
+
+#panel .foot {
+  flex: 0 0 auto;
+  display: flex;
+  gap: var(--gap);
+  padding-top: 16px;
+}
+
+/* A row: label at the start, value at the end. Mirrors with `dir`. */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 13px 2px;
+  border-bottom: 1px solid rgba(74, 91, 107, 0.28);
+}
+.row .lab { font-size: 12px; color: var(--quartz); opacity: 0.9; }
+/*
+ * A VALUE IS ISOLATED, NOT FORCED LTR — and the difference was visible only in a
+ * screenshot.
+ *
+ * This was `direction: ltr`, on the reasoning that "412 m" should not mirror.
+ * That is right when the unit is Latin and wrong when it is not: the Hebrew
+ * string is "{n} מ׳", and forcing the run left-to-right put the unit before the
+ * number, so the statistics screen read "מ׳ 0" — backwards, in the language the
+ * developer actually speaks.
+ *
+ * `isolate` gives the bidi algorithm what it needs: the value is its own run, so
+ * a stray digit cannot reorder the label next to it, and inside that run the
+ * document's direction applies. English reads "412 m"; Hebrew reads "0 מ׳".
+ */
+.row .val {
+  font-family: var(--font-num);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  unicode-bidi: isolate;
+  color: var(--rime);
+}
+
+/* A mark. Earned ones take --memory; the rest are a rule and a hint. */
+.mark {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 11px 2px;
+  border-bottom: 1px solid rgba(74, 91, 107, 0.2);
+  opacity: 0.35;
+}
+.mark.got { opacity: 1; }
+.mark .nm { font-size: 12px; color: var(--rime); }
+.mark.got .nm { color: var(--memory); }
+.mark .st { font-size: 9px; letter-spacing: var(--track-ui); color: var(--fault); }
+.mark.got .st { color: var(--memory); opacity: 0.7; }
+
+/* Buttons. One is primary per screen and it is the only --ember thing on it. */
+button.btn {
+  appearance: none;
+  flex: 1 1 auto;
+  background: transparent;
+  border: 1px solid rgba(143, 163, 176, 0.3);
+  color: var(--quartz);
+  font: 300 11px/1 var(--font-ui);
+  letter-spacing: var(--track-ui);
+  padding: 15px 16px;
+  min-height: 48px;
+  cursor: pointer;
+  touch-action: none;
+  transition: border-color var(--t-instant) var(--ease);
+}
+button.btn:active { border-color: var(--quartz); }
+button.btn.primary { border-color: rgba(255, 107, 53, 0.55); color: var(--ember); }
+button.btn.danger { border-color: rgba(255, 107, 53, 0.3); color: var(--ember); opacity: 0.75; }
 
 /* ------------------------------------------------------------- monument */
 
 /*
  * Monument view is the whole lifetime tower on one screen and nothing else.
- * Every reading surface goes away — the height, the record strip, the mute
- * toggle — because the image is the point and a number on top of it is an
+ * Every reading surface goes away — the height, the record strip, the corner
+ * controls — because the image is the point and a number on top of it is an
  * apology for the image.
  */
 body.monument #height,
 body.monument #best,
-body.monument #mute,
+body.monument #streak,
+body.monument .corner,
 body.monument #toast { opacity: 0; pointer-events: none; }
 
 #monshare {
   position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 26px);
+  inset-inline: 0;
+  margin-inline: auto;
+  width: max-content;
+  bottom: calc(var(--safe-b) + 26px);
   appearance: none;
   background: none;
-  border: 1px solid rgba(201, 154, 74, 0.30);
+  border: 1px solid rgba(201, 154, 74, 0.3);
   color: rgba(201, 154, 74, 0.85);
-  font: 300 10px/1 var(--mono);
-  letter-spacing: 0.30em;
-  padding: 12px 20px;
+  font: 300 10px/1 var(--font-ui);
+  letter-spacing: var(--track-ui);
+  padding: 14px 22px;
+  min-height: 44px;
   z-index: 6;
   touch-action: none;
   opacity: 0;
   pointer-events: none;
+  transition: opacity var(--t-slow) var(--ease);
 }
-
 /* Offered only once the pull-back has landed, never during it. */
 #monshare.on { opacity: 1; pointer-events: auto; }
 
-/*
- * The Daily Climb switch. Mirrors #mute exactly — same size, same weight, same
- * near-invisibility — because it is the same KIND of thing: a setting, not a
- * feature competing with the tower for attention. It brightens when the daily
- * tower is the one you are on.
- */
-#daily {
+/* --------------------------------------------------------------- fallback */
+
+/* The error boundary. If the bundle throws before the loop starts, this is what
+   a player sees instead of a black rectangle. */
+#fatal {
   position: fixed;
-  left: calc(env(safe-area-inset-left, 0px) + 14px);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
-  appearance: none;
-  background: none;
-  border: 0;
-  color: var(--ink);
-  opacity: 0.22;
-  font: 300 9px/1 var(--mono);
-  letter-spacing: 0.28em;
-  padding: 10px;
-  z-index: 5;
-  touch-action: none;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px;
+  text-align: center;
+  background: var(--void);
+  z-index: 20;
 }
-#daily.on { opacity: 0.72; color: #C99A4A; }
-body.monument #daily { opacity: 0; pointer-events: none; }
+#fatal.on { display: flex; }
+#fatal p { font-size: 12px; color: var(--rime); max-width: 30ch; line-height: 1.7; }
+
+/* --------------------------------------------------------------- landscape */
+
+/* Handled, not embraced. This is a game played upright in one hand. */
+@media (orientation: landscape) and (max-height: 520px) {
+  #card h1 { font-size: clamp(24px, 7vh, 40px); }
+  #card .go { margin-top: 14px; }
+  #panel { padding-top: calc(var(--safe-t) + 10px); }
+  .row { padding: 9px 2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #card .go { animation: none; opacity: 0.6; }
+  #card.intro h1,
+  #card.intro .tag,
+  #card.intro .go { animation: none; }
+  #panel.on { animation: none; }
+  * { transition-duration: 1ms !important; }
+}

@@ -39,15 +39,21 @@
 <body>
 <canvas id="view"></canvas>
 
-<!-- The entire interface. One number, one card, one word of sound state. -->
+<!-- The entire interface. One number, one card, two corners, one panel. -->
 <p id="height"></p>
 <div id="card"></div>
 <p id="toast"></p>
 <div id="best"></div>
-<button id="mute" type="button"></button>
-<button id="monshare" type="button">SHARE THIS</button>
-<button id="daily" type="button">DAILY</button>
+<p id="streak"></p>
+<button id="monshare" type="button"></button>
+<button id="daily" class="corner" type="button"></button>
+<button id="menu" class="corner" type="button">≡</button>
+<div id="panel"></div>
 <pre id="debug"></pre>
+
+<!-- The error boundary. A game that throws before the loop starts must say so,
+     not present a black rectangle. Filled in by main.js; inert until then. -->
+<div id="fatal"><p></p></div>
 
 <script type="module" src="./main.js"></script>
 </body>
