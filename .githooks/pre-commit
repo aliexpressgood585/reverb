@@ -1,0 +1,14 @@
+#!/bin/sh
+# CAIRN pre-commit.
+#
+# Fast gates only. The things that take minutes — the acceptance suite, the
+# balance harness, the route audit — belong in a release checklist, not in the
+# path of every commit; a hook people disable protects nothing.
+set -e
+echo "pre-commit: typecheck"
+npx tsc --noEmit
+echo "pre-commit: lint"
+npx eslint .
+echo "pre-commit: unit tests"
+npx vitest run --silent
+echo "pre-commit: ok"

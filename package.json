@@ -2,16 +2,33 @@
   "name": "reverb",
   "version": "1.0.0",
   "private": true,
-  "description": "REVERB — a 3D stealth-horror game where sound is the only light.",
+  "description": "REVERB \u2014 a 3D stealth-horror game where sound is the only light.",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --port 4173"
+    "preview": "vite preview --port 4173",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "profile": "node scripts/cairn-profile.mjs",
+    "accept": "node scripts/cairn-check.mjs",
+    "bodies": "node scripts/cairn-bodies-check.mjs",
+    "reach": "node scripts/cairn-reach-check.mjs --from=0 --span=3000 --seeds=30"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.8.0",
+    "globals": "^17.8.0",
     "playwright": "^1.62.0",
-    "vite": "^7.1.5"
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2",
+    "vite": "^7.1.5",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "three": "^0.180.0"

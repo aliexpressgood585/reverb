@@ -10,21 +10,55 @@
 
 const BIOME_ROOT = [55, 61.74, 49, 43.65, 58.27, 65.41];  // A1, B1, G1, F1, Bb1, C2
 
+/**
+ * @typedef {object} Bed
+ * @property {OscillatorNode[]} oscs
+ * @property {BiquadFilterNode} filt
+ * @property {GainNode} out
+ */
+
 export class Audio {
   constructor() {
+    /** @type {AudioContext|null} null until the first touch unlocks it */
     this.ctx = null;
+    /** @type {GainNode|null} */
     this.master = null;
+    /** @type {Bed|null} */
     this.bed = null;
+    /** @type {{src: AudioBufferSourceNode, f: BiquadFilterNode, g: GainNode}|null} */
+    this._charge = null;
     this.muted = localStorage.getItem('cairn.mute') === '1';
-    this.ready = false;
     this.height = 0;
     this.biome = 0;
   }
 
+  /**
+   * The context and the master bus, or null if the first touch has not happened.
+   *
+   * Every sound in this file goes through here. It replaced a `ready` boolean
+   * that told the truth and told it in a way nothing could act on: `ready` being
+   * true did not make `this.ctx` non-null to a reader OR to a type checker, so
+   * each method reached through a nullable field on the strength of a flag set
+   * somewhere else. Now the guard and the values are the same expression.
+   *
+   * @returns {{c: AudioContext, m: GainNode}|null}
+   */
+  _live() {
+    return this.ctx && this.master ? { c: this.ctx, m: this.master } : null;
+  }
+
+  /** True once the first touch has built the graph. Read by the harness. */
+  get ready() { return !!this.ctx && !!this.master; }
+
   /** Unlocked by the first touch, per every mobile browser's autoplay policy. */
   unlock() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
-    const AC = window.AudioContext || window.webkitAudioContext;
+    // Safari under 14.1 and every WebView built on it only have the prefixed
+    // constructor. Cast rather than declare: this is the one line in the codebase
+    // that knows the prefix exists.
+    const AC = window.AudioContext
+      || /** @type {{webkitAudioContext?: typeof AudioContext}} */ (
+        /** @type {unknown} */ (window)).webkitAudioContext;
     if (!AC) return;
     this.ctx = new AC();
     const g = this.ctx.createGain();
@@ -32,22 +66,27 @@ export class Audio {
     g.connect(this.ctx.destination);
     this.master = g;
     this._bed();
-    this.ready = true;
   }
 
+  /** @param {boolean} m */
   setMuted(m) {
     this.muted = m;
     localStorage.setItem('cairn.mute', m ? '1' : '0');
-    if (this.master) this.master.gain.setTargetAtTime(m ? 0 : 0.9, this.ctx.currentTime, 0.05);
+    const L = this._live();
+    if (L) L.m.gain.setTargetAtTime(m ? 0 : 0.9, L.c.currentTime, 0.05);
   }
 
+  /** @param {boolean} on */
   duck(on) {
-    if (!this.master || this.muted) return;
-    this.master.gain.setTargetAtTime(on ? 0 : 0.9, this.ctx.currentTime, 0.08);
+    const L = this._live();
+    if (!L || this.muted) return;
+    L.m.gain.setTargetAtTime(on ? 0 : 0.9, L.c.currentTime, 0.08);
   }
 
   _bed() {
-    const c = this.ctx;
+    const L = this._live();
+    if (!L) return;
+    const c = L.c;
     const out = c.createGain();
     out.gain.value = 0.16;
     const filt = c.createBiquadFilter();
@@ -55,8 +94,9 @@ export class Audio {
     filt.frequency.value = 320;
     filt.Q.value = 0.7;
     filt.connect(out);
-    out.connect(this.master);
+    out.connect(L.m);
 
+    /** @type {OscillatorNode[]} */
     const oscs = [];
     for (let i = 0; i < 3; i++) {
       const o = c.createOscillator();
@@ -82,9 +122,14 @@ export class Audio {
   }
 
   /** Altitude drives brightness and detune. Biome changes re-root the drones. */
+  /**
+   * @param {number} y
+   * @param {number} biomeIndex
+   */
   setHeight(y, biomeIndex) {
-    if (!this.ready || !this.bed) return;
-    const t = this.ctx.currentTime;
+    const L = this._live();
+    if (!L || !this.bed) return;
+    const t = L.c.currentTime;
     const climb = Math.min(1, y / 900);
     this.bed.filt.frequency.setTargetAtTime(320 + climb * 1500, t, 0.6);
 
@@ -100,16 +145,28 @@ export class Audio {
     }
   }
 
+  /**
+   * @param {GainNode} node
+   * @param {number} peak
+   * @param {number} attack
+   * @param {number} decay
+   */
   _env(node, peak, attack, decay) {
-    const t = this.ctx.currentTime;
+    const L = this._live();
+    if (!L) return;
+    const t = L.c.currentTime;
     node.gain.cancelScheduledValues(t);
     node.gain.setValueAtTime(0.0001, t);
     node.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + attack);
     node.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
   }
 
-  _noise(dur) {
-    const c = this.ctx;
+  /**
+   * @param {number} dur seconds
+   * @param {AudioContext} c
+   * @returns {AudioBufferSourceNode}
+   */
+  _noise(dur, c) {
     const n = Math.max(1, Math.floor(c.sampleRate * dur));
     const buf = c.createBuffer(1, n, c.sampleRate);
     const d = buf.getChannelData(0);
@@ -121,10 +178,11 @@ export class Audio {
 
   /** Rising filtered noise; cutoff tracks the pull. Held while charging. */
   charge() {
-    if (!this.ready || this.muted) return;
+    const L = this._live();
+    if (!L || this.muted) return;
     this.stopCharge();
-    const c = this.ctx;
-    const src = this._noise(3);
+    const c = L.c;
+    const src = this._noise(3, c);
     src.loop = true;
     const f = c.createBiquadFilter();
     f.type = 'bandpass';
@@ -133,41 +191,48 @@ export class Audio {
     const g = c.createGain();
     g.gain.value = 0.0001;
     g.gain.setTargetAtTime(0.10, c.currentTime, 0.08);
-    src.connect(f); f.connect(g); g.connect(this.master);
+    src.connect(f); f.connect(g); g.connect(L.m);
     src.start();
     this._charge = { src, f, g };
   }
 
+  /** @param {number} power */
   chargeTo(power) {
-    if (!this._charge) return;
-    this._charge.f.frequency.setTargetAtTime(300 + power * 2400, this.ctx.currentTime, 0.03);
+    const L = this._live();
+    if (!this._charge || !L) return;
+    this._charge.f.frequency.setTargetAtTime(300 + power * 2400, L.c.currentTime, 0.03);
   }
 
   stopCharge() {
-    if (!this._charge) return;
+    const L = this._live();
+    if (!this._charge || !L) return;
     const { src, g } = this._charge;
-    g.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.04);
+    g.gain.setTargetAtTime(0.0001, L.c.currentTime, 0.04);
     setTimeout(() => { try { src.stop(); } catch { /* already gone */ } }, 200);
     this._charge = null;
   }
 
+  /** @param {number} power */
   release(power) {
     this.stopCharge();
-    if (!this.ready || this.muted) return;
-    const c = this.ctx;
+    const L = this._live();
+    if (!L || this.muted) return;
+    const c = L.c;
     const o = c.createOscillator();
     o.type = 'triangle';
     const g = c.createGain();
     o.frequency.setValueAtTime(180 + power * 260, c.currentTime);
     o.frequency.exponentialRampToValueAtTime(620 + power * 700, c.currentTime + 0.12);
     this._env(g, 0.22, 0.008, 0.16);
-    o.connect(g); g.connect(this.master);
+    o.connect(g); g.connect(L.m);
     o.start(); o.stop(c.currentTime + 0.3);
   }
 
+  /** @param {number} force */
   land(force) {
-    if (!this.ready || this.muted) return;
-    const c = this.ctx;
+    const L = this._live();
+    if (!L || this.muted) return;
+    const c = L.c;
     const o = c.createOscillator();
     o.type = 'sine';
     const g = c.createGain();
@@ -175,22 +240,23 @@ export class Audio {
     o.frequency.setValueAtTime(f, c.currentTime);
     o.frequency.exponentialRampToValueAtTime(f * 0.55, c.currentTime + 0.14);
     this._env(g, 0.16 + force * 0.22, 0.004, 0.18);
-    o.connect(g); g.connect(this.master);
+    o.connect(g); g.connect(L.m);
     o.start(); o.stop(c.currentTime + 0.4);
 
-    const n = this._noise(0.06);
+    const n = this._noise(0.06, c);
     const nf = c.createBiquadFilter();
     nf.type = 'lowpass';
     nf.frequency.value = 1400 + force * 2600;
     const ng = c.createGain();
     this._env(ng, 0.09 + force * 0.12, 0.002, 0.06);
-    n.connect(nf); nf.connect(ng); ng.connect(this.master);
+    n.connect(nf); nf.connect(ng); ng.connect(L.m);
     n.start(); n.stop(c.currentTime + 0.12);
   }
 
   death() {
-    if (!this.ready || this.muted) return;
-    const c = this.ctx;
+    const L = this._live();
+    if (!L || this.muted) return;
+    const c = L.c;
     const o = c.createOscillator();
     o.type = 'sawtooth';
     const f = c.createBiquadFilter();
@@ -201,30 +267,32 @@ export class Audio {
     o.frequency.setValueAtTime(300, c.currentTime);
     o.frequency.exponentialRampToValueAtTime(46, c.currentTime + 0.7);
     this._env(g, 0.24, 0.01, 1.5);
-    o.connect(f); f.connect(g); g.connect(this.master);
+    o.connect(f); f.connect(g); g.connect(L.m);
     o.start(); o.stop(c.currentTime + 1.7);
   }
 
   /** A rising tone for a personal best. The only unambiguously good sound. */
   chime() {
-    if (!this.ready || this.muted) return;
-    const c = this.ctx;
+    const L = this._live();
+    if (!L || this.muted) return;
+    const c = L.c;
     for (let i = 0; i < 3; i++) {
       const o = c.createOscillator();
       o.type = 'sine';
       const g = c.createGain();
       o.frequency.setValueAtTime([440, 660, 880][i], c.currentTime + i * 0.06);
       this._env(g, 0.10, 0.02 + i * 0.06, 0.8);
-      o.connect(g); g.connect(this.master);
+      o.connect(g); g.connect(L.m);
       o.start(); o.stop(c.currentTime + 1.2);
     }
   }
 
   /** A full-spectrum swell when a biome line is crossed. */
   wash() {
-    if (!this.ready || this.muted) return;
-    const c = this.ctx;
-    const n = this._noise(1.4);
+    const L = this._live();
+    if (!L || this.muted) return;
+    const c = L.c;
+    const n = this._noise(1.4, c);
     const f = c.createBiquadFilter();
     f.type = 'bandpass';
     f.Q.value = 1.1;
@@ -232,7 +300,7 @@ export class Audio {
     f.frequency.exponentialRampToValueAtTime(3200, c.currentTime + 0.9);
     const g = c.createGain();
     this._env(g, 0.09, 0.25, 0.9);
-    n.connect(f); f.connect(g); g.connect(this.master);
+    n.connect(f); f.connect(g); g.connect(L.m);
     n.start(); n.stop(c.currentTime + 1.5);
   }
 }

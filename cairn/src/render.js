@@ -1,6 +1,23 @@
 import { FEEL, COLUMN, biomeAt, newBiomeSlot, MEMORY_GOLD } from './feel.js';
 import { makeRng, erosionOf, EROSION } from './sim.js';
 
+/** @typedef {import('./sim.js').Sim} Sim */
+/** @typedef {import('./types.js').Solid} Solid */
+/** @typedef {import('./feel.js').BiomeSlot} BiomeSlot */
+/** @typedef {import('./input.js').Input} Input */
+/**
+ * The presentation-layer state main.js owns and the renderer reads.
+ * @typedef {object} UiState
+ * @property {number} squash
+ * @property {number} flash
+ * @property {number} bestFlash
+ * @property {number} dead
+ * @property {number} wash
+ * @property {boolean} started
+ * @property {boolean} monument
+ * @property {boolean} [daily]
+ */
+
 /**
  * The scene, drawn in Canvas2D. The post chain lives in post.js; everything
  * here produces the raw image it grades.
@@ -24,9 +41,12 @@ import { makeRng, erosionOf, EROSION } from './sim.js';
  */
 
 const TAU = Math.PI * 2;
+/** @type {(v: number, a: number, b: number) => number} */
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+/** @type {(a: number, b: number, t: number) => number} */
 const lerp = (a, b, t) => a + (b - a) * t;
 
+/** @type {(c: number[], a: number|string) => string} */
 const rgb = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 
 // ------------------------------------------------------------------- camera
@@ -50,6 +70,7 @@ export class Camera {
     this.monTop = 0;        // the summit to frame, world units
   }
 
+  /** @param {number} force 0..1 */
   kick(force) {
     const C = FEEL.camera;
     this.rotVel += (Math.random() < 0.5 ? -1 : 1) * C.impactRotDeg * clamp(force, 0, 1) * 0.06;
@@ -60,6 +81,11 @@ export class Camera {
    * Smooth follow with velocity lookahead and a vertical dead zone, zooming out
    * as speed rises. Shake is decaying value noise rather than random jitter, so
    * it reads as a physical wobble instead of a broken television.
+   */
+  /**
+   * @param {number} dt
+   * @param {{x: number, y: number, vx: number, vy: number}} body
+   * @param {boolean} reduced
    */
   update(dt, body, reduced) {
     const C = FEEL.camera;
@@ -112,12 +138,20 @@ export class Camera {
 }
 
 /** Value noise with smooth interpolation — decaying, never a random jitter. */
+/**
+ * @param {number} x
+ * @returns {number}
+ */
 function noise1(x) {
   const i = Math.floor(x);
   const f = x - i;
   const u = f * f * (3 - 2 * f);
   return lerp(hash1(i), hash1(i + 1), u);
 }
+/**
+ * @param {number} i
+ * @returns {number}
+ */
 function hash1(i) {
   let h = (i | 0) * 374761393;
   h = (h ^ (h >>> 13)) * 1274126177;
@@ -131,9 +165,19 @@ const DUST = 90;
 // ----------------------------------------------------------------- renderer
 
 export class Renderer {
+  /** @param {HTMLCanvasElement} canvas */
   constructor(canvas) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    if (!ctx) throw new Error('CAIRN: no 2D context for the scene canvas');
+    this.ctx = ctx;
+
+    // The camera-to-screen transform, rebuilt by `_setup` every frame. Seeded
+    // here because `strictPropertyInitialization` is right to ask: a draw that
+    // ran before the first `_setup` would put every coordinate at NaN.
+    this.scale = 1;
+    this.originX = 0;
+    this.originY = 0;
     this.w = 1; this.h = 1; this.dpr = 1;
     this.biome = newBiomeSlot();
 
@@ -176,6 +220,11 @@ export class Renderer {
     this._lit = [0, 0, 0];   // scratch: rock tinted by the light on it
   }
 
+  /**
+   * @param {number} w CSS px
+   * @param {number} h CSS px
+   * @param {number} dpr
+   */
   resize(w, h, dpr) {
     this.w = w; this.h = h; this.dpr = dpr;
     this.canvas.width = Math.round(w * dpr);
@@ -187,6 +236,7 @@ export class Renderer {
 
   // ------------------------------------------------------------ world → px
 
+  /** @param {Camera} cam */
   _setup(cam) {
     const ctx = this.ctx;
     const scale = (this.h / cam.viewH);
@@ -201,11 +251,17 @@ export class Renderer {
     }
   }
 
+  /** @param {number} wx */
   X(wx) { return this.originX + wx * this.scale; }
+  /** @param {number} wy */
   Y(wy) { return this.originY - wy * this.scale; }
 
   // -------------------------------------------------------------- emitters
 
+  /**
+   * @param {number} x
+   * @param {number} y
+   */
   pushTrail(x, y) {
     const T = FEEL.juice.trailPoints;
     for (let i = Math.min(this.trailN, T - 1); i > 0; i--) {
@@ -217,6 +273,11 @@ export class Renderer {
     this.trailN = Math.min(this.trailN + 1, T);
   }
 
+  /**
+   * @param {number} x
+   * @param {number} y
+   * @param {number} force
+   */
   ring(x, y, force) {
     const i = this.ringN < 12 ? this.ringN++ : 0;
     const o = i * 4;
@@ -227,6 +288,11 @@ export class Renderer {
    * Death reads as crystallisation, not detonation: the shards burst outward,
    * stall, and are drawn back INTO the body as it solidifies. `life` runs 0→1
    * and the motion reverses at 0.45.
+   */
+  /**
+   * @param {number} x
+   * @param {number} y
+   * @param {number} n
    */
   burst(x, y, n) {
     for (let k = 0; k < n && this.partN < 160; k++) {
@@ -242,6 +308,7 @@ export class Renderer {
     }
   }
 
+  /** @param {number} dt */
   step(dt) {
     for (let i = 0; i < this.trailN; i++) this.trail[i * 3 + 2] += dt;
     for (let i = this.ringN - 1; i >= 0; i--) {
@@ -269,6 +336,15 @@ export class Renderer {
 
   // ------------------------------------------------------------------ draw
 
+  /**
+   * @param {Sim} sim
+   * @param {Camera} cam
+   * @param {Input|null} input
+   * @param {UiState} ui
+   * @param {number} dt
+   * @param {boolean} reduced
+   * @returns {BiomeSlot}
+   */
   draw(sim, cam, input, ui, dt, reduced) {
     const ctx = this.ctx;
     const B = biomeAt(Math.max(0, sim.body.y), this.biome);
@@ -307,7 +383,12 @@ export class Renderer {
     return B;
   }
 
-  _background(ctx, B, cam) {
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Camera} _cam unused; kept so every layer has one call shape
+   */
+  _background(ctx, B, _cam) {
     // Never flat: a vertical gradient, rebuilt only when the biome moves enough
     // to be visible, which is a handful of times per climb.
     const key = Math.round(B.index * 100 + B.blend * 60);
@@ -318,7 +399,7 @@ export class Renderer {
       g.addColorStop(1, rgb(B.bgBot, 1));
       this._bg = g;
     }
-    ctx.fillStyle = this._bg;
+    if (this._bg) ctx.fillStyle = this._bg;
     ctx.fillRect(-40, -40, this.w + 80, this.h + 80);
   }
 
@@ -326,6 +407,11 @@ export class Renderer {
    * The height, enormous and almost invisible, behind the play. It is the only
    * number in the game that is allowed to be large, and it sits at 8% opacity
    * so it reads as an atmosphere rather than as a readout.
+   */
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {number} y
    */
   _bigNumber(ctx, B, y) {
     const n = Math.round(y);
@@ -339,6 +425,11 @@ export class Renderer {
     ctx.restore();
   }
 
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Camera} cam
+   */
   _bands(ctx, B, cam) {
     // Silhouetted geometry, never empty, never contrasty. Each band repeats
     // vertically so the tower has depth at any height.
@@ -372,6 +463,11 @@ export class Renderer {
     }
   }
 
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Camera} cam
+   */
   _shafts(ctx, B, cam) {
     // Volumetric light from above, drifting. Intensity is a biome property.
     const n = 3;
@@ -394,6 +490,12 @@ export class Renderer {
     }
   }
 
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Camera} cam
+   * @param {number} dt
+   */
   _dust(ctx, B, cam, dt) {
     const top = cam.y + cam.viewH * 0.7;
     const bot = cam.y - cam.viewH * 0.7;
@@ -405,7 +507,7 @@ export class Renderer {
       this.dust[o] += drift;
       this.dust[o + 1] += dt * (1.6 + layer * 3.2);
 
-      let wy = this.dust[o + 1];
+      const wy = this.dust[o + 1];
       const span = cam.viewH * 1.4;
       // Parallax by layer, then wrap into view.
       const py = bot + (((wy - bot * layer) % span) + span) % span;
@@ -426,7 +528,12 @@ export class Renderer {
    * it fades in as the camera pulls back so it never competes with the jump you
    * are about to make.
    */
-  _threads(ctx, B, sim) {
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} _B unused; the thread is always memory-gold
+   * @param {Sim} sim
+   */
+  _threads(ctx, _B, sim) {
     const solids = sim.world.solids;
     const strength = clamp((this.scale > 0 ? 1 : 0) * (1 - (FEEL.camera.viewH / (this.h / this.scale))), 0, 1);
     const a = 0.05 + strength * 0.12;
@@ -451,7 +558,13 @@ export class Renderer {
    * the lighting pass — so the single living light in the scene is you, and
    * geometry emerges from the dark as you approach it.
    */
-  _solids(ctx, B, sim, cam) {
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Sim} sim
+   * @param {Camera} _cam unused; culling is done against `this.h`
+   */
+  _solids(ctx, B, sim, _cam) {
     const solids = sim.world.solids;
     const bx = sim.body.rx ?? sim.body.x;
     const by = sim.body.ry ?? sim.body.y;
@@ -569,6 +682,12 @@ export class Renderer {
    * A frozen silhouette. Four poses, chosen at the moment of death and kept
    * forever, so no two corpses in the tower are the same shape.
    */
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {number} hw
+   * @param {number} hh
+   * @param {number} pose
+   */
   _figurePath(ctx, hw, hh, pose) {
     const w = hw * 2;
     ctx.beginPath();
@@ -582,6 +701,10 @@ export class Renderer {
     ctx.closePath();
   }
 
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   */
   _rings(ctx, B) {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < this.ringN; i++) {
@@ -597,6 +720,10 @@ export class Renderer {
     ctx.globalCompositeOperation = 'source-over';
   }
 
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   */
   _parts(ctx, B) {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < this.partN; i++) {
@@ -610,6 +737,10 @@ export class Renderer {
     ctx.globalCompositeOperation = 'source-over';
   }
 
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   */
   _trail(ctx, B) {
     if (this.trailN < 2) return;
     const life = FEEL.juice.trailMs / 1000;
@@ -632,6 +763,12 @@ export class Renderer {
    * You. Not a box: a small emissive shard that carries the only real light in
    * the scene, squashing and stretching along its velocity with a spring return.
    */
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Sim} sim
+   * @param {UiState} ui
+   */
   _player(ctx, B, sim, ui) {
     const b = sim.body;
     const x = this.X(b.rx ?? b.x), y = this.Y((b.ry ?? b.y) + FEEL.body.h * 0.5);
@@ -653,7 +790,6 @@ export class Renderer {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(clamp(-b.vx * 0.0016, -0.45, 0.45));
-    ctx.scale(1 + ui.stretch * 0.0, 1);
     const sx = 1 - ui.squash, sy = 1 + ui.squash;
     ctx.scale(sx, sy);
 
@@ -683,6 +819,12 @@ export class Renderer {
    * The aim: the exact arc the physics will take, crisp for the first stretch
    * and dissolving after, plus a reticle at the predicted first contact. The
    * reticle takes the accent colour on a safe surface and dims on nothing.
+   */
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Input} input
+   * @param {Sim} sim
    */
   _aim(ctx, B, input, sim) {
     const arc = input.arc;
@@ -754,7 +896,12 @@ export class Renderer {
   }
 
   /** A hairline at your all-time best, visible only when you are near it. */
-  _bestLine(ctx, B, sim) {
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} _B unused; the record line is always the accent
+   * @param {Sim} sim
+   */
+  _bestLine(ctx, _B, sim) {
     if (sim.best <= 1) return;
     const d = Math.abs((sim.body.ry ?? sim.body.y) - sim.best);
     if (d > FEEL.bestLineFadeU) return;

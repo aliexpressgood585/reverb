@@ -15,6 +15,21 @@
 
 export const COLUMN = 100;
 
+/**
+ * A biome, already cross-faded, written into a reused slot.
+ * @typedef {object} BiomeSlot
+ * @property {number[]} bgTop
+ * @property {number[]} bgBot
+ * @property {number[]} rock
+ * @property {number[]} accent
+ * @property {number} ambient
+ * @property {number} shaft
+ * @property {number} sat
+ * @property {string} name
+ * @property {number} index
+ * @property {number} blend
+ */
+
 export const FEEL = {
   // ------------------------------------------------------------ simulation
   sim: {
@@ -394,9 +409,15 @@ export const BIOMES = [
 /** Gold is the colour of memory: old corpses cool toward it whatever the biome. */
 export const MEMORY_GOLD = [0xc9, 0x9a, 0x4a];
 
+/** @type {(a: number, b: number, t: number) => number} */
 const lerp = (a, b, t) => a + (b - a) * t;
 
 /** The biome at a height, already cross-faded. Allocation-free: fills `out`. */
+/**
+ * @param {number} y
+ * @param {BiomeSlot} out filled in place; allocation-free
+ * @returns {BiomeSlot}
+ */
 export function biomeAt(y, out) {
   const raw = y / BIOME_SPAN;
   const i = Math.max(0, Math.floor(raw));
@@ -422,6 +443,7 @@ export function biomeAt(y, out) {
   return out;
 }
 
+/** @returns {BiomeSlot} */
 export function newBiomeSlot() {
   return {
     bgTop: [0, 0, 0], bgBot: [0, 0, 0], rock: [0, 0, 0], accent: [0, 0, 0],

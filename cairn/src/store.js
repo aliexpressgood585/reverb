@@ -1,4 +1,25 @@
-import { FEEL, COLUMN, BIOMES, biomeAt, newBiomeSlot } from './feel.js';
+import { FEEL, COLUMN, biomeAt, newBiomeSlot } from './feel.js';
+
+/** @typedef {import('./sim.js').Sim} Sim */
+/** @typedef {import('./types.js').Solid} Solid */
+
+/**
+ * A 2D context that is known to exist.
+ *
+ * `getContext('2d')` is typed as nullable and returns null only when the canvas
+ * already has an incompatible context bound. Every canvas in this file is created
+ * one line above the call, so it cannot. Asserting once here beats 34 null checks
+ * that can never fire — and it throws loudly rather than drawing into nothing if
+ * that assumption ever stops holding.
+ *
+ * @param {HTMLCanvasElement} cv
+ * @returns {CanvasRenderingContext2D}
+ */
+function ctx2d(cv) {
+  const c = cv.getContext('2d');
+  if (!c) throw new Error('CAIRN: no 2D context on a freshly created canvas');
+  return c;
+}
 
 /**
  * Persistence and the share poster.
@@ -31,6 +52,7 @@ const SCHEMA = 2;
  * exactly, so every save already on a phone still loads.
  */
 let slot = '';
+/** @param {string} name */
 export function setSlot(name) { slot = name ? `.${name}` : ''; }
 const key = () => KEY + slot;
 const bakKey = () => BAK + slot;
@@ -43,10 +65,18 @@ const bakKey = () => BAK + slot;
  * local calendars disagree. The seed is derived rather than stored, so a share
  * card only has to carry the date for a recipient to get the same climb.
  */
+/**
+ * @param {Date} [now]
+ * @returns {string} YYYY-MM-DD, always UTC
+ */
 export function dailyDate(now = new Date()) {
   return now.toISOString().slice(0, 10);          // YYYY-MM-DD, always UTC
 }
 
+/**
+ * @param {string} [date]
+ * @returns {number}
+ */
 export function dailySeed(date = dailyDate()) {
   // FNV-1a over the date string. Any stable hash would do; what matters is that
   // it is a pure function of the date and computed identically everywhere.
@@ -79,6 +109,10 @@ const MAX_STORED = 600;   // beyond this the tower is scenery, not gameplay
 
 const FIELDS = 5;
 
+/**
+ * @param {string} k
+ * @returns {any}
+ */
 function readSlot(k) {
   let raw;
   try { raw = localStorage.getItem(k); } catch { return null; }
@@ -86,9 +120,11 @@ function readSlot(k) {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
+/** @param {Sim} sim */
 export function save(sim) {
   try {
     const solids = sim.world.solids;
+    /** @type {number[]} */
     const packed = [];
     for (let i = 0; i < solids.length; i++) {
       const s = solids[i];
@@ -98,7 +134,7 @@ export function save(sim) {
         Math.round(s.y * 100) / 100,
         Math.round(s.rot * 1000) / 1000,
         s.pose | 0,
-        s.bornDeath | 0,
+        (s.bornDeath ?? 0) | 0,
       );
     }
     const trim = packed.length > MAX_STORED * FIELDS
@@ -128,6 +164,10 @@ export function save(sim) {
 }
 
 /** Is this payload structurally sound enough to be worth migrating? */
+/**
+ * @param {any} d
+ * @returns {boolean}
+ */
 function validate(d) {
   if (!d || typeof d !== 'object') return false;
   if (!Number.isFinite(d.v) || d.v < 1 || d.v > SCHEMA) return false;
@@ -139,6 +179,10 @@ function validate(d) {
 }
 
 /** Bring any accepted payload up to the current schema. */
+/**
+ * @param {any} d
+ * @returns {any}
+ */
 function migrate(d) {
   if (d.v === 1) {
     const n = d.corpses.length / 4;
@@ -154,6 +198,17 @@ function migrate(d) {
   return d;
 }
 
+/**
+ * What the last `load` actually did. Read by `cairn-store-check.mjs`, which has
+ * to distinguish "restored from the main slot" from "the main slot was corrupt
+ * and this came out of the backup" — a difference the return value cannot carry.
+ */
+export const loadStats = { source: '', dropped: 0 };
+
+/**
+ * @param {Sim} sim
+ * @returns {boolean}
+ */
 export function load(sim) {
   // Main slot, then the backup. A tower is worth two attempts.
   let d = null;
@@ -185,8 +240,8 @@ export function load(sim) {
   }
 
   sim.world.generate(Math.max(sim.best, 0) + FEEL.camera.viewH * 2.2);
-  load.lastSource = from;
-  load.lastDropped = dropped;
+  loadStats.source = from;
+  loadStats.dropped = dropped;
   return true;
 }
 
@@ -196,7 +251,7 @@ export function wipe() {
 
 // ------------------------------------------------------------------- poster
 
-const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+/** @type {(c: number[], a: number) => string} */
 const rgb = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 
 /**
@@ -204,13 +259,21 @@ const rgb = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
  * it is the thing a player posts — so it gets the full biome gradient, the
  * thread of light through every death in order, and the wordmark.
  */
+/**
+ * @param {Sim} sim
+ * @param {number} [W]
+ * @param {number} [H]
+ * @returns {HTMLCanvasElement}
+ */
 export function poster(sim, W = 1080, H = 1920) {
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
-  const ctx = cv.getContext('2d');
+  const ctx = ctx2d(cv);
 
   const top = Math.max(sim.best, 60) * 1.06;
+  /** @type {(wy: number) => number} */
   const toY = (wy) => H - (wy / top) * H * 0.88 - H * 0.06;
+  /** @type {(wx: number) => number} */
   const toX = (wx) => (wx / 100) * W;
 
   // Background: the whole climb's worth of biomes, stacked.
@@ -286,6 +349,12 @@ export function poster(sim, W = 1080, H = 1920) {
  *
  * Exported so the share path and the monument check measure the same thing.
  */
+/**
+ * @param {Sim} sim
+ * @param {number} [W]
+ * @param {number} [H]
+ * @returns {Promise<Blob|null>}
+ */
 export async function posterBlob(sim, W, H) {
   const cv = poster(sim, W, H);
   let blob = await new Promise((r) => cv.toBlob(r, 'image/webp', 0.92));
@@ -294,6 +363,10 @@ export async function posterBlob(sim, W, H) {
 }
 
 /** Web Share where it exists, clipboard then download where it does not. */
+/**
+ * @param {Sim} sim
+ * @returns {Promise<'shared'|'copied'|'downloaded'|'failed'>}
+ */
 export async function share(sim) {
   const blob = await posterBlob(sim);
   if (!blob) return 'failed';
@@ -331,10 +404,15 @@ export async function share(sim) {
  * a maskable safe zone. Generated at boot and injected as a data URL so the
  * manifest needs no binary asset in the repository.
  */
+/**
+ * @param {number} [size]
+ * @param {boolean} [maskable]
+ * @returns {string} a data URL
+ */
 export function icon(size = 512, maskable = false) {
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
-  const c = cv.getContext('2d');
+  const c = ctx2d(cv);
   c.fillStyle = '#04060B';
   c.fillRect(0, 0, size, size);
   const pad = maskable ? size * 0.22 : size * 0.14;

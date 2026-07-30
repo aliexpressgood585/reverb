@@ -437,3 +437,71 @@ falsifiable: `--tune='{"hardSlack":-14}'` and `--tune='{"hardRate":0}'` both tur
 it red. Its third test is the control — with every corpse forced non-solid the
 same count must read exactly 0.00% — because five tests in this repository have
 passed while blind to the state they claimed to cover.
+
+---
+
+## 19. Physics stays at 120 Hz, not the 60 Hz the release brief asks for
+
+The brief specifies a fixed 60 Hz simulation decoupled from render. The
+decoupling was already there; the rate is 120 and stays 120.
+
+Halving it doubles the distance a body travels between collision checks, which
+is exactly the budget `FEEL.body.sweepFraction` exists to protect — acceptance
+test 3 fires 140 max-power launches through a six-deep corpse wall and measures
+the longest sub-step at 1.34 u against a 2.10 u limit. That margin is not large
+enough to give away for nothing.
+
+And it *is* nothing: a tick costs **0.0003 ms** at 400 bodies, unmeasurable
+against a 16.67 ms frame. Two ticks per 60 Hz frame is 0.0006 ms.
+
+The real cost of changing it would be the documentation: every number in
+`BALANCE.md` — 30,000 climbs, four difficulty targets, the aim-tolerance survey,
+the hard-gap power window — was produced at `dt = 1/120`. Re-deriving all of it
+to satisfy a number in a brief is the wrong trade.
+
+## 20. Strict type checking, on the JavaScript, through JSDoc
+
+The brief asks for TypeScript strict mode. What shipped is `tsconfig.json` with
+`checkJs` and every strict flag on, and JSDoc types throughout — **zero errors
+across all 4,300 lines that reach a player's phone**, enforced in
+`npm run typecheck` and in the pre-commit hook.
+
+Not a `.ts` conversion, and the reasoning is the same one behind §19. The
+physics in this repository is pinned by fourteen browser acceptance tests, 30,000
+headless climbs, a route audit over 4,506 gaps and a precision survey over 4,186
+jumps. A wholesale rewrite of every line of it buys inference-only generics and
+risks all of that. `checkJs` finds the same errors in the same places without
+touching a single expression.
+
+It also keeps something this project has spent real effort on: Vite ships
+`cairn/src/*.js` as written. There is no transpile step between the file and the
+phone, which is a large part of why the bundle is 21 KB gzipped.
+
+What it caught is in `AUDIT.md` and is not theoretical — a latent null crash in
+the audio graph on backgrounding, an uninitialised render transform, dead code in
+the player draw, and a self-assignment pretending to be logic.
+
+The harness in `scripts/` is deliberately excluded. It is 4,700 lines of
+measurement bots whose correctness is established by the numbers they print;
+typing them accounts for 629 of the 1,387 errors a repo-wide pass reports and
+buys nothing that a wrong number would not already show.
+
+## 21. Offline comes from Capacitor, not from a service worker
+
+The brief asks for full offline support via a service worker. **This project does
+not get a service worker**, and the reason is in `cairn/AUDIT.md`: one was
+shipped, it served navigations cache-first, and it pinned a real device to the
+exact build where the game could not be started. The device could then neither
+play nor update, because Chrome will not re-fetch a worker script until its
+registration is a day old. `public/cairn/sw.js` is a tombstone that unregisters
+its predecessor and `index.html` carries a recovery script that runs before the
+bundle.
+
+The Android build does not need one. Capacitor bundles the whole `dist/` into the
+APK and serves it from the local filesystem, so the packaged game is offline by
+construction — with no cache to go stale and no way to strand anyone on a dead
+build. Airplane mode works because there is nothing to fetch.
+
+The web build at `/cairn/` therefore stays online-only. That is a real difference
+between the two and it is the correct one: the web build is where a bad cache
+would be unrecoverable, and the store build is where offline actually matters.

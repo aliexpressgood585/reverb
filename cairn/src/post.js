@@ -119,8 +119,15 @@ void main() {
   gl_FragColor = vec4(max(col, 0.0), 1.0);
 }`;
 
+/**
+ * @param {WebGLRenderingContext} gl
+ * @param {number} type
+ * @param {string} src
+ * @returns {WebGLShader}
+ */
 function compile(gl, type, src) {
   const s = gl.createShader(type);
+  if (!s) throw new Error('shader: could not allocate');
   gl.shaderSource(s, src);
   gl.compileShader(s);
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
@@ -129,8 +136,14 @@ function compile(gl, type, src) {
   return s;
 }
 
+/**
+ * @param {WebGLRenderingContext} gl
+ * @param {string} fs
+ * @returns {WebGLProgram}
+ */
 function program(gl, fs) {
   const p = gl.createProgram();
+  if (!p) throw new Error('program: could not allocate');
   gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, VERT));
   gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fs));
   gl.bindAttribLocation(p, 0, 'aPos');
@@ -142,7 +155,10 @@ function program(gl, fs) {
 }
 
 export class Post {
-  /** @returns {Post|null} null when WebGL is unavailable; caller falls back. */
+  /**
+   * @param {HTMLCanvasElement} canvas
+   * @returns {Post|null} null when WebGL is unavailable; caller falls back.
+   */
   static create(canvas) {
     const gl = canvas.getContext('webgl', {
       alpha: false, antialias: false, depth: false, stencil: false,
@@ -153,6 +169,10 @@ export class Post {
     try { return new Post(gl, canvas); } catch { return null; }
   }
 
+  /**
+   * @param {WebGLRenderingContext} gl
+   * @param {HTMLCanvasElement} canvas
+   */
   constructor(gl, canvas) {
     this.gl = gl;
     this.canvas = canvas;
@@ -173,6 +193,7 @@ export class Post {
     this.fboA = this._target();
     this.fboB = this._target();
     this.w = 0; this.h = 0;
+    /** @type {Map<string, WebGLUniformLocation|null>} */
     this._u = new Map();
   }
 
@@ -194,6 +215,11 @@ export class Post {
     return { tex, fbo, w: 0, h: 0 };
   }
 
+  /**
+   * @param {{tex: WebGLTexture|null, fbo: WebGLFramebuffer|null, w: number, h: number}} t
+   * @param {number} w
+   * @param {number} h
+   */
   _sizeTarget(t, w, h) {
     if (t.w === w && t.h === h) return;
     const gl = this.gl;
@@ -205,6 +231,11 @@ export class Post {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
+  /**
+   * @param {number} w CSS px
+   * @param {number} h CSS px
+   * @param {number} dpr
+   */
   resize(w, h, dpr) {
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
@@ -218,6 +249,11 @@ export class Post {
     this._sizeTarget(this.fboB, bw, bh);
   }
 
+  /**
+   * @param {WebGLProgram} p
+   * @param {string} name
+   * @returns {WebGLUniformLocation|null}
+   */
   _loc(p, name) {
     const key = name + (p === this.pComp ? 'C' : p === this.pBlur ? 'B' : 'R');
     let l = this._u.get(key);
@@ -226,8 +262,10 @@ export class Post {
   }
 
   /**
-   * @param source  the Canvas2D scene canvas
-   * @param o       { speed, flash, bloom, grain, barrel, vignette, lift, gain, sat, time }
+   * @param {HTMLCanvasElement} source the Canvas2D scene canvas
+   * @param {{time: number, speed: number, bloom: number, grain: number,
+   *          barrel: number, vignette: number, flash: number,
+   *          lift: number[], gain: number[], sat: number}} o
    */
   render(source, o) {
     const gl = this.gl;

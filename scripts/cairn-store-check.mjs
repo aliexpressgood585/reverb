@@ -112,7 +112,7 @@ const mig = await page.evaluate(() => {
   const ok = Store.load(sim);
   let solid = 0;
   for (const s of sim.world.solids) if (s.corpse && window.T.stage(sim.deaths, s.bornDeath) < 3) solid++;
-  return { ok, stages: window.T.stages(), solid, src: Store.load.lastSource };
+  return { ok, stages: window.T.stages(), solid, src: Store.loadStats.source };
 });
 check(mig.ok && mig.solid > 0 && mig.stages[3] < 40,
   `v1 migrates exactly — ${JSON.stringify(mig.stages)}, ${mig.solid} of 40 still load-bearing ` +
@@ -131,7 +131,7 @@ const trunc = await page.evaluate(() => {
   const ok = Store.load(sim);
   let n = 0;
   for (const s of sim.world.solids) if (s.corpse) n++;
-  return { ok, n, src: Store.load.lastSource };
+  return { ok, n, src: Store.loadStats.source };
 });
 check(trunc.ok && trunc.src === 'backup' && trunc.n === 30,
   `a truncated save falls back to the backup (${trunc.n} corpses, from ${trunc.src})`);
@@ -148,7 +148,7 @@ const junk = await page.evaluate(() => {
   const ok = Store.load(sim);
   let n = 0;
   for (const s of sim.world.solids) if (s.corpse) n++;
-  return { ok, n, src: Store.load.lastSource };
+  return { ok, n, src: Store.loadStats.source };
 });
 check(junk.ok && junk.src === 'backup' && junk.n === 25,
   `unparseable JSON falls back to the backup (${junk.n} corpses, from ${junk.src})`);
@@ -171,7 +171,7 @@ const poison = await page.evaluate(() => {
   const ok = Store.load(sim);
   let n = 0;
   for (const s of sim.world.solids) if (s.corpse) n++;
-  return { ok, n, dropped: Store.load.lastDropped, buckets: sim.world.buckets.size };
+  return { ok, n, dropped: Store.loadStats.dropped, buckets: sim.world.buckets.size };
 });
 check(poison.ok && poison.n === 20 && poison.dropped === 3 && poison.buckets < 200,
   `${poison.dropped} poisoned rows dropped, ${poison.n} good ones kept, ` +

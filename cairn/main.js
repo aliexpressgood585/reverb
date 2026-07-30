@@ -20,13 +20,31 @@ import * as Store from './src/store.js';
  */
 
 const DT = FEEL.sim.dt;
+/** @type {(v: number, a: number, b: number) => number} */
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ------------------------------------------------------------------ canvases
 
-const view = document.getElementById('view');
+/**
+ * An element the document is required to have.
+ *
+ * Every id below is in `index.html` and is not conditional, so a null here is a
+ * broken build rather than a state to handle — and it should say so out loud
+ * instead of failing forty lines later on a null property access.
+ *
+ * @template {Element} T
+ * @param {string} id
+ * @returns {T}
+ */
+function need(id) {
+  const e = document.getElementById(id);
+  if (!e) throw new Error(`CAIRN: #${id} missing from the document`);
+  return /** @type {T} */ (/** @type {unknown} */ (e));
+}
+
+const view = /** @type {HTMLCanvasElement} */ (need('view'));
 const scene = document.createElement('canvas');
 
 const sim = new Sim(0x1a2b3c);
@@ -40,7 +58,7 @@ if (!post) {
   view.replaceWith(scene);
   scene.id = 'view';
 }
-const surface = post ? view : scene;
+const surface = /** @type {HTMLElement} */ (post ? view : scene);
 surface.style.touchAction = 'none';
 
 const input = new Input(surface, sim);
@@ -63,6 +81,7 @@ const ui = {
   // PHASE3 §3 — the first sixty seconds, instrumented. Milliseconds from the
   // touch that starts the run to the first time each thing ever happens. Read by
   // scripts/cairn-first-minute.mjs; nothing in the game reads them.
+  /** @type {Record<string, number>} */
   beats: {},
   taught: false,
 };
@@ -74,14 +93,14 @@ let paused = false;
 let lastBiome = 0;
 
 const el = {
-  small: document.getElementById('height'),
-  card: document.getElementById('card'),
-  toast: document.getElementById('toast'),
-  best: document.getElementById('best'),
-  debug: document.getElementById('debug'),
-  mute: document.getElementById('mute'),
-  monshare: document.getElementById('monshare'),
-  daily: document.getElementById('daily'),
+  small: need('height'),
+  card: need('card'),
+  toast: need('toast'),
+  best: need('best'),
+  debug: need('debug'),
+  mute: /** @type {HTMLButtonElement} */ (need('mute')),
+  monshare: /** @type {HTMLButtonElement} */ (need('monshare')),
+  daily: /** @type {HTMLButtonElement} */ (need('daily')),
 };
 
 function resize() {
@@ -96,6 +115,7 @@ addEventListener('orientationchange', () => setTimeout(resize, 120));
 
 // ---------------------------------------------------------------- haptics
 
+/** @param {number|number[]} pattern */
 function buzz(pattern) {
   if (reduced) return;
   try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* iOS: silent */ }
@@ -104,6 +124,7 @@ function buzz(pattern) {
 // -------------------------------------------------------------------- flow
 
 /** Stamp the first time something ever happens, in ms since the run began. */
+/** @param {string} name */
 function beat(name) {
   if (ui.beats[name] === undefined && ui.beats.start !== undefined) {
     ui.beats[name] = Math.round(performance.now() - ui.beats.start);
@@ -186,7 +207,8 @@ function showBanner() {
     `<span class="k">${sim.deaths} STONES</span><button id="share">SHARE</button>`;
   el.best.className = 'on';
   ui.banner = 4.2;
-  el.best.querySelector('#share').onpointerdown = async (e) => {
+  const shareBtn = /** @type {HTMLButtonElement} */ (el.best.querySelector('#share'));
+  shareBtn.onpointerdown = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     ui.banner = 4.2;
@@ -196,6 +218,7 @@ function showBanner() {
   };
 }
 
+/** @param {string} msg */
 function toast(msg) {
   if (!msg) return;
   el.toast.textContent = msg;
@@ -217,6 +240,7 @@ function toast(msg) {
  * Only from the ground: opening it mid-flight would mean watching yourself die
  * from orbit.
  */
+/** @param {boolean} on */
 function monument(on) {
   if (on && ui.started && !sim.body.grounded) return;
   if (on === ui.monument) return;
@@ -269,12 +293,15 @@ try { ui.taught = localStorage.getItem('cairn.taught') === '1'; } catch { /* pri
  * piles of bodies. `sim.dailyDate` is what the share card carries, because the
  * date IS the seed and a recipient who has it plays the identical climb.
  */
+/** @param {boolean} daily */
 function setMode(daily) {
   if (daily === !!ui.daily) return;
   Store.save(sim);                                // bank the tower being left
   ui.daily = daily;
   ui.beats = {};
-  ui.taught = ui.taught;                          // the lesson is per player, not per mode
+  // `ui.taught` is deliberately NOT reset: the lesson is per player, not per
+  // mode. This line used to assign it to itself, which said so in a way that
+  // did nothing and read as though it did something.
   const date = Store.dailyDate();
   sim.dailyDate = daily ? date : null;
   sim.world.seed = daily ? Store.dailySeed(date) : 0x1a2b3c;
@@ -311,11 +338,11 @@ el.monshare.addEventListener('pointerdown', async (e) => {
   if (how !== 'shared') toast(how === 'copied' ? 'COPIED' : 'SAVED');
 });
 input.onChargeStart = () => { audio.charge(); buzz(8); };
-input.onRelease = (p) => { audio.release(p); buzz(14); };
-input.onLaunch = (vx, vy) => {
+input.onRelease = /** @param {number} p */ (p) => { audio.release(p); buzz(14); };
+input.onLaunch = /** @type {(vx: number, vy: number) => void} */ ((vx, vy) => {
   if (!ui.started) { begin(); return; }
   sim.launch(vx, vy);
-};
+});
 
 // ------------------------------------------------------------------ events
 
@@ -324,7 +351,7 @@ function drainEvents() {
   for (let i = 0; i < e.length; i += 4) {
     const kind = e[i];
     if (kind === EV.LAND) {
-      const force = clamp(e[i + 1] / FEEL.maxFallSpeed, 0, 1);
+      const force = clamp(e[i + 1] ?? 0, 0, FEEL.maxFallSpeed) / FEEL.maxFallSpeed;
       renderer.ring(e[i + 2], e[i + 3], force);
       audio.land(force);
       camera.kick(force);
@@ -350,6 +377,7 @@ const grade = { lift: [0, 0, 0], gain: [1, 1, 1] };
  * can drive the real transition logic at an exact cadence instead of waiting on
  * a software rasteriser running at three frames a second.
  */
+/** @param {number} real seconds of real time since the last frame */
 function update(real) {
   input.update(real, innerHeight);
   if (input.aiming) audio.chargeTo(input.power);
@@ -427,6 +455,7 @@ function update(real) {
   audio.setHeight(Math.max(0, b.y), bi);
 }
 
+/** @param {number} now */
 function frame(now) {
   requestAnimationFrame(frame);
   if (paused) { lastFrame = now; return; }
@@ -487,7 +516,7 @@ addEventListener('pagehide', () => Store.save(sim));
 let debugOn = false;
 let taps = 0;
 let tapAt = 0;
-addEventListener('pointerdown', (e) => {
+addEventListener('pointerdown', /** @param {PointerEvent} e */ (e) => {
   if (e.clientX > 90 || e.clientY > 90) { taps = 0; return; }
   const t = performance.now();
   taps = t - tapAt < 500 ? taps + 1 : 1;
@@ -496,6 +525,7 @@ addEventListener('pointerdown', (e) => {
 }, true);
 
 let fpsAccum = 0, fpsFrames = 0, fps = 0, worst = 0;
+/** @param {number} real */
 function drawDebug(real) {
   fpsAccum += real; fpsFrames++;
   worst = Math.max(worst, real * 1000);
@@ -570,13 +600,23 @@ try {
   document.head.appendChild(fav);
 } catch { /* manifest is a nice-to-have, never a blocker */ }
 
-// The harness drives the real loop, never a copy of it.
-window.CAIRN = {
+// THE HARNESS DRIVES THE REAL LOOP, NEVER A COPY OF IT. Ten acceptance tests
+// once passed against a game that could not be started, because they reached
+// past the browser instead of through it; everything exposed here is the object
+// the game itself is using.
+const api = {
   sim, input, camera, renderer, audio, post, FEEL, Store, predict,
   begin, frame, update, ui, monument, teach, setMode,
+  /** @param {number} n */
   step(n) { for (let i = 0; i < n; i++) sim.tick(0); },
+  /**
+   * @param {number} vx
+   * @param {number} vy
+   */
   fire(vx, vy) { return sim.launch(vx, vy); },
 };
+
+/** @type {any} */ (window).CAIRN = api;
 
 /**
  * Frame statistics for the art-direction tests: mean colour, mean chroma, and
@@ -585,11 +625,12 @@ window.CAIRN = {
  * whole art pass exists to remove. Sampled from the surface actually on screen,
  * so it measures the graded image rather than the raw scene.
  */
-window.__stats = function () {
+/** @type {any} */ (window).__stats = function () {
   const src = post ? view : scene;
   const s = document.createElement('canvas');
   s.width = 160; s.height = 340;
   const c = s.getContext('2d', { willReadFrequently: true });
+  if (!c) return { r: 0, g: 0, b: 0, chroma: 0, greyPct: 0 };
   c.drawImage(src, 0, 0, s.width, s.height);
   const d = c.getImageData(0, 0, s.width, s.height).data;
   let r = 0, g = 0, b = 0, chroma = 0, grey = 0, n = 0;

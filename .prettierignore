@@ -1,0 +1,8 @@
+dist
+node_modules
+src
+android
+store
+shots
+docs
+package-lock.json

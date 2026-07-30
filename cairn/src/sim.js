@@ -1,5 +1,9 @@
 import { FEEL, COLUMN } from './feel.js';
 
+/** @typedef {import('./types.js').Solid} Solid */
+/** @typedef {import('./types.js').Body} Body */
+/** @typedef {import('./types.js').Launch} Launch */
+
 /**
  * The simulation. No DOM, no canvas, no audio — this file could run in a
  * worker or in Node, and the headless acceptance harness drives exactly this
@@ -17,6 +21,7 @@ import { FEEL, COLUMN } from './feel.js';
  */
 
 const { dt: DT } = FEEL.sim;
+/** @type {(v: number, a: number, b: number) => number} */
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 /**
@@ -50,10 +55,15 @@ export const EROSION = { FRESH: 0, THIN: 1, TOP: 2, MEMORY: 3 };
  * file's one-integrator rule exists to prevent. A missing argument now throws
  * instead of silently ageing a corpse differently in the physics than on screen.
  */
+/**
+ * @param {Solid} solid
+ * @param {Sim} sim
+ * @returns {number} one of EROSION
+ */
 export function erosionOf(solid, sim) {
   if (!solid.corpse) return EROSION.FRESH;
   const E = FEEL.erosion;
-  let age = sim.deaths - solid.bornDeath;
+  let age = sim.deaths - (solid.bornDeath ?? 0);
   if (E.deepScale !== 1) {
     const t = clamp(Math.max(0, sim.best - solid.y) / E.deepSpan, 0, 1);
     age *= 1 + (E.deepScale - 1) * t;
@@ -65,6 +75,11 @@ export function erosionOf(solid, sim) {
 }
 
 /** Half-width a corpse still offers as a landing, given its stage. */
+/**
+ * @param {Solid} solid
+ * @param {Sim} sim
+ * @returns {number}
+ */
 export function solidHalfWidth(solid, sim) {
   if (!solid.corpse) return solid.hw;
   const st = erosionOf(solid, sim);
@@ -75,6 +90,10 @@ export function solidHalfWidth(solid, sim) {
 // --------------------------------------------------------------------- rng
 
 /** xorshift32. A seed is a tower, on every device and every run. */
+/**
+ * @param {number} seed
+ * @returns {() => number} uniform in [0,1)
+ */
 export function makeRng(seed) {
   let s = (seed | 0) || 0x9e3779b9;
   return () => {
@@ -89,6 +108,7 @@ export function makeRng(seed) {
  * A solid is an axis-aligned slab you can stand on and, if it is a corpse, can
  * also cling to the sides of. Pooled: the array only ever grows.
  */
+/** @returns {Solid} */
 function newSolid() {
   return {
     x: 0, y: 0, hw: 0, hh: 0,
@@ -98,7 +118,7 @@ function newSolid() {
     // ones is an audit that cannot prove they are all crossable.
     hard: false,
     // corpse presentation state, carried here so the renderer needs no lookup
-    order: 0, bornAt: 0, rot: 0, pose: 0, glow: 0,
+    order: 0, bornAt: 0, bornDeath: 0, rot: 0, pose: 0, glow: 0,
   };
 }
 
@@ -115,19 +135,36 @@ const BUCKET = 32;
 const LEDGE_HH = 2.4;
 
 export class World {
+  /** @param {number} seed */
   constructor(seed = 0x1a2b3c) {
     this.seed = seed;
     this.rng = makeRng(seed);
+    /** @type {Solid[]} */
     this.solids = [];
+    /** @type {Solid[]} the free list; solids are pooled and never dropped */
     this.pool = [];
+    /** @type {Map<number, Solid[]>} height buckets, `BUCKET` units tall */
     this.buckets = new Map();
     this.builtTo = 0;
     this.lastX = COLUMN * 0.5;
     this.lastHw = 14;
     this.corpseCount = 0;
+    /** @type {Solid[]} one scratch array, so `near` allocates nothing */
     this._q = [];
+    /** @type {Solid|null} the ledge a new gap is measured from */
+    this.lastLedge = null;
+    /**
+     * Installed by `Sim`, because verification needs the physics and the world
+     * does not have any. Null in a bare `World`, which is what the poster and
+     * the store checks build.
+     * @type {((from: Solid, to: Solid) => boolean)|null}
+     */
+    this.verify = null;
+    /** @type {((from: Solid, rise: number, width: number, dir: number) => {x:number,y:number}|null)|null} */
+    this.step = null;
   }
 
+  /** @returns {Solid} */
   _take() {
     const s = this.pool.pop() || newSolid();
     s.live = true;
@@ -136,6 +173,7 @@ export class World {
   }
 
   /** Remove one solid from its height bucket. O(1) in the bucket's length. */
+  /** @param {Solid} s */
   _unindex(s) {
     const arr = this.buckets.get(Math.floor(s.y / BUCKET));
     if (!arr) return;
@@ -143,6 +181,7 @@ export class World {
     if (i >= 0) arr.splice(i, 1);
   }
 
+  /** @param {Solid} s */
   _index(s) {
     const k = Math.floor(s.y / BUCKET);
     let arr = this.buckets.get(k);
@@ -151,6 +190,11 @@ export class World {
   }
 
   /** Candidates whose slab may intersect [lo, hi]. Reuses one scratch array. */
+  /**
+   * @param {number} lo
+   * @param {number} hi
+   * @returns {Solid[]}
+   */
   near(lo, hi) {
     const out = this._q;
     out.length = 0;
@@ -164,6 +208,7 @@ export class World {
     return out;
   }
 
+  /** @param {number} seed */
   reset(seed = this.seed) {
     for (const s of this.solids) { s.live = false; this.pool.push(s); }
     this.solids.length = 0;
@@ -176,6 +221,12 @@ export class World {
     this.lastLedge = this.ledge(COLUMN * 0.5, 0, FEEL.tower.baseWidth);
   }
 
+  /**
+   * @param {number} x centre
+   * @param {number} y centre; the surface is `y + LEDGE_HH`
+   * @param {number} w full width
+   * @returns {Solid}
+   */
   ledge(x, y, w) {
     const s = this._take();
     s.x = x; s.y = y; s.hw = w * 0.5; s.hh = LEDGE_HH;
@@ -185,6 +236,15 @@ export class World {
     return s;
   }
 
+  /**
+   * @param {number} x
+   * @param {number} y centre; the surface is `y + hh` and sits at the apex reached
+   * @param {number} rot
+   * @param {number} pose
+   * @param {number} at sim time
+   * @param {number} deathIndex the death this body was left by; erosion ages against it
+   * @returns {Solid}
+   */
   corpse(x, y, rot, pose, at, deathIndex = 0) {
     const s = this._take();
     s.x = x; s.y = y;
@@ -213,6 +273,10 @@ export class World {
    * height is always earned on ground nobody has stood on.
    *
    * Corpses are never regenerated. They are history and history does not move.
+   */
+  /**
+   * @param {number} y keep everything at or below this
+   * @param {number} seed
    */
   regenerateAbove(y, seed) {
     const keep = [];
@@ -252,6 +316,7 @@ export class World {
    *
    * Every number this function reads comes from FEEL.tower.
    */
+  /** @param {number} upTo world height to build to */
   generate(upTo) {
     const T = FEEL.tower;
     const g = FEEL.gravityRise;
@@ -380,12 +445,15 @@ export class World {
 
 // ------------------------------------------------------------------- player
 
+/** @returns {Body} */
 export function newBody() {
   return {
     x: COLUMN * 0.5, y: 0,
     px: COLUMN * 0.5, py: 0,     // previous tick, for render interpolation
+    rx: COLUMN * 0.5, ry: 0,     // interpolated for the renderer; never read by physics
     vx: 0, vy: 0,
     grounded: true,
+    /** @type {Solid|null} */
     standing: null,
     onWall: 0,                   // -1 left contact, +1 right, 0 none
     wallTimer: 0,
@@ -402,6 +470,7 @@ export function newBody() {
 export const PHASE = { TITLE: 0, PLAY: 1, DYING: 2, RESET: 3 };
 
 export class Sim {
+  /** @param {number} [seed] */
   constructor(seed) {
     this.world = new World(seed);
     this.body = newBody();
@@ -410,9 +479,18 @@ export class Sim {
     this.deaths = 0;
     this.best = 0;
     this.runBest = 0;
-    this.buffered = null;       // a launch queued in the air, spent on landing
+    /**
+     * The UTC date of the Daily Climb, or null in endless. The seed is DERIVED
+     * from this rather than stored, so a share card carrying the date is enough
+     * to hand someone the identical tower.
+     * @type {string|null}
+     */
+    this.dailyDate = null;
+    /** @type {Launch|null} a launch queued in the air, spent on landing */
+    this.buffered = null;
     this.bufferTimer = 0;
-    this.events = [];           // drained by the presentation layer each frame
+    /** @type {number[]} flat [kind, a, b, c, ...], drained by the presentation layer */
+    this.events = [];
     this.hitStop = 0;
     // The longest single sub-step ever taken, for the tunnelling test.
     this.maxSubStep = 0;
@@ -433,6 +511,12 @@ export class Sim {
     this.reset(true);
   }
 
+  /**
+   * @param {number} kind one of EV
+   * @param {number} [a]
+   * @param {number} [b]
+   * @param {number} [c]
+   */
   emit(kind, a = 0, b = 0, c = 0) { this.events.push(kind, a, b, c); }
 
   /**
@@ -441,6 +525,14 @@ export class Sim {
    * The generator runs while the real body is mid-flight, so verification gets
    * its own scratch body. `_flight` only ever touches the body it is handed and
    * the world, which is what makes this safe.
+   */
+  /**
+   * @param {number} x
+   * @param {number} y
+   * @param {number} vx
+   * @param {number} vy
+   * @param {Solid|null} standing
+   * @returns {Solid|null} what it landed on, or null for died / still flying
    */
   _probeFlight(x, y, vx, vy, standing) {
     const p = this._probe;
@@ -458,6 +550,13 @@ export class Sim {
   }
 
   /** Does any launch from (x, y) land on `target`? Coarse and conservative. */
+  /**
+   * @param {number} x
+   * @param {number} y
+   * @param {Solid|null} standing
+   * @param {Solid} target
+   * @returns {boolean}
+   */
   _reaches(x, y, standing, target) {
     const L = FEEL.launch;
     const dx = target.x - x, dy = target.y + target.hh - y;
@@ -494,6 +593,14 @@ export class Sim {
    * that high — in which case the point would be an apex, not a descent, and the
    * gap would be a different gap from the one asked for.
    */
+  /**
+   * @param {number} x
+   * @param {number} y
+   * @param {number} vx
+   * @param {number} vy
+   * @param {number} atY
+   * @returns {Body|null}
+   */
   _descendTo(x, y, vx, vy, atY) {
     const p = this._probe;
     p.x = p.px = x; p.y = p.py = y;
@@ -526,6 +633,13 @@ export class Sim {
    *
    * Returns the LANDING SURFACE height and centre, or null when no launch this
    * side of the column can produce one.
+   */
+  /**
+   * @param {Solid} from
+   * @param {number} wantRise
+   * @param {number} width
+   * @param {number} dir -1 or +1
+   * @returns {{x: number, y: number}|null} the LANDING SURFACE, or null
    */
   hardStep(from, wantRise, width, dir) {
     const L = FEEL.launch;
@@ -607,6 +721,11 @@ export class Sim {
    * Is there a way from `from` to `to` — directly, or by dying once and standing
    * on the body it leaves? Installed on the world as `verify`.
    */
+  /**
+   * @param {Solid} from
+   * @param {Solid} to
+   * @returns {boolean}
+   */
   routeExists(from, to) {
     const edge = from.x + Math.sign(to.x - from.x || 1) * from.hw;
     const y = from.y + from.hh;
@@ -626,6 +745,13 @@ export class Sim {
    * The throw that goes FURTHEST is not the useful one — a corpse's surface sits
    * at the apex reached, so a body placed at maximum height leaves nothing above
    * it to aim for. Shorter, steeper throws come first for exactly that reason.
+   */
+  /**
+   * @param {Solid} from
+   * @param {number} edge
+   * @param {number} y
+   * @param {Solid} to
+   * @returns {boolean}
    */
   _bodyRoute(from, edge, y, to) {
     const L = FEEL.launch;
@@ -657,6 +783,7 @@ export class Sim {
   }
 
   /** Full restart: bare rock, no history. Corpses are restored separately. */
+  /** @param {boolean} [hard] wipe deaths and time as well as the terrain */
   reset(hard) {
     this.world.reset(this.world.seed);
     this.world.generate(FEEL.camera.viewH * 2.2);
@@ -703,6 +830,11 @@ export class Sim {
    * down is honoured on contact, which removes the single most common source
    * of "the game ate my input".
    */
+  /**
+   * @param {number} vx
+   * @param {number} vy
+   * @returns {boolean} true if it fired now, false if it was buffered or refused
+   */
   launch(vx, vy) {
     if (this.phase !== PHASE.PLAY) return false;
     if (!this.canLaunch()) {
@@ -727,6 +859,13 @@ export class Sim {
    *
    * Writes into `out` so the aim path allocates nothing.
    */
+  /**
+   * @param {Body} b
+   * @param {number} vx
+   * @param {number} vy
+   * @param {Launch} out
+   * @returns {Launch}
+   */
   launchVelocity(b, vx, vy, out) {
     out.vx = vx;
     out.vy = vy;
@@ -734,6 +873,11 @@ export class Sim {
     return out;
   }
 
+  /**
+   * @param {number} vx
+   * @param {number} vy
+   * @returns {boolean}
+   */
   _fire(vx, vy) {
     const b = this.body;
     const v = this.launchVelocity(b, vx, vy, this._lv);
@@ -755,6 +899,10 @@ export class Sim {
   // ------------------------------------------------------------ integration
 
   /** Gravity for the current instant, including the apex hang. */
+  /**
+   * @param {Body} b
+   * @returns {number}
+   */
   _gravity(b) {
     const A = FEEL.apexHang;
     let g = b.vy > 0 ? FEEL.gravityRise : FEEL.gravityFall;
@@ -777,6 +925,11 @@ export class Sim {
    * is travelling.
    *
    * @returns the solid landed on, the string 'die', or null for still flying.
+   */
+  /**
+   * @param {Body} b
+   * @param {number} aimDir -1, 0 or +1 of held air control
+   * @returns {Solid|'die'|null}
    */
   _flight(b, aimDir) {
     // Subtle drift toward the aim. Enough to save a jump, never enough to make
@@ -825,7 +978,8 @@ export class Sim {
   }
 
   /** One fixed tick of the whole game. */
-  tick(aimDir) {
+  /** @param {number} [aimDir] -1, 0 or +1 of held air control */
+  tick(aimDir = 0) {
     this.time += DT;
     if (this.hitStop > 0) { this.hitStop -= DT; return; }
     if (this.phase !== PHASE.PLAY) return;
@@ -862,6 +1016,12 @@ export class Sim {
    * pulled onto the ledge rather than punished, because a player who was
    * clearly going for a platform meant to be on it.
    */
+  /**
+   * @param {number} fromY
+   * @param {number} toY
+   * @param {number} x
+   * @returns {Solid|null}
+   */
   _surfaceUnder(fromY, toY, x) {
     const solids = this.world.near(toY - 4, fromY + 4);
     const half = FEEL.body.w * 0.5;
@@ -882,6 +1042,7 @@ export class Sim {
     return best;
   }
 
+  /** @param {Solid} s */
   _land(s) {
     const b = this.body;
     const impact = Math.abs(b.vy);
@@ -904,6 +1065,10 @@ export class Sim {
     }
   }
 
+  /**
+   * @param {Body} b
+   * @param {number} side
+   */
   _wall(b, side) {
     b.onWall = side;
     b.wallTimer += DT;
@@ -913,6 +1078,7 @@ export class Sim {
   }
 
   /** Cling to the vertical face of a ledge or a corpse. */
+  /** @param {Body} b */
   _sides(b) {
     if (b.vy > 0) return;
     const solids = this.world.near(b.y - 2, b.y + FEEL.body.h + 2);
@@ -976,6 +1142,13 @@ export const EV = { LAUNCH: 0, LAND: 1, DEATH: 2, BEST: 3, BIOME: 4 };
  * and an earlier build of this game shipped exactly that bug.
  *
  * Writes flat [x,y,...] into `outArc` and returns the landing solid or null.
+ */
+/**
+ * @param {Sim} sim
+ * @param {number} vx
+ * @param {number} vy
+ * @param {number[]} outArc flat [x, y, ...], cleared and refilled
+ * @returns {Solid|null} what the launch lands on, or null if it dies
  */
 export function predict(sim, vx, vy, outArc) {
   const b = sim.body;

@@ -1,6 +1,9 @@
 import { FEEL } from './feel.js';
 import { predict } from './sim.js';
 
+/** @typedef {import('./types.js').Solid} Solid */
+/** @typedef {import('./sim.js').Sim} Sim */
+
 /**
  * Touch, and the aim model.
  *
@@ -31,6 +34,10 @@ import { predict } from './sim.js';
 const DEG = Math.PI / 180;
 
 export class Input {
+  /**
+   * @param {HTMLElement} canvas the surface actually on screen
+   * @param {Sim} sim
+   */
   constructor(canvas, sim) {
     this.canvas = canvas;
     this.sim = sim;
@@ -46,14 +53,21 @@ export class Input {
     this.vx = 0; this.vy = 0;
     this.snapped = 0;           // degrees actually applied, for the debug pane
 
+    /** @type {number[]} flat [x, y, ...] of the predicted flight */
     this.arc = [];
+    /** @type {Solid|null} */
     this.landing = null;
     this.timeScale = 1;
 
+    /** @type {((vx: number, vy: number) => void)|null} */
     this.onLaunch = null;
+    /** @type {(() => void)|null} */
     this.onChargeStart = null;
+    /** @type {((power: number) => void)|null} */
     this.onRelease = null;
+    /** @type {(() => void)|null} */
     this.onTap = null;
+    /** @type {(() => void)|null} */
     this.onMonument = null;
 
     // While the monument is up there is nothing to aim at — the player is not
@@ -62,23 +76,29 @@ export class Input {
     this.locked = false;
 
     this._snapTick = 0;
+    /** @type {number[]} */
     this._scratch = [];
+    /** @type {number|undefined} */
+    this._lastAssist = undefined;
+    /** @type {number|undefined} */
+    this._lastRaw = undefined;
 
     const opts = { passive: false };
-    canvas.addEventListener('pointerdown', (e) => this._down(e), opts);
-    canvas.addEventListener('pointermove', (e) => this._move(e), opts);
-    canvas.addEventListener('pointerup', (e) => this._up(e), opts);
-    canvas.addEventListener('pointercancel', (e) => this._up(e), opts);
+    canvas.addEventListener('pointerdown', /** @param {PointerEvent} e */ (e) => this._down(e), opts);
+    canvas.addEventListener('pointermove', /** @param {PointerEvent} e */ (e) => this._move(e), opts);
+    canvas.addEventListener('pointerup', /** @param {PointerEvent} e */ (e) => this._up(e), opts);
+    canvas.addEventListener('pointercancel', /** @param {PointerEvent} e */ (e) => this._up(e), opts);
     // Belt and braces on top of touch-action: none. iOS in particular will
     // still try to scroll, zoom and pop a callout without these.
     for (const t of ['gesturestart', 'gesturechange', 'contextmenu', 'dblclick', 'selectstart']) {
-      canvas.addEventListener(t, (e) => e.preventDefault(), opts);
+      canvas.addEventListener(t, /** @param {Event} e */ (e) => e.preventDefault(), opts);
     }
-    document.addEventListener('touchmove', (e) => {
+    document.addEventListener('touchmove', /** @param {TouchEvent} e */ (e) => {
       if (e.cancelable) e.preventDefault();
     }, opts);
   }
 
+  /** @param {PointerEvent} e */
   _down(e) {
     e.preventDefault();
     // A SECOND FINGER IS NOT A SECOND AIM.
@@ -109,6 +129,7 @@ export class Input {
     }
   }
 
+  /** @param {PointerEvent} e */
   _move(e) {
     if (this.locked) return;
     if (!this.active || e.pointerId !== this.pointerId) return;
@@ -124,6 +145,7 @@ export class Input {
     }
   }
 
+  /** @param {PointerEvent} e */
   _up(e) {
     if (!this.active || (e.pointerId !== this.pointerId && e.pointerId !== undefined)) return;
     if (e.preventDefault) e.preventDefault();
@@ -151,6 +173,10 @@ export class Input {
   /**
    * Resolve the drag into a launch vector, and — while aiming — the exact arc
    * the physics will take. Called once per rendered frame.
+   */
+  /**
+   * @param {number} dtReal seconds of real time
+   * @param {number} screenH CSS pixels; the ONE place pixels enter the game
    */
   update(dtReal, screenH) {
     const L = FEEL.launch;
@@ -211,6 +237,11 @@ export class Input {
    *
    * Rate-limited to every third frame: the fan costs several full physics
    * predictions, and the aim does not move far in 50 ms of slowed time.
+   */
+  /**
+   * @param {number} angle radians
+   * @param {number} speed
+   * @returns {number} the possibly-nudged angle
    */
   _assist(angle, speed) {
     const L = FEEL.launch;
