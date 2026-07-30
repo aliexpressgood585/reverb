@@ -126,6 +126,14 @@ export class World {
     return s;
   }
 
+  /** Remove one solid from its height bucket. O(1) in the bucket's length. */
+  _unindex(s) {
+    const arr = this.buckets.get(Math.floor(s.y / BUCKET));
+    if (!arr) return;
+    const i = arr.indexOf(s);
+    if (i >= 0) arr.splice(i, 1);
+  }
+
   _index(s) {
     const k = Math.floor(s.y / BUCKET);
     let arr = this.buckets.get(k);
@@ -156,7 +164,7 @@ export class World {
     this.lastX = COLUMN * 0.5;
     this.lastHw = 14;
     this.corpseCount = 0;
-    this.ledge(COLUMN * 0.5, 0, FEEL.tower.baseWidth);
+    this.lastLedge = this.ledge(COLUMN * 0.5, 0, FEEL.tower.baseWidth);
   }
 
   ledge(x, y, w) {
@@ -206,15 +214,16 @@ export class World {
     this.solids = keep;
     this.buckets.clear();
 
-    let top = 0, topX = COLUMN * 0.5, topHw = 15;
+    let top = 0, topX = COLUMN * 0.5, topHw = 15, topLedge = null;
     for (let i = 0; i < keep.length; i++) {
       const s = keep[i];
       this._index(s);
-      if (!s.corpse && s.y > top) { top = s.y; topX = s.x; topHw = s.hw; }
+      if (!s.corpse && s.y >= top) { top = s.y; topX = s.x; topHw = s.hw; topLedge = s; }
     }
     this.builtTo = top;
     this.lastX = topX;
     this.lastHw = topHw;
+    this.lastLedge = topLedge;
     this.rng = makeRng(seed);
   }
 
@@ -292,9 +301,31 @@ export class World {
       nx = clamp(nx, lo, hi);
 
       this.builtTo = h + rise;
+      const from = this.lastLedge;
+      const led = this.ledge(nx, this.builtTo, width);
+
+      // THE PROMISE: NO LEDGE YOU CANNOT LEAVE.
+      //
+      // An unreachable gap is the point of this game — you die in it and stand
+      // on the body — but only when a body actually bridges it. Roughly half of
+      // them did not, for a reason a great deal of measurement never explained,
+      // and a player hit one three separate times and was stuck.
+      //
+      // So the generator proves it now instead of assuming it. `verify` runs the
+      // real physics; if it cannot demonstrate a route, the ledge drops to an
+      // ordinary rise. The test is deliberately CONSERVATIVE and cheap: a false
+      // negative costs one hard gap, a false positive would cost the run, and a
+      // physics-verified positive cannot be false.
+      if (unreachable && this.verify && from && !this.verify(from, led)) {
+        this._unindex(led);
+        led.y = h + T.minRise + this.rng() * (T.maxRise - T.minRise);
+        this.builtTo = led.y;
+        this._index(led);
+      }
+
       this.lastX = nx;
       this.lastHw = width * 0.5;
-      this.ledge(nx, this.builtTo, width);
+      this.lastLedge = led;
     }
   }
 }
@@ -344,10 +375,104 @@ export class Sim {
     // Where a predicted launch would freeze. Filled by `predict`, read by the
     // renderer to draw the body you are about to leave. Allocated once.
     this.predictPeak = { x: 0, y: 0, dies: false };
+    // A second scratch body, for proving routes while the player is in the air.
+    this._probe = newBody();
+    this.world.verify = (from, to) => this.routeExists(from, to);
     this.reset(true);
   }
 
   emit(kind, a = 0, b = 0, c = 0) { this.events.push(kind, a, b, c); }
+
+  /**
+   * Fly the PROBE — never the player — and report what it landed on.
+   *
+   * The generator runs while the real body is mid-flight, so verification gets
+   * its own scratch body. `_flight` only ever touches the body it is handed and
+   * the world, which is what makes this safe.
+   */
+  _probeFlight(x, y, vx, vy, standing) {
+    const p = this._probe;
+    p.x = p.px = x; p.y = p.py = y;
+    p.vx = vx; p.vy = vy;
+    p.takeoff = y; p.peakX = x; p.peakY = y;
+    p.hangTimer = 0; p.onWall = 0; p.wallTimer = 0;
+    p.grounded = false; p.standing = standing;
+    for (let i = 0; i < 360; i++) {
+      const r = this._flight(p, 0);
+      if (r === 'die') return null;
+      if (r) return r;
+    }
+    return null;
+  }
+
+  /** Does any launch from (x, y) land on `target`? Coarse and conservative. */
+  _reaches(x, y, standing, target) {
+    const L = FEEL.launch;
+    const dx = target.x - x, dy = target.y + target.hh - y;
+    for (const m of [1.5, 5, 10, 16]) {
+      const peak = Math.max(dy + m, 0.5);
+      const vy = Math.sqrt(2 * FEEL.gravityRise * peak);
+      const t = vy / FEEL.gravityRise
+        + Math.sqrt((2 * Math.max(peak - dy, 0)) / FEEL.gravityFall);
+      const vx = dx / Math.max(t, 1e-3);
+      const sp = Math.hypot(vx, vy);
+      if (sp > 1e-6) {
+        const k = clamp(sp, L.minSpeed, L.maxSpeed) / sp;
+        if (this._probeFlight(x, y, vx * k, vy * k, standing) === target) return true;
+      }
+    }
+    for (let a = 25; a <= 155; a += 10) {
+      const th = a * Math.PI / 180;
+      for (let f = 1; f >= 0.39; f -= 0.2) {
+        const sp = L.minSpeed + (L.maxSpeed - L.minSpeed) * f;
+        if (this._probeFlight(x, y, Math.cos(th) * sp, Math.sin(th) * sp, standing) === target) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Is there a way from `from` to `to` — directly, or by dying once and standing
+   * on the body it leaves? Installed on the world as `verify`.
+   */
+  routeExists(from, to) {
+    const edge = from.x + Math.sign(to.x - from.x || 1) * from.hw;
+    const y = from.y + from.hh;
+    if (this._reaches(edge, y, from, to)) return true;
+
+    // Leave a body and try again from it. The throw that goes FURTHEST is not
+    // the useful one — a corpse's surface sits at the apex reached, so a body
+    // placed at maximum height leaves nothing above it to aim for. Shorter,
+    // steeper throws come first for exactly that reason.
+    const L = FEEL.launch;
+    for (let a = 88; a >= 40; a -= 8) {
+      for (let f = 0.55; f <= 1.001; f += 0.15) {
+        const sp = L.minSpeed + (L.maxSpeed - L.minSpeed) * f;
+        const th = a * Math.PI / 180 * Math.sign(to.x - from.x || 1);
+        if (this._probeFlight(edge, y, Math.cos(th) * sp, Math.sin(th) * sp, from)) continue;
+        const px = this._probe.peakX, py = this._probe.peakY;
+        if (py <= y + 1) continue;
+
+        const c = this.world.corpse(px, py - FEEL.tower.corpseH * 0.5, 0, 0, 0, this.deaths);
+        let ok = this._reaches(edge, y, from, c);
+        if (ok) {
+          const ch = solidHalfWidth(c, this);
+          const cx = c.x + Math.sign(to.x - c.x || 1) * ch;
+          ok = this._reaches(cx, c.y + c.hh, c, to);
+        }
+        this.world._unindex(c);
+        const at = this.world.solids.indexOf(c);
+        if (at >= 0) this.world.solids.splice(at, 1);
+        this.world.corpseCount--;
+        c.live = false;
+        this.world.pool.push(c);
+        if (ok) return true;
+      }
+    }
+    return false;
+  }
 
   /** Full restart: bare rock, no history. Corpses are restored separately. */
   reset(hard) {

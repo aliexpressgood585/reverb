@@ -218,7 +218,26 @@ export const FEEL = {
     // gaps need a body to bridge them, 10.4% have no route even with one, and
     // the expert model still passes 600 m on only 3.3% of first attempts. Lower
     // and the mechanic stops mattering; higher and the terrain does the killing.
-    overreachRate: 0.14,  // their share of gaps at full difficulty
+    // ZERO. A player hit an unleavable ledge three times, at 391 m, 481 m and
+    // 567 m, and the game is meant to be shipped.
+    //
+    // Every wall this game has ever produced comes from this one mechanic:
+    // audited at 0 it is 100% DIRECT across 681 gaps with no dead end anywhere,
+    // and at any non-zero rate roughly 5% of gaps have no route even after the
+    // generator verifies each one with the real physics and demotes the ones it
+    // cannot prove. Half of them were never bridgeable and a great deal of
+    // measurement never explained why.
+    //
+    // What it costs is honest and worth stating: a BOT with 1.1 degrees of aim
+    // error now climbs without dying. That was the finding this whole balance
+    // effort started from — but the same measurements showed a jump forgives
+    // about twenty degrees while one pixel of thumb is 0.31, so precision was
+    // never what killed anyone. It killed bots. A person's ceiling here is nerve
+    // and patience, and an unleavable ledge is not difficulty, it is a stop.
+    //
+    // The verifier in generate() stays regardless: it is now a permanent guard
+    // rather than a repair, and it costs nothing while this is zero.
+    overreachRate: 0,     // their share of gaps at full difficulty
     // Rise as a multiple of the ideal full-power lift. The floor must clear what
     // the apex hang actually buys (~1.05) or the gap is merely hard; the ceiling
     // must stay close enough that a corpse left below it finishes the job.

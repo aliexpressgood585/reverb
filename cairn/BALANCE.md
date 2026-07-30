@@ -519,6 +519,48 @@ comfort, not challenge.
 
 ---
 
+## The dead ends are gone, and what that cost
+
+A player was stopped at **391 m, 481 m and 567 m** — three separate unleavable
+ledges — and said the game did not feel ready to market. That is the end of the
+argument, and it ended it in the right direction.
+
+**Two things were built before the decision was taken.** The generator now
+verifies: `Sim.routeExists` flies a dedicated probe body through the real physics
+and, if it cannot demonstrate a route to a ledge — directly, or by leaving a body
+in the gap and standing on it — the ledge drops to an ordinary rise. It is
+deliberately conservative, because a false negative costs one hard gap and a
+false positive costs the run, and a physics-verified positive cannot be false.
+1,200 m of tower generates in 24 ms with it running.
+
+It was not enough. Even with every unreachable ledge verified and demoted, ~5% of
+gaps still had no route, while switching the mechanic off entirely gave 100%
+DIRECT with no dead end anywhere. Every wall this game has ever produced comes
+from that one mechanic, and half of them were never bridgeable for a reason a
+great deal of measurement never explained.
+
+**So `overreachRate` is 0.** Audited across **4,226 gaps from 0 m to 3,000 m:
+100% DIRECT, zero walls.** The verifier stays as a permanent guard rather than a
+repair — it costs nothing at zero and it will catch the next person who turns
+this knob up without measuring.
+
+### What it costs, plainly
+
+A **bot** with 1.1 degrees of aim error now climbs without dying, which is the
+finding this entire document started from. It is worth putting next to the other
+number this document produced: **a jump forgives about twenty degrees, and one
+pixel of thumb is 0.31 degrees.** Precision was never what killed anyone here. It
+killed bots. A person's ceiling is nerve, patience and the narrowing ledges —
+median width 9.7 u against a 4.2 u body — and an unleavable ledge is not
+difficulty, it is a stop.
+
+The honest position: **this game's difficulty curve is now unverified for expert
+humans.** The bot models cannot see it, and the only way to know is to watch
+someone good play. Everything in this file above that line still stands for
+novice and average play, which is where retention is decided.
+
+---
+
 ## The plateau: what was tried, and why it did not ship
 
 The caveat under target 2 says the average player's median death height flattens

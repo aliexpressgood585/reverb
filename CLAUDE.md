@@ -265,7 +265,16 @@ change; the schema number lives inside the payload. Rows are validated
 individually — a body at x=1e9 does not merely look wrong, it poisons the height
 buckets every collision query walks.
 
-**Uncrossable gaps are TOO HIGH, not too far.** The first version pushed them
+**There are no unleavable ledges. `FEEL.tower.overreachRate` is 0** and audited
+at 4,226 gaps from 0-3000 m, 100% directly crossable. A player hit three walls at
+391, 481 and 567 m; every wall this game ever produced came from that mechanic.
+`Sim.routeExists` stays as a permanent guard — the generator flies a probe body
+through the real physics and demotes any ledge it cannot prove a route to. Turn
+the rate up and it will catch you; do not turn it up without re-running
+`cairn-reach-check.mjs`. The cost is recorded in BALANCE.md: a 1.1-degree bot no
+longer dies, and the difficulty curve is unverified for expert humans.
+
+**Historical, and why the knob exists: uncrossable gaps were TOO HIGH, not too far.** The first version pushed them
 sideways and the 100 u column clamped them back into ordinary gaps — the
 mechanic fired on 2.2% of gaps against a knob set for 27%. Height has no wall,
 and it is bridgeable by design: throw under full power so the apex is low enough
