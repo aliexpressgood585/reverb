@@ -17,9 +17,17 @@
     "profile": "node scripts/cairn-profile.mjs",
     "accept": "node scripts/cairn-check.mjs",
     "bodies": "node scripts/cairn-bodies-check.mjs",
-    "reach": "node scripts/cairn-reach-check.mjs --from=0 --span=3000 --seeds=30"
+    "reach": "node scripts/cairn-reach-check.mjs --from=0 --span=3000 --seeds=30",
+    "build:android": "vite build --config vite.android.config.js && cap sync android",
+    "assets": "node scripts/cairn-assets.mjs",
+    "store": "node scripts/cairn-store-shots.mjs",
+    "ui": "node scripts/cairn-ui-shots.mjs",
+    "qa": "node scripts/cairn-qa.mjs"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/cli": "^8.4.2",
+    "@capacitor/core": "^8.4.2",
     "@eslint/js": "^10.0.1",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.8.0",

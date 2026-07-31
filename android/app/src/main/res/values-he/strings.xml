@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- The launcher label on a Hebrew device. The game's own strings come from
+     cairn/src/i18n.js; this is the one string Android owns. -->
+<resources>
+    <string name="app_name">קאירן</string>
+    <string name="title_activity_main">קאירן</string>
+</resources>

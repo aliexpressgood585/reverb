@@ -2,3 +2,15 @@ node_modules
 dist
 shots
 *.log
+
+# ---------------------------------------------------------------- android
+# THE KEYSTORE NEVER GOES IN GIT. Losing it means never updating the app again;
+# leaking it means someone else can publish as you. Back it up out of band.
+keystore/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+dist-android/

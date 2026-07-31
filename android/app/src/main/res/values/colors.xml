@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- --void from DESIGN.md. The launcher background, the splash and the status
+     bar are all the same colour as the top of the shaft, so the app opens into
+     the game rather than through a white flash. -->
+<resources>
+    <color name="ic_launcher_background">#05070C</color>
+    <color name="colorPrimary">#05070C</color>
+    <color name="colorPrimaryDark">#05070C</color>
+    <color name="colorAccent">#FF6B35</color>
+    <color name="splash_background">#05070C</color>
+</resources>

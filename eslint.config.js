@@ -72,6 +72,7 @@ export default [
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'src/**', 'android/**', 'public/**', 'store/**'],
+    ignores: ['dist/**', 'dist-android/**', 'node_modules/**', 'src/**',
+      'android/**', 'public/**', 'store/**', 'shots/**', 'keystore/**'],
   },
 ];

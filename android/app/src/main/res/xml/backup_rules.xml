@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  THE TOWER IS THE ONE THING WORTH BACKING UP.
+
+  A player's cairn is hundreds of decisions and it lives in localStorage, which
+  the WebView keeps under app_webview. Losing it to a new phone is the worst bug
+  this game can have, so Play's auto-backup is opted in explicitly rather than
+  left to the default.
+-->
+<full-backup-content>
+    <include domain="database" path="." />
+    <include domain="file" path="app_webview/" />
+    <exclude domain="file" path="app_webview/Cache/" />
+    <exclude domain="file" path="app_webview/GPUCache/" />
+</full-backup-content>

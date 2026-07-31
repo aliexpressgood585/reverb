@@ -1,0 +1,23 @@
+{
+  "appId": "app.cairn.game",
+  "appName": "CAIRN",
+  "webDir": "dist-android",
+  "android": {
+    "backgroundColor": "#05070C",
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "launchFadeOutDuration": 300,
+      "backgroundColor": "#05070C",
+      "androidSplashResourceName": "splash",
+      "showSpinner": false
+    }
+  }
+}

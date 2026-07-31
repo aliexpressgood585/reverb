@@ -18,6 +18,10 @@ export default defineConfig({
       input: {
         main: resolve(root, 'index.html'),
         cairn: resolve(root, 'cairn/index.html'),
+        // Google Play will not accept a listing without a LIVE privacy policy
+        // URL, so it ships with the games rather than living in a document
+        // somewhere. https://reverb-wheat.vercel.app/privacy/
+        privacy: resolve(root, 'privacy/index.html'),
       },
     },
   },
