@@ -49,6 +49,91 @@ const lerp = (a, b, t) => a + (b - a) * t;
 /** @type {(c: number[], a: number|string) => string} */
 const rgb = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 
+/**
+ * THE SILHOUETTE LANGUAGE OF EACH BIOME, in the order BIOMES declares them.
+ *
+ * Colour tells you which biome you are in. Shape is what stops the twelfth pass
+ * through it looking like the first.
+ */
+const BAND_KINDS = ['spire', 'block', 'dome', 'needle', 'shard', 'facet'];
+
+/**
+ * One parallax layer's outline, in a biome's own geometry.
+ *
+ * Returns `n + 1` points as a flat [x0, y0, x1, y1, ...] with x ascending from 0
+ * to 1 and y a height fraction. EVERY KIND MUST RETURN THE SAME LENGTH for a
+ * given `n`, because two of them are interpolated against each other while a
+ * biome crossfades — a shape that changes its point count would have to pop.
+ *
+ * @param {string} kind
+ * @param {number} level  0 is the furthest and tallest, 2 the nearest
+ * @param {number} n      segments; the array is (n + 1) points
+ * @param {() => number} rng
+ * @returns {Float32Array}
+ */
+function bandShape(kind, level, n, rng) {
+  const out = new Float32Array((n + 1) * 2);
+  const amp = 0.42 - level * 0.09;
+  /** @type {(i: number, y: number) => void} */
+  const put = (i, y) => { out[i * 2] = i / n; out[i * 2 + 1] = clamp(y, 0.01, 0.98); };
+
+  if (kind === 'block') {
+    // SIGNAL. Stepped plateaus with vertical walls — architecture, not rock.
+    // A run of points holds one height, then jumps.
+    let h = 0.1 + rng() * amp;
+    let hold = 0;
+    for (let i = 0; i <= n; i++) {
+      if (hold-- <= 0) { h = 0.06 + rng() * amp; hold = 2 + Math.floor(rng() * 3); }
+      put(i, h);
+    }
+  } else if (kind === 'dome') {
+    // BLOOM. Overlapping rounded humps — organic, swollen, no sharp corners.
+    const humps = 3 + level;
+    /** @type {number[][]} */
+    const hs = [];
+    for (let k = 0; k < humps; k++) hs.push([rng(), 0.10 + rng() * 0.22, 0.14 + rng() * amp]);
+    for (let i = 0; i <= n; i++) {
+      const x = i / n;
+      let y = 0.05;
+      for (const [cx, w, hh] of hs) {
+        const d = Math.abs(x - (cx ?? 0)) / (w ?? 0.2);
+        if (d < 1) y = Math.max(y, (hh ?? 0.2) * Math.cos(d * Math.PI * 0.5) ** 0.7);
+      }
+      put(i, y);
+    }
+  } else if (kind === 'needle') {
+    // VOID. Mostly empty, with rare thin spikes. The emptiest biome should LOOK
+    // like the emptiest biome rather than like a dark version of a busy one.
+    for (let i = 0; i <= n; i++) {
+      const spike = rng() < 0.13;
+      put(i, spike ? 0.2 + rng() * amp * 1.5 : 0.02 + rng() * 0.05);
+    }
+  } else if (kind === 'shard') {
+    // CINDER. Asymmetric sawtooth: a slow rise then a vertical drop. Broken.
+    let h = 0.08;
+    for (let i = 0; i <= n; i++) {
+      h += amp * 0.34 * rng();
+      if (h > amp || rng() < 0.12) { put(i, h); h = 0.04 + rng() * 0.06; continue; }
+      put(i, h);
+    }
+  } else if (kind === 'facet') {
+    // GLACIER. Long straight runs meeting at points — crystal, not noise.
+    let i = 0;
+    let h = 0.1 + rng() * amp;
+    while (i <= n) {
+      const run = 3 + Math.floor(rng() * 6);
+      const to = 0.06 + rng() * amp;
+      for (let k = 0; k <= run && i <= n; k++, i++) put(i, h + (to - h) * (k / run));
+      h = to;
+    }
+  } else {
+    // ASH, and the fallback. The original jagged noise, kept exactly, because it
+    // is the silhouette the art direction was tuned against.
+    for (let i = 0; i <= n; i++) put(i, rng() * amp + 0.05);
+  }
+  return out;
+}
+
 // ------------------------------------------------------------------- camera
 
 export class Camera {
@@ -181,20 +266,45 @@ export class Renderer {
     this.w = 1; this.h = 1; this.dpr = 1;
     this.biome = newBiomeSlot();
 
-    // Parallax bands: point arrays, generated once, redrawn as paths so they
-    // cross-fade with the biome for free.
+    /*
+     * PARALLAX BANDS — one silhouette LANGUAGE per biome, not one silhouette.
+     *
+     * This used to be three jagged polygons generated once from a fixed seed and
+     * tiled forever, with only the colour changing by altitude. A player at
+     * 11,045 m reported it as "the design between the stages is boring, it
+     * repeats" and he was exactly right: the biome cycle is six biomes of 150 m,
+     * so at 11 km he had seen the same three shapes in the same six colours
+     * TWELVE times. Hue is not variety.
+     *
+     * Each biome now has its own geometry — spires, blocks, domes, needles,
+     * shards, facets — and every layer of every biome has the same POINT COUNT so
+     * the crossfade between two biomes can interpolate the silhouettes as well as
+     * the colours. Shapes are still generated once at construction; what happens
+     * per frame is a lerp into a preallocated scratch array, so the draw loop
+     * still allocates nothing.
+     */
     this.bands = [];
-    const rng = makeRng(0x51ce07);
     for (let l = 0; l < 3; l++) {
-      const pts = [];
       const n = 26 + l * 10;
-      for (let i = 0; i <= n; i++) {
-        pts.push(i / n, rng() * (0.42 - l * 0.09) + 0.05);
+      /** @type {Float32Array[]} one silhouette per biome, all the same length */
+      const shapes = [];
+      for (let b = 0; b < BAND_KINDS.length; b++) {
+        shapes.push(bandShape(BAND_KINDS[b] ?? 'spire', l, n, makeRng(0x51ce07 + b * 7919 + l)));
       }
-      this.bands.push({ pts, par: [0.15, 0.35, 0.6][l], span: 260 - l * 60 });
+      this.bands.push({
+        shapes,
+        /** filled each frame by lerping two shapes; never reallocated */
+        pts: new Float32Array((n + 1) * 2),
+        n,
+        par: [0.15, 0.35, 0.6][l],
+        span: 260 - l * 60,
+      });
     }
 
-    // Dust, pooled and wrapped into view rather than respawned.
+    // Dust, pooled and wrapped into view rather than respawned. Its own seed:
+    // it used to share the bands' generator, so reshaping the bands would have
+    // silently moved every dust mote as well.
+    const rng = makeRng(0xd057);
     this.dust = new Float32Array(DUST * 5);   // x, y, layer, phase, size
     for (let i = 0; i < DUST; i++) {
       const o = i * 5;
@@ -433,11 +543,34 @@ export class Renderer {
   _bands(ctx, B, cam) {
     // Silhouetted geometry, never empty, never contrasty. Each band repeats
     // vertically so the tower has depth at any height.
+    //
+    // TWO THINGS STOP IT REPEATING. The silhouette is the current biome's, blended
+    // into the next one exactly as the colours blend — so a biome boundary is a
+    // change of geometry and not only of hue. And the SCALE of that geometry
+    // drifts continuously with altitude on two frequencies that do not divide
+    // into each other, so the combination of colour, shape and scale has no short
+    // period. Twelve passes through six biomes used to be twelve identical
+    // pictures; it now takes kilometres before anything looks like itself again.
+    const kinds = this.bands[0] ? this.bands[0].shapes.length : 1;
+    const i0 = ((B.index % kinds) + kinds) % kinds;
+    const i1 = (i0 + 1) % kinds;
+    const blend = B.blend;
+    const drift = 1
+      + 0.42 * Math.sin(cam.y * 0.00055)
+      + 0.20 * Math.sin(cam.y * 0.00017 + 1.7);
+
     for (let l = 0; l < this.bands.length; l++) {
       const band = this.bands[l];
       const par = band.par;
       const a = 0.11 + l * 0.075;
-      const spanPx = band.span * this.scale;
+      const spanPx = band.span * drift * this.scale;
+
+      // Lerp the two silhouettes into the scratch array. No allocation.
+      const from = band.shapes[i0], to = band.shapes[i1], pts = band.pts;
+      for (let i = 0; i < pts.length; i += 2) {
+        pts[i] = from[i] ?? 0;
+        pts[i + 1] = (from[i + 1] ?? 0) + ((to[i + 1] ?? 0) - (from[i + 1] ?? 0)) * blend;
+      }
       const off = ((cam.y * par * this.scale) % spanPx + spanPx) % spanPx;
       for (let rep = -1; rep <= Math.ceil(this.h / spanPx) + 1; rep++) {
         const baseY = this.h - off + rep * spanPx;
@@ -452,7 +585,6 @@ export class Renderer {
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.moveTo(-20, foot);
-        const pts = band.pts;
         for (let i = 0; i < pts.length; i += 2) {
           ctx.lineTo(-20 + pts[i] * (this.w + 40), baseY - pts[i + 1] * spanPx);
         }
@@ -641,7 +773,17 @@ export class Renderer {
         ctx.stroke();
       } else {
         const narrow = st === EROSION.FRESH ? 1 : 0.45;
-        const solidity = st === EROSION.FRESH ? 1 : st === EROSION.THIN ? 0.66 : 0.34;
+        // FRESH AND THIN WERE NEARLY THE SAME BRIGHTNESS.
+        //
+        // Solidity used to run 1 / 0.66 / 0.34, and once `rimlight` is up — which
+        // it is whenever the player's light is anywhere near — a FRESH fill and a
+        // THIN fill land within a tenth of each other. Acceptance test 13 was
+        // passing on a margin of 4.2 against a threshold of 3, which is not a
+        // pass, it is a coin landing on its edge. An external reviewer had already
+        // said it in words: "it is not clear which bodies still hold weight".
+        // The spread is wider now, and it is widest on the shelf bar below,
+        // because the shelf IS the hitbox.
+        const solidity = st === EROSION.FRESH ? 1 : st === EROSION.THIN ? 0.5 : 0.24;
         const fill = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.10 + solidity * (0.22 + rimlight * 0.5)).toFixed(3)})`;
         const rim = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.08 + solidity * (0.16 + rimlight * 0.8)).toFixed(3)})`;
         const hwPx = s.hw * this.scale * narrow;
@@ -657,8 +799,9 @@ export class Renderer {
         // The load-bearing surface, drawn as a bright bar exactly as wide as the
         // collision actually is. Fresh corpses get a full shelf; eroded ones a
         // visibly shorter one. This is the tell that reads fastest.
-        ctx.fillStyle = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.30 + solidity * 0.55).toFixed(3)})`;
-        ctx.fillRect(-hwPx, -hhPx, hwPx * 2, Math.max(1, 1.4 * this.dpr));
+        ctx.fillStyle = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.16 + solidity * 0.80).toFixed(3)})`;
+        ctx.fillRect(-hwPx, -hhPx, hwPx * 2,
+                     Math.max(1, (st === EROSION.FRESH ? 2.1 : 1.2) * this.dpr));
 
         if (st === EROSION.THIN) {
           // Cracks. Three hairlines through the body, seeded off the pose so a

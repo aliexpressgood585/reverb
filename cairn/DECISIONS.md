@@ -528,3 +528,78 @@ no longer does is take the product over uninvited.
 indistinguishable from a decision the next time it is read, and the player would
 then be locked to English by an act they never performed. Only an explicit choice
 in Settings is written down.
+
+
+---
+
+## 23. Each biome has a silhouette, not just a hue
+
+A player at **11,045 m** sent a screenshot and said the design between the stages
+was boring and repeated itself. He was right, and the cause was structural rather
+than a matter of taste.
+
+The parallax bands were three jagged polygons generated once from a fixed seed
+and tiled vertically forever. The only thing altitude changed was colour. The
+biome cycle is six biomes of 150 m, so **at 11 km he had seen the same three
+shapes in the same six colours twelve times**. Hue is not variety.
+
+Each biome now has its own geometry:
+
+| biome | silhouette |
+|---|---|
+| ASH | spires — the original jagged noise, kept because the art was tuned against it |
+| SIGNAL | blocks — stepped plateaus with vertical walls. Architecture, not rock. |
+| BLOOM | domes — overlapping rounded humps, no sharp corners |
+| VOID | needles — mostly empty with rare thin spikes. The emptiest biome looks empty. |
+| CINDER | shards — asymmetric sawtooth, slow rise then a vertical drop |
+| GLACIER | facets — long straight runs meeting at points. Crystal, not noise. |
+
+Every kind returns **the same point count** for a given layer, so a biome
+crossfade interpolates the silhouettes exactly as it interpolates the colours.
+Shapes are still generated once; the per-frame work is a lerp into a preallocated
+array, so the draw loop still allocates nothing.
+
+And the cycle itself is broken: the SCALE of the geometry drifts with altitude on
+two sine frequencies that do not divide into each other, so the combination of
+colour, shape and scale has no short period. `scripts/cairn-variety-check.mjs`
+gates it by sampling the *same phase of the cycle one lap apart* — 200 m against
+1,100 m, 2,000 m and 2,900 m were pixel-identical before and now differ by 1.6.
+
+**Acceptance test 5 could not have caught this.** It compares 50 m, 200 m and
+400 m — three points inside the *first* lap, where the colours genuinely differ.
+Repetition is a property of the second lap and nothing ever looked at the second
+lap.
+
+## 24. Test 13 was measuring the one thing that carries no information
+
+Chasing the above turned up a worse problem underneath it. Acceptance test 13
+asks whether the four erosion stages are distinguishable, and it was passing on
+a margin of **4.2 against a threshold of 3** — which is not a pass, it is a coin
+landing on its edge. Two things were wrong with it:
+
+**Its fixture made the colour axis fight the stage axis.** The renderer cools a
+corpse toward gold by its creation order, and the test created the FRESHEST one
+first — so the FRESH corpse was drawn in memory-gold and the MEMORY one in full
+accent. That ordering cannot occur in a real game. Corrected, the honest margin
+was **1.2**.
+
+**And its metric could not see the design's main tell.** It measured mean
+luminance and a count of lit pixels in a fixed box. The count saturates at 100%
+for every stage, so it contributed nothing but noise — while the shelf bar, which
+§16 says is *drawn exactly as wide as the collision actually is*, was not measured
+at all. It now measures brightness, chroma, and the width of that bar:
+
+```
+FRESH   lum  94.4  chroma 114.8  shelf 45.3%
+THIN    lum  95.5  chroma  95.3  shelf 19.5%
+TOP     lum  71.7  chroma  66.7  shelf  2.5%
+MEMORY  lum  57.8  chroma  42.1  shelf    0%
+```
+
+Monotone, and the shelf percentages are the collision widths. Margin 41.0.
+
+The stages were also genuinely too close and were widened — solidity 1 / 0.66 /
+0.34 became 1 / 0.5 / 0.24, and the shelf bar's alpha spread and thickness both
+grew. An external reviewer had already said this in words — *"it is not clear
+which bodies still hold weight"* — and the suite had been reading a pessimistic
+number on exactly that property for months.

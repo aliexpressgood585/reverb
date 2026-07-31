@@ -57,7 +57,9 @@ for (const size of SIZES) {
     page.on('pageerror', (e) => problems.push(`${size.name}/${lang}: ${e.message}`));
     await page.goto(`http://127.0.0.1:${PORT}/cairn/`, { waitUntil: 'load' });
     await page.waitForFunction(() => !!window.CAIRN);
-    await page.evaluate((l) => localStorage.setItem('cairn.lang', l), lang);
+    // The key is v2: the old one held auto-detected values and is deliberately
+    // ignored now, so writing it would silently leave the game in English.
+    await page.evaluate((l) => localStorage.setItem('cairn.lang.v2', l), lang);
     await page.reload({ waitUntil: 'load' });
     await page.waitForFunction(() => !!window.CAIRN);
     await delay(500);

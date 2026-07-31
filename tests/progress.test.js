@@ -251,3 +251,20 @@ describe('grammatical number', () => {
     expect(days(3)).toBe('3 ימים');
   });
 });
+
+describe('the language migration', () => {
+  it('ignores a language the old build auto-detected and stored', () => {
+    // The previous version wrote the DEVICE language to `cairn.lang`, so that
+    // value is not a decision and must not be honoured as one.
+    globalThis.localStorage.setItem('cairn.lang', 'he');
+    initLang();
+    expect(isRtl()).toBe(false);
+  });
+
+  it('still honours a real choice made under the new key', () => {
+    setLang('he');
+    expect(globalThis.localStorage.getItem('cairn.lang.v2')).toBe('he');
+    initLang();
+    expect(isRtl()).toBe(true);
+  });
+});

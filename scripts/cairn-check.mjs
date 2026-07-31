@@ -509,9 +509,18 @@ const page = await newPage();
     sim.reset(true); sim.phase = 1;
     sim.deaths = 40;
     // One corpse per stage, side by side at the same height.
+    //
+    // CREATED OLDEST FIRST, which is the only order that can happen in a real
+    // game and was not what this fixture did. The renderer cools a corpse toward
+    // gold by its CREATION ORDER, and this test used to create the freshest one
+    // first — so the FRESH corpse was drawn in memory-gold and the MEMORY one in
+    // full accent, with the colour axis pulling against the stage axis. It made
+    // the four stages look more alike than they ever do in play, and the suite
+    // has been reading a pessimistic number on the one property an external
+    // reviewer specifically complained about.
     const ages = [0, 10, 20, 34];
     const xs = [22, 40, 60, 78];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 3; i >= 0; i--) {
       const c = sim.world.corpse(xs[i], 60, 0, 1, 0, 40 - ages[i]);
       c.glow = 0;
     }
@@ -545,22 +554,50 @@ const page = await newPage();
       const py = Math.round(renderer.Y(60) * renderer.dpr);
       const R = Math.round(16 * renderer.dpr);
       const d = c2.getImageData(px - R, py - R, R * 2, R * 2).data;
-      let lum = 0, chroma = 0, lit = 0, n = 0;
+      let lum = 0, chroma = 0, n = 0;
       for (let i = 0; i < d.length; i += 4) {
         const L = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
         const ch = Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
-        lum += L; chroma += ch; if (L > 40) lit++; n++;
+        lum += L; chroma += ch; n++;
       }
-      return { lum: +(lum / n).toFixed(1), chroma: +(chroma / n).toFixed(1), coverage: +((lit / n) * 100).toFixed(1) };
+
+      // THE SHELF, WHICH IS THE HITBOX, WHICH IS THE WHOLE TELL.
+      //
+      // DECISIONS.md §16: "the bright bar on top of each corpse is drawn exactly
+      // as wide as the collision actually is, so a half-width shelf is not a
+      // stylistic choice, it is the hitbox." That is the fastest read in the
+      // design and this test could not see it — it measured mean brightness and
+      // a lit-pixel COUNT over a fixed box, and the count saturates at 100% for
+      // every stage, so it contributed nothing but noise. Measure the bar.
+      const top = Math.round(renderer.Y(60 + 3) * renderer.dpr);
+      const row = c2.getImageData(px - R, top - Math.round(2 * renderer.dpr),
+                                  R * 2, Math.round(4 * renderer.dpr)).data;
+      let bright = 0;
+      for (let i = 0; i < row.length; i += 4) {
+        const L = 0.2126 * row[i] + 0.7152 * row[i + 1] + 0.0722 * row[i + 2];
+        if (L > 120) bright++;
+      }
+      return {
+        lum: +(lum / n).toFixed(1),
+        chroma: +(chroma / n).toFixed(1),
+        shelf: +((bright / (row.length / 4)) * 100).toFixed(1),
+      };
     };
     return xs.map(sample);
   });
   const names = ['FRESH', 'THIN', 'TOP', 'MEMORY'];
-  r.forEach((v, i) => console.log(`      ${names[i].padEnd(7)} lum ${String(v.lum).padStart(5)}  chroma ${String(v.chroma).padStart(5)}  lit-coverage ${v.coverage}%`));
-  // Each stage must differ from the next by a margin a human eye would catch.
+  r.forEach((v, i) => console.log(`      ${names[i].padEnd(7)} lum ${String(v.lum).padStart(5)}  ` +
+    `chroma ${String(v.chroma).padStart(5)}  shelf ${String(v.shelf).padStart(5)}%`));
+  // Each stage must differ from the next by a margin a human eye would catch,
+  // across the three axes the design actually uses: how bright it is, how
+  // saturated it is (accent when fresh, cooling toward gold), and how much
+  // load-bearing shelf it still has.
   let minGap = Infinity;
   for (let i = 0; i < 3; i++) {
-    minGap = Math.min(minGap, Math.abs(r[i].lum - r[i + 1].lum) + Math.abs(r[i].coverage - r[i + 1].coverage));
+    minGap = Math.min(minGap,
+      Math.abs(r[i].lum - r[i + 1].lum)
+      + Math.abs(r[i].chroma - r[i + 1].chroma)
+      + Math.abs(r[i].shelf - r[i + 1].shelf));
   }
   minGap > 3
     ? pass(13, `all four erosion stages separate in one frame (closest neighbouring pair differs by ${minGap.toFixed(1)})`)

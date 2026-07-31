@@ -158,7 +158,21 @@ const TABLES = { en: EN, he: HE };
 export const LANGS = /** @type {const} */ (['en', 'he']);
 const RTL = new Set(['he']);
 
-const STORE_KEY = 'cairn.lang';
+/*
+ * THE KEY IS v2, AND THAT IS THE MIGRATION.
+ *
+ * The build before this one auto-detected the device language AND WROTE IT to
+ * `cairn.lang`. So every existing player has a stored language they never chose
+ * — and this version treats a stored language as an explicit decision, which
+ * would have pinned them to it forever. A player on a Hebrew phone would have
+ * kept getting a Hebrew game and no change to the default would ever have
+ * reached them.
+ *
+ * A new key ignores the auto-detected values without deleting anything, so the
+ * only thing that can be in here is a choice somebody actually made in Settings.
+ * Spotted in a screenshot of a real device at 11,045 m, not in a test.
+ */
+const STORE_KEY = 'cairn.lang.v2';
 
 /** @type {'en'|'he'} */
 let current = 'en';
