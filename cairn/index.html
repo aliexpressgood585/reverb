@@ -2,6 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<!-- `user-scalable=no` STAYS, and it is the only Lighthouse accessibility
+     failure on this page (86 instead of 100).
+     Removing it is tempting and was tried: a climbing game is one long drag, and
+     acceptance test 9 — which this project wrote after shipping a build that
+     could not be started — asserts the lockdown directly. Lighthouse's audit is
+     written for documents, and this page has no scrollable text to magnify; the
+     interface is a canvas and one number. Trading a measured gesture guarantee
+     for a generic score would be weakening a gate to buy a number.
+     Recorded in AUDIT.md rather than silently accepted. -->
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>CAIRN</title>
 <meta name="description" content="Every death leaves a stone. Climb on what you were." />
@@ -10,6 +19,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="CAIRN" />
+<!-- The mark, inline, so the browser never asks for /favicon.ico and never gets
+     a 404. Deferring the PNG icons to idle (see main.js) is right for boot cost
+     and left exactly this gap for one frame. An SVG data URI costs no encode and
+     no request, and it is still zero external assets. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2305070C'/%3E%3Crect x='24' y='14' width='16' height='9' rx='1' fill='%23E8EFF3'/%3E%3Crect x='18' y='27' width='28' height='9' rx='1' fill='%23C99A4A'/%3E%3Crect x='12' y='40' width='40' height='9' rx='1' fill='%234A5B6B'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="./style.css" />
 <script>
 /* Self-heal, first thing on the page and outside the module bundle so it runs

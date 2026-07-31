@@ -15,6 +15,10 @@ const BIOME_ROOT = [55, 61.74, 49, 43.65, 58.27, 65.41];  // A1, B1, G1, F1, Bb1
  * @property {OscillatorNode[]} oscs
  * @property {BiquadFilterNode} filt
  * @property {GainNode} out
+ * @property {BiquadFilterNode} windFilt
+ * @property {GainNode} windGain
+ * @property {BiquadFilterNode} gustFilt
+ * @property {GainNode} gustGain
  */
 
 export class Audio {
@@ -27,6 +31,8 @@ export class Audio {
     this.bed = null;
     /** @type {{src: AudioBufferSourceNode, f: BiquadFilterNode, g: GainNode}|null} */
     this._charge = null;
+    /** @type {GainNode|null} depth of the wind's slow breath */
+    this._breath = null;
     this.muted = localStorage.getItem('cairn.mute') === '1';
     this.height = 0;
     this.biome = 0;
@@ -118,7 +124,52 @@ export class Audio {
     lfoGain.connect(filt.frequency);
     lfo.start();
 
-    this.bed = { oscs, filt, out };
+    /*
+     * WIND — the layer that makes altitude audible.
+     *
+     * The drones say where you are in the world; the wind says how far up. It is
+     * two bands of filtered noise: a steady bed whose cutoff and level both rise
+     * with height, and a slow gust that breathes over it so the top of the tower
+     * is never a flat hiss.
+     *
+     * Noise is a four-second looping buffer rather than a per-frame source. A
+     * fresh AudioBuffer per gust would allocate 176 KB every few seconds for a
+     * sound nobody could distinguish from this one.
+     */
+    const wind = this._noise(4, c);
+    wind.loop = true;
+    const windFilt = c.createBiquadFilter();
+    windFilt.type = 'bandpass';
+    windFilt.frequency.value = 420;
+    windFilt.Q.value = 0.55;
+    const windGain = c.createGain();
+    windGain.gain.value = 0;          // silent at ground level, by design
+    wind.connect(windFilt); windFilt.connect(windGain); windGain.connect(L.m);
+    wind.start();
+
+    const gust = this._noise(4, c);
+    gust.loop = true;
+    const gustFilt = c.createBiquadFilter();
+    gustFilt.type = 'bandpass';
+    gustFilt.frequency.value = 900;
+    gustFilt.Q.value = 1.6;
+    const gustGain = c.createGain();
+    gustGain.gain.value = 0;
+    gust.connect(gustFilt); gustFilt.connect(gustGain); gustGain.connect(L.m);
+    gust.start();
+
+    // The breath: a very slow LFO on the gust's level, so it swells and falls
+    // instead of sitting there.
+    const breath = c.createOscillator();
+    breath.frequency.value = 0.085;
+    const breathDepth = c.createGain();
+    breathDepth.gain.value = 1;
+    breath.connect(breathDepth);
+    breathDepth.connect(gustGain.gain);
+    breath.start();
+    this._breath = breathDepth;
+
+    this.bed = { oscs, filt, out, windFilt, windGain, gustFilt, gustGain };
   }
 
   /** Altitude drives brightness and detune. Biome changes re-root the drones. */
@@ -132,6 +183,20 @@ export class Audio {
     const t = L.c.currentTime;
     const climb = Math.min(1, y / 900);
     this.bed.filt.frequency.setTargetAtTime(320 + climb * 1500, t, 0.6);
+
+    // THE SOUNDSCAPE THINS AND GETS COLDER AS YOU CLIMB.
+    //
+    // Wind rises with height and the drone bed gives way to it — so the top of
+    // the tower is not the bottom plus more layers, it is a different and emptier
+    // place. `climb` is the same 0-900 m curve the filter uses, so the two move
+    // together rather than crossing.
+    const B = this.bed;
+    B.windGain.gain.setTargetAtTime(climb * 0.075, t, 1.2);
+    B.windFilt.frequency.setTargetAtTime(420 + climb * 1400, t, 1.2);
+    B.gustFilt.frequency.setTargetAtTime(900 + climb * 2200, t, 1.4);
+    if (this._breath) this._breath.gain.setTargetAtTime(climb * 0.030, t, 1.4);
+    // The drones recede as the wind arrives. Thinner, not quieter.
+    B.out.gain.setTargetAtTime(0.16 * (1 - climb * 0.45), t, 1.2);
 
     if (biomeIndex !== this.biome) {
       this.biome = biomeIndex;

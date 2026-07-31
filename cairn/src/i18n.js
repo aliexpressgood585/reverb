@@ -164,9 +164,19 @@ const STORE_KEY = 'cairn.lang';
 let current = 'en';
 
 /**
- * The language to start in: an explicit choice if one was made, otherwise the
- * device's. Anything that is not a language we ship falls back to English rather
- * than to a half-translated screen.
+ * The language to start in.
+ *
+ * ENGLISH IS THE GAME'S LANGUAGE, and it is the default on every device
+ * regardless of what the system is set to. CAIRN is an English-language product:
+ * the wordmark, the tagline, the store listing and the share card are all
+ * English, and a player who installs it should get the thing the listing showed
+ * them rather than a translation of it.
+ *
+ * Hebrew is kept, complete and tested, as an explicit choice in Settings. It
+ * costs 1.3 KB and it is the developer's own language; what it no longer does is
+ * take over the game because a phone's region happens to be set to it. Auto-
+ * detection is deliberately gone rather than merely reordered — see
+ * DECISIONS.md §22.
  *
  * @returns {'en'|'he'}
  */
@@ -175,16 +185,6 @@ function detect() {
     const saved = localStorage.getItem(STORE_KEY);
     if (saved === 'en' || saved === 'he') return saved;
   } catch { /* private mode */ }
-  const tags = navigator.languages && navigator.languages.length
-    ? navigator.languages
-    : [navigator.language || 'en'];
-  for (const tag of tags) {
-    const base = String(tag).toLowerCase().split('-')[0];
-    // `iw` is the deprecated ISO code for Hebrew and is still what some Android
-    // builds report. A device set to Hebrew must not get an English game.
-    if (base === 'he' || base === 'iw') return 'he';
-    if (base === 'en') return 'en';
-  }
   return 'en';
 }
 
@@ -208,8 +208,20 @@ export function setLang(next) {
   html.dir = isRtl() ? 'rtl' : 'ltr';
 }
 
-/** Read the device's preference and apply it. Called once at boot. */
-export function initLang() { setLang(detect()); }
+/**
+ * Apply the stored choice, or English. Called once at boot.
+ *
+ * `setLang` writes to storage, so calling this would normally PERSIST a default
+ * nobody chose — which would then look like an explicit choice forever. It only
+ * writes when the player actually picks one.
+ */
+export function initLang() {
+  const chosen = detect();
+  current = chosen;
+  const html = document.documentElement;
+  html.lang = current;
+  html.dir = isRtl() ? 'rtl' : 'ltr';
+}
 
 /**
  * Look up a string and fill its placeholders.

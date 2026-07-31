@@ -151,8 +151,18 @@ cairn/
 ```
 
 **Renderer:** Canvas2D scene → one WebGL post pass. **Three.js was deleted** —
-120 KB gzipped of 3D engine for a 2D art direction. Total payload **23.4 KB
-gzipped** (21.0 JS + 1.3 CSS + 1.1 HTML) against a 400 KB budget.
+120 KB gzipped of 3D engine for a 2D art direction. Total payload **30.3 KB
+gzipped** against a 2 MB store budget — 1.45%.
+
+**The game ships in English.** `cairn/src/i18n.js` is the only place a string
+lives; Hebrew is complete and is an explicit choice in Settings, never a
+device-language default. See DECISIONS.md §22.
+
+**It is packaged for Android.** `android/` is a Capacitor project with the
+manifest, icons, splash, signing and R8 rules done. `RELEASE.md` is the build
+and upload procedure, `BLOCKED.md` is what needs a human. **The AAB has never
+been built here** — `dl.google.com` is blocked, which is where both the SDK and
+the Android Gradle Plugin live.
 
 **Units:** virtual, never pixels. Column is 100 u wide; camera shows
 `FEEL.camera.viewH` of height. Pixels appear in exactly one place — `input.js`
@@ -206,6 +216,20 @@ node scripts/cairn-daily-check.mjs
 node scripts/cairn-bodies-check.mjs
                                # CAIRN: does anyone stand on their own corpse, and
                                # is a hard gap ever a wall. ~60 s, no browser
+node scripts/cairn-qa.mjs      # CAIRN: 1000 runs, dead ends, save corruption
+node scripts/cairn-boundary-check.mjs
+                               # CAIRN: sabotages the loop; does a crash say
+                               # something readable and save the tower
+node scripts/cairn-audio-check.mjs
+                               # CAIRN: does the soundscape thin as you climb
+node scripts/cairn-profile.mjs # CAIRN: bundle, load, frame cost, 10-min heap
+node scripts/cairn-lighthouse.mjs
+                               # CAIRN: performance 93, accessibility 86
+node scripts/cairn-ui-shots.mjs
+                               # CAIRN: every screen, 3 sizes, both directions
+node scripts/cairn-assets.mjs  # CAIRN: launcher icons, splash, store graphics
+node scripts/cairn-store-shots.mjs
+                               # CAIRN: the 8 Play screenshots, from the real game
 node scripts/smoke.mjs         # REVERB: state machine + 5 levels
 node scripts/nav-check.mjs     # REVERB: navigation, <1s, no GPU
 ```

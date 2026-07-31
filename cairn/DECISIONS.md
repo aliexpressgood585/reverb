@@ -505,3 +505,26 @@ build. Airplane mode works because there is nothing to fetch.
 The web build at `/cairn/` therefore stays online-only. That is a real difference
 between the two and it is the correct one: the web build is where a bad cache
 would be unrecoverable, and the store build is where offline actually matters.
+
+---
+
+## 22. English is the game. Hebrew is a setting.
+
+CAIRN shipped with device-language auto-detection: a phone set to Hebrew got a
+Hebrew game. That is now gone, deliberately rather than reordered.
+
+**English is the default on every device, regardless of system language.** The
+wordmark, the tagline, the store listing, the share card and the marks are all
+English, and a player who installs from an English listing should get the thing
+the listing showed them. A game that silently becomes a translation of itself
+because of a region setting is a game that does not know what it is.
+
+Hebrew stays — complete, tested, and reachable in Settings in two taps. It costs
+1.3 KB, it is the developer's own language, and removing working translated
+strings to enforce a default would be destroying something for no gain. What it
+no longer does is take the product over uninvited.
+
+`initLang` also does not WRITE the default. A default persisted to storage is
+indistinguishable from a decision the next time it is read, and the player would
+then be locked to English by an act they never performed. Only an explicit choice
+in Settings is written down.

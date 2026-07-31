@@ -49,6 +49,48 @@ function need(id) {
   return /** @type {T} */ (/** @type {unknown} */ (e));
 }
 
+/**
+ * THE ERROR BOUNDARY.
+ *
+ * A canvas game that throws before its loop starts shows a black rectangle, and
+ * a black rectangle is indistinguishable from a game that is simply very dark.
+ * This is the one screen in the product that exists to be read.
+ *
+ * It is installed FIRST — before the canvas, before the simulation, before
+ * anything that could throw — because a boundary registered after the failure it
+ * is meant to catch is not a boundary.
+ *
+ * @param {string} what
+ */
+function fatal(what) {
+  try {
+    const box = document.getElementById('fatal');
+    if (!box) return;
+    const p = box.querySelector('p');
+    if (p) {
+      // A crash before the first frame and a crash mid-climb are different
+      // events and a player can tell which one happened to them. Saying "could
+      // not start" to someone who was 300 m up is a message that is obviously
+      // wrong, and an obviously wrong message is worse than a vague one.
+      p.textContent = (started
+        ? 'CAIRN stopped unexpectedly. Your tower is safe — it was saved before '
+          + 'this screen appeared, and nothing has been erased.'
+        : 'CAIRN could not start on this device. Your tower is safe — nothing '
+          + 'has been erased.')
+        + ' Closing and reopening the app usually fixes it.';
+    }
+    box.className = 'on';
+    // eslint-disable-next-line no-console
+    console.error('CAIRN fatal:', what);
+  } catch { /* if even this throws there is nothing left to try */ }
+}
+
+/** Has the loop ever produced a frame? Decides which sentence `fatal` shows. */
+let started = false;
+
+addEventListener('error', (e) => fatal(e.message || 'error'));
+addEventListener('unhandledrejection', (e) => fatal(String(e.reason)));
+
 const view = /** @type {HTMLCanvasElement} */ (need('view'));
 const scene = document.createElement('canvas');
 
@@ -573,12 +615,32 @@ function update(real) {
 
 /** @param {number} now */
 function frame(now) {
+  if (dead) return;
   requestAnimationFrame(frame);
   if (paused) { lastFrame = now; return; }
 
   let real = (now - lastFrame) / 1000;
   lastFrame = now;
   if (real > 0.25) real = 0.25;      // a backgrounded tab must not fast-forward
+  try {
+    step(now, real);
+  } catch (e) {
+    // A throw inside the loop would otherwise repeat sixty times a second and
+    // bury the console. Stop, save what the player earned, and say so.
+    dead = true;
+    try { Store.save(sim); Progress.flush(); } catch { /* nothing left to save with */ }
+    fatal(e instanceof Error ? e.message : String(e));
+  }
+}
+
+let dead = false;
+
+/**
+ * @param {number} now
+ * @param {number} real
+ */
+function step(now, real) {
+  started = true;
   update(real);
 
   const b = sim.body;
@@ -748,29 +810,50 @@ showTitle();
 camera.y = 0;
 requestAnimationFrame(frame);
 
-// PWA. The icon is drawn at boot rather than shipped, so the repository holds
-// no binary art asset and the manifest is still complete.
-try {
-  const manifest = {
-    name: 'CAIRN', short_name: 'CAIRN',
-    start_url: './', scope: './', display: 'standalone',
-    orientation: 'portrait',
-    background_color: '#04060B', theme_color: '#04060B',
-    icons: [
-      { src: Store.icon(192), sizes: '192x192', type: 'image/png' },
-      { src: Store.icon(512), sizes: '512x512', type: 'image/png' },
-      { src: Store.icon(512, true), sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-    ],
-  };
-  const link = document.createElement('link');
-  link.rel = 'manifest';
-  link.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/json' }));
-  document.head.appendChild(link);
-  const fav = document.createElement('link');
-  fav.rel = 'icon';
-  fav.href = Store.icon(192);
-  document.head.appendChild(fav);
-} catch { /* manifest is a nice-to-have, never a blocker */ }
+/*
+ * PWA. The icon is drawn rather than shipped, so the repository holds no binary
+ * art and the manifest is still complete.
+ *
+ * BUILT ONLY IF SOMEBODY MIGHT INSTALL IT, and that took two goes to get right.
+ *
+ * Encoding three PNGs — 192, 512, and a 512 maskable — through `toDataURL` costs
+ * one to two seconds of blocked main thread on a slow CPU. Doing it inline at
+ * boot put that in the load; moving it to `requestIdleCallback` just moved it
+ * into the interaction window, where Lighthouse measured a WORSE total blocking
+ * time than before. Deferring work that nobody needs is still doing work that
+ * nobody needs.
+ *
+ * The manifest exists for one purpose: an install prompt. So it is built when
+ * the browser says an install is possible, and never otherwise. On Android — the
+ * platform this actually ships to — Capacitor uses the native launcher icons and
+ * none of this runs at all. The tab icon is an inline SVG in index.html, which
+ * costs no encode and no request.
+ */
+let manifestReady = false;
+function installManifest() {
+  if (manifestReady) return;
+  manifestReady = true;
+  try {
+    const manifest = {
+      name: 'CAIRN', short_name: 'CAIRN',
+      description: 'Every death leaves a stone. Climb on what you were.',
+      start_url: './', scope: './', display: 'standalone',
+      orientation: 'portrait',
+      background_color: '#05070C', theme_color: '#05070C',
+      icons: [
+        { src: Store.icon(192), sizes: '192x192', type: 'image/png' },
+        { src: Store.icon(512), sizes: '512x512', type: 'image/png' },
+        { src: Store.icon(512, true), sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
+    };
+    const link = document.createElement('link');
+    link.rel = 'manifest';
+    link.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/json' }));
+    document.head.appendChild(link);
+  } catch { /* manifest is a nice-to-have, never a blocker */ }
+}
+
+addEventListener('beforeinstallprompt', installManifest);
 
 // THE HARNESS DRIVES THE REAL LOOP, NEVER A COPY OF IT. Ten acceptance tests
 // once passed against a game that could not be started, because they reached
@@ -778,7 +861,7 @@ try {
 // the game itself is using.
 const api = {
   sim, input, camera, renderer, audio, post, FEEL, Store, predict,
-  begin, frame, update, ui, monument, teach, setMode,
+  begin, frame, update, ui, monument, teach, setMode, panel,
   /** @param {number} n */
   step(n) { for (let i = 0; i < n; i++) sim.tick(0); },
   /**

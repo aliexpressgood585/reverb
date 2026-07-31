@@ -212,24 +212,25 @@ describe('i18n', () => {
     expect(globalThis.document.documentElement.dir).toBe('ltr');
   });
 
-  it('detects Hebrew from the device, including the deprecated iw tag', () => {
-    stub('navigator', { languages: ['iw-IL'], language: 'iw-IL' });
+  it('starts in English on a Hebrew device — English is the game', () => {
+    stub('navigator', { languages: ['he-IL'], language: 'he-IL' });
+    initLang();
+    expect(isRtl()).toBe(false);
+    expect(t('menu.settings')).toBe('SETTINGS');
+  });
+
+  it('honours an explicit choice of Hebrew across a restart', () => {
+    setLang('he');
+    stub('navigator', { languages: ['en-GB'], language: 'en-GB' });
     initLang();
     expect(isRtl()).toBe(true);
   });
 
-  it('prefers an explicit choice over the device', () => {
-    setLang('en');
-    stub('navigator', { languages: ['he-IL'], language: 'he-IL' });
-    initLang();
-    expect(isRtl()).toBe(false);
-  });
-
-  it('falls back to English for a language we do not ship', () => {
+  it('does not persist a default nobody chose', () => {
     globalThis.localStorage.clear();
-    stub('navigator', { languages: ['ja-JP'], language: 'ja-JP' });
     initLang();
-    expect(isRtl()).toBe(false);
+    // A default written to disk becomes indistinguishable from a decision.
+    expect(globalThis.localStorage.getItem('cairn.lang')).toBe(null);
   });
 
   it('switches to kilometres past ten', () => {

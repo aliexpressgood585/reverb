@@ -198,6 +198,61 @@ names must start with `_` so a dropped argument is visible rather than silent.
 
 ---
 
+## What the release pass found after the audit was written
+
+Four things, all measured, all fixed except the last.
+
+**The PWA manifest was a 5.4-second performance bug.** `Store.icon()` encodes a
+512x512 PNG through `toDataURL`, and the manifest asked for three of them. On a
+throttled profile that is **5,740 ms of total blocking time** and a Lighthouse
+performance score of **69**. Deferring it to `requestIdleCallback` made it
+*worse* — it moved the work out of load and into the interaction window, which
+is exactly what TBT measures. Deferring work nobody needs is still doing work
+nobody needs.
+
+The manifest now builds on `beforeinstallprompt` and never otherwise, and the
+tab icon is an inline SVG that costs no encode and no request. On Android none
+of it runs at all: Capacitor uses the native launcher icons.
+
+| | before | after |
+|---|---|---|
+| Lighthouse performance | 69 | **93** |
+| total blocking time | 5,740 ms | **300 ms** |
+
+**The error boundary was in the HTML and wired to nothing.** `#fatal` had been
+added to `index.html` and no code ever raised it, which is worse than not having
+one — a boundary that has never caught anything is a div.
+`scripts/cairn-boundary-check.mjs` now sabotages the renderer mid-loop and
+asserts that the screen says something readable, that the tower was written to
+disk on the way down, and that it fires once rather than sixty times a second.
+It also carries two sentences rather than one, because "CAIRN could not start"
+is obviously wrong to someone who was 300 m up.
+
+**The wind did not exist.** The audit called the sound design thin and the
+soundscape now has the layer that makes altitude audible — a filtered noise bed
+whose level and band centre both rise with height, a slow gust breathing over
+it, and the drone receding to make room. `scripts/cairn-audio-check.mjs` reads
+the actual `AudioParam` values at four altitudes:
+
+```
+height   wind    windHz  gustHz   drone
+   0 m   0.0000    420     900   0.1599
+ 900 m   0.0728   1779    3030   0.0901
+```
+
+Thinner and colder, not merely busier. The first version of that check waited
+260 ms for ramps with a 1.4-second time constant and reported the drone as
+barely moving — it was measuring the ramp rather than the destination.
+
+**Accessibility is 86 and stays there.** The single failing audit is
+`meta-viewport`, because `user-scalable=no` is set. Removing it takes the
+category to 100 and fails acceptance test 9, which asserts the gesture lockdown
+this project wrote after shipping a build that could not be started. A canvas
+with one number on it has no text to magnify. The lockdown wins; the score is
+recorded rather than quietly accepted.
+
+---
+
 ## Honest assessment: what is good, and what is mediocre
 
 ### Genuinely good
@@ -232,17 +287,20 @@ they are missing product.
 built. Streak, progression, achievements, unlockables: none of them exist. A
 single endless mode with a local high score is a 2011 game.
 
-**It is not localised at all.** Every string is a hardcoded English literal in
-`main.js`. For a Hebrew-speaking developer shipping to an Israeli market first,
-that is not a nice-to-have.
+**~~It is not localised at all.~~** Fixed. Every string goes through `i18n.js`.
+**English is the game's language and the default on every device**; Hebrew is
+complete, tested, and an explicit choice in Settings. RTL is a layout — logical
+CSS properties throughout — rather than mirrored text, and the canvas never
+mirrors, because the tower is a physical space.
 
-**The audio bed is good and the sound design is thin.** The synthesised drone
-that re-tunes by altitude is genuinely nice. But there is no wind, the footfall
-is the same sound at every height, and the death — the single most important
-moment in the game — is one filtered sawtooth sweep.
+**The sound design is better and still not finished.** The drone that re-tunes
+by altitude is genuinely nice, and there is wind now, measured. What is still
+thin: the footfall is the same sound at every height, and the death — the single
+most important moment in the game — is one filtered sawtooth sweep.
 
-**Monetisation, packaging and store presence are at zero.** No Capacitor
-project, no icons as files, no privacy policy, no listing.
+**~~Monetisation, packaging and store presence are at zero.~~** All built. The
+one thing that could not be produced here is the AAB itself, because
+`dl.google.com` is blocked — see `BLOCKED.md` §1.
 
 **And the thing no amount of measurement here can fix: no human has played the
 retuned tower.** The hard-gap mechanic demands a 5.0%-of-full power window
