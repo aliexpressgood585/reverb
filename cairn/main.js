@@ -80,7 +80,6 @@ function fatal(what) {
         + ' Closing and reopening the app usually fixes it.';
     }
     box.className = 'on';
-    // eslint-disable-next-line no-console
     console.error('CAIRN fatal:', what);
   } catch { /* if even this throws there is nothing left to try */ }
 }
