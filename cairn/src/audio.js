@@ -336,6 +336,54 @@ export class Audio {
     o.start(); o.stop(c.currentTime + 1.7);
   }
 
+  /**
+   * ASH: the hold you just landed on has started to go.
+   *
+   * A DIFFERENT sound from `land`, deliberately — the landing already happened
+   * and was already scored. This is the news that arrives a moment later, so it
+   * is dry, close and small: grit, not a hit.
+   */
+  crumbleWarn() {
+    const L = this._live();
+    if (!L || this.muted) return;
+    const c = L.c;
+    const n = this._noise(0.22, c);
+    const f = c.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.setValueAtTime(2600, c.currentTime);
+    f.frequency.exponentialRampToValueAtTime(1100, c.currentTime + 0.22);
+    f.Q.value = 1.2;
+    const g = c.createGain();
+    this._env(g, 0.075, 0.006, 0.22);
+    n.connect(f); f.connect(g); g.connect(L.m);
+    n.start(); n.stop(c.currentTime + 0.3);
+  }
+
+  /** ASH: it is gone. The floor leaving, not the player hitting it. */
+  crumble() {
+    const L = this._live();
+    if (!L || this.muted) return;
+    const c = L.c;
+    const o = c.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(150, c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(38, c.currentTime + 0.4);
+    const g = c.createGain();
+    this._env(g, 0.13, 0.004, 0.5);
+    o.connect(g); g.connect(L.m);
+    o.start(); o.stop(c.currentTime + 0.6);
+
+    const n = this._noise(0.32, c);
+    const nf = c.createBiquadFilter();
+    nf.type = 'lowpass';
+    nf.frequency.setValueAtTime(3200, c.currentTime);
+    nf.frequency.exponentialRampToValueAtTime(420, c.currentTime + 0.32);
+    const ng = c.createGain();
+    this._env(ng, 0.11, 0.002, 0.34);
+    n.connect(nf); nf.connect(ng); ng.connect(L.m);
+    n.start(); n.stop(c.currentTime + 0.4);
+  }
+
   /** A rising tone for a personal best. The only unambiguously good sound. */
   chime() {
     const L = this._live();

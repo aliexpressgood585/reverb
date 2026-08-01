@@ -513,6 +513,14 @@ function drainEvents() {
       beat('firstLaunch');
       ui.runLaunches++;
       ui.squashVel += 5;
+    } else if (kind === EV.CRUMBLE_START) {
+      // The clock has started on the hold under your feet. Sound and a short
+      // buzz, because the eyes are on the gap ahead by now, not on the ledge.
+      audio.crumbleWarn();
+      buzz(14);
+    } else if (kind === EV.CRUMBLE) {
+      audio.crumble();
+      renderer.burst(e[i + 1], e[i + 2], 14);
     }
   }
   e.length = 0;

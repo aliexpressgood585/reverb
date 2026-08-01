@@ -1,4 +1,4 @@
-import { FEEL, COLUMN } from './feel.js';
+import { FEEL, COLUMN, BIOME_SPAN } from './feel.js';
 
 /** @typedef {import('./types.js').Solid} Solid */
 /** @typedef {import('./types.js').Body} Body */
@@ -117,6 +117,23 @@ function newSolid() {
     // an audit reads it, and an audit that has to guess which gaps are the hard
     // ones is an audit that cannot prove they are all crossable.
     hard: false,
+    // THE BIOME VERBS. `crumble` is the ASH hold that gives way once stood on;
+    // `drift` is the BLOOM ledge that will not hold still; `updraft` is the
+    // SIGNAL column of rising air standing on top of this ledge. `baseX` is
+    // where a drifting ledge was PLACED, which is the position the generator
+    // verified and the position every route proof is about — `x` is where it
+    // is now.
+    crumble: false,
+    crumbleAt: 0,          // sim time it goes, or 0 while nobody has touched it
+    drift: 0,              // amplitude in units, 0 for a ledge that stays put
+    driftPhase: 0,
+    updraft: false,
+    baseX: 0,
+    // Half-width as PLACED. A crumbled hold sets `hw` to 0 — which is the whole
+    // truth about its collision and the reason nothing has to be reindexed —
+    // and the renderer draws the outline it used to have from this. Without it
+    // a hold does not give way, it teleports out of the world.
+    baseHw: 0,
     // corpse presentation state, carried here so the renderer needs no lookup
     order: 0, bornAt: 0, bornDeath: 0, rot: 0, pose: 0, glow: 0,
   };
@@ -232,6 +249,13 @@ export class World {
     s.x = x; s.y = y; s.hw = w * 0.5; s.hh = LEDGE_HH;
     s.corpse = false;
     s.hard = false;
+    s.crumble = false;
+    s.crumbleAt = 0;
+    s.drift = 0;
+    s.driftPhase = 0;
+    s.updraft = false;
+    s.baseX = x;
+    s.baseHw = s.hw;
     this._index(s);
     return s;
   }
@@ -251,6 +275,12 @@ export class World {
     s.hw = FEEL.tower.corpseW * 0.5;
     s.hh = FEEL.tower.corpseH * 0.5;
     s.corpse = true;
+    s.crumble = false;
+    s.crumbleAt = 0;
+    s.drift = 0;
+    s.updraft = false;
+    s.baseX = x;
+    s.baseHw = s.hw;
     s.order = this.corpseCount++;
     s.bornAt = at;
     s.bornDeath = deathIndex;
@@ -316,6 +346,50 @@ export class World {
    *
    * Every number this function reads comes from FEEL.tower.
    */
+  /**
+   * THE BIOME VERBS, assigned as the ledge is built.
+   *
+   * One per biome so each is learned in isolation, and none before the on-ramp
+   * or before `verbs.from` of difficulty — PHASE3 §7 asks for both, and for never
+   * introducing two new verbs within 100 m of each other, which six biomes of
+   * 150 m gives for free.
+   *
+   * A gap CUT OUT OF A FLIGHT never gets one. Its whole guarantee is that a
+   * specific launch lands on a specific surface, and a surface that crumbles or
+   * drifts is not that surface.
+   *
+   * @param {Solid} led
+   * @param {number} diff
+   * @param {boolean} cut  was this a hard gap
+   */
+  _verbs(led, diff, cut) {
+    const V = FEEL.verbs;
+    // Both rolls always happen, so the random stream — and therefore the tower —
+    // does not depend on which biome this ledge landed in.
+    const roll = this.rng();
+    const phase = this.rng();
+    if (cut || diff < V.from || led.y < FEEL.tower.openingSpan) return;
+
+    const biome = Math.floor(led.y / BIOME_SPAN) % 6;
+    if (biome === 0 && diff >= V.crumbleFrom && roll < V.crumbleRate) {
+      led.crumble = true;
+    } else if (biome === 1 && roll < V.updraftRate) {
+      // A column of rising air standing on this ledge. It is only ever a bonus:
+      // route proofs fly with it switched off (see `_probeFlight`), so every gap
+      // the generator promised is still crossable if the player ignores it.
+      led.updraft = true;
+    } else if (biome === 2 && roll < V.driftRate) {
+      // A drifting ledge cannot move out of a route that was proved against
+      // `baseX`, and the margin that guarantees it is the 30% of the physical
+      // reach envelope every ordinary gap is placed inside — NOT the 3 u of
+      // landing forgiveness, which `driftAmp` is already wider than.
+      // `cairn-verbs-check.mjs` sweeps the whole cycle and finds the first wall
+      // between 12 and 16 u.
+      led.drift = V.driftAmp;
+      led.driftPhase = phase * Math.PI * 2;
+    }
+  }
+
   /** @param {number} upTo world height to build to */
   generate(upTo) {
     const T = FEEL.tower;
@@ -416,6 +490,7 @@ export class World {
 
       const led = this.ledge(nx, this.builtTo, width);
       led.hard = cut;
+      this._verbs(led, diff, cut);
 
       // THE PROMISE: NO LEDGE YOU CANNOT LEAVE.
       //
@@ -462,6 +537,11 @@ export function newBody() {
     peakX: 0, peakY: 0,
     airTime: 0,
     hangTimer: 0,
+    // THE BODY'S OWN CLOCK, in `verbTime`'s units. The real body's tracks the
+    // world's; the ghost's and the probe's run ahead through the flight being
+    // previewed, which is the only reason a drifting ledge lands where the arc
+    // drew it. Set at every launch, advanced once per tick by `_flight`.
+    t: 0,
   };
 }
 
@@ -503,6 +583,16 @@ export class Sim {
     this.predictPeak = { x: 0, y: 0, dies: false };
     // A second scratch body, for proving routes while the player is in the air.
     this._probe = newBody();
+    /**
+     * VERB TIME. Drifting ledges move on this rather than on `time`, because
+     * `time` also advances during the death transition and while a prediction is
+     * being computed — and a ledge that slid sideways between the arc being drawn
+     * and the launch being fired would make the preview a liar, which is the one
+     * thing this codebase will not have. It advances only in `tick`.
+     */
+    this.verbTime = 0;
+    /** Ledges that crumbled this tick, drained by the presentation layer. */
+    this.crumbled = 0;
     // Where a constructed hard gap puts its landing surface. Allocated once,
     // because generation runs inside `tick`.
     this._hs = { x: 0, y: 0 };
@@ -541,6 +631,7 @@ export class Sim {
     p.takeoff = y; p.peakX = x; p.peakY = y;
     p.hangTimer = 0; p.onWall = 0; p.wallTimer = 0;
     p.grounded = false; p.standing = standing;
+    p.t = this.verbTime;
     for (let i = 0; i < 360; i++) {
       const r = this._flight(p, 0);
       if (r === 'die') return null;
@@ -608,6 +699,7 @@ export class Sim {
     p.takeoff = y; p.peakX = x; p.peakY = y;
     p.hangTimer = 0; p.onWall = 0; p.wallTimer = 0;
     p.grounded = false; p.standing = null;
+    p.t = this.verbTime;
     for (let i = 0; i < 360; i++) {
       if (this._flight(p, 0)) return null;      // landed on something, or died
       if (p.vy < 0 && p.y <= atY) return p.peakY < atY ? null : p;
@@ -815,6 +907,7 @@ export class Sim {
     b.standing = base;
     b.onWall = 0; b.wallTimer = 0; b.coyote = FEEL.coyoteTime;
     b.airTime = 0; b.hangTimer = 0;
+    b.t = this.verbTime;
     b.takeoff = b.y;
   }
 
@@ -891,6 +984,10 @@ export class Sim {
     b.peakY = b.y;
     b.airTime = 0;
     b.hangTimer = 0;
+    // The real body starts its clock at the world's, and the two advance
+    // together forever after — so a drifting ledge is collided at exactly the
+    // position `_stepVerbs` drew it at.
+    b.t = this.verbTime;
     this.buffered = null;
     this.emit(EV.LAUNCH, Math.hypot(b.vx, b.vy));
     return true;
@@ -944,8 +1041,22 @@ export class Sim {
 
     const g = this._gravity(b);
     if (Math.abs(b.vy) < FEEL.apexHang.vyBand) b.hangTimer += DT; else b.hangTimer = 0;
-    b.vy -= g * DT;
+    // The updraft is part of the flight, so `predict` sees it too and the arc
+    // stays honest inside a column. One integrator, one source.
+    //
+    // The generator's probe is the one body it does NOT lift. Every route this
+    // world promises is proved without help, so a column can only ever widen
+    // what was already crossable — and switching updrafts off tomorrow cannot
+    // strand anybody standing in a tower built today.
+    const lift = b === this._probe ? 0 : this.updraftAt(b.x, b.y);
+    b.vy -= (g - lift) * DT;
     if (b.vy < -FEEL.maxFallSpeed) b.vy = -FEEL.maxFallSpeed;
+
+    // THE BODY'S OWN CLOCK. For the real body this tracks `verbTime` exactly,
+    // because both advance one DT per tick. For `_ghost` and `_probe` it runs
+    // ahead into the future the launch is being flown through, which is what
+    // makes a drifting ledge land where the arc said it would.
+    b.t += DT;
 
     let dx = b.vx * DT;
     let dy = b.vy * DT;
@@ -968,7 +1079,7 @@ export class Sim {
       else b.onWall = 0;
 
       if (b.vy <= 0) {
-        const s = this._surfaceUnder(fromY, b.y, b.x);
+        const s = this._surfaceUnder(fromY, b.y, b.x, b.t);
         if (s) return s;
       }
       this._sides(b);
@@ -978,9 +1089,94 @@ export class Sim {
   }
 
   /** One fixed tick of the whole game. */
+  /**
+   * Move every drifting ledge to where it is at `verbTime`, and retire any hold
+   * whose time has run out.
+   *
+   * Runs ONCE per tick, before the body moves, so a prediction and the flight it
+   * predicts see the world in the same place. Only ledges near the player are
+   * touched — the rest of the tower is not on screen and nothing can land on it.
+   */
+  _stepVerbs() {
+    const b = this.body;
+    const near = this.world.near(b.y - FEEL.camera.viewH, b.y + FEEL.camera.viewH);
+    for (let i = 0; i < near.length; i++) {
+      const s = near[i];
+      if (s.drift > 0) s.x = this.driftXAt(s, this.verbTime);
+      if (s.crumble && s.crumbleAt > 0 && this.verbTime >= s.crumbleAt) {
+        // `hw = 0` is the entire truth about its collision, and it needs no
+        // reindexing because the height buckets are keyed on y. It does not
+        // vanish: the renderer keeps drawing its outline from `baseHw`, which
+        // is the same sentence MEMORY says about an old corpse — present, and
+        // not a platform.
+        s.crumble = false;
+        s.crumbleAt = 0;
+        s.hw = 0;
+        this.crumbled++;
+        this.emit(EV.CRUMBLE, s.x, s.y);
+        if (b.standing === s) { b.grounded = false; b.standing = null; b.coyote = 0; }
+      }
+    }
+  }
+
+  /**
+   * WHERE A DRIFTING LEDGE IS AT A GIVEN SIM TIME.
+   *
+   * The one source. `_stepVerbs` writes `s.x` from it for the renderer, and
+   * every collision query inside `_flight` reads it at the FLIGHT'S OWN time —
+   * which for the aim arc is up to two seconds in the future.
+   *
+   * Without that second caller the arc lied on 71.8% of drifting ledges: the
+   * preview froze the world at the instant the thumb was down, the real flight
+   * moved the ledge for a second and a half underneath it, and the two landed
+   * in different places. Exactly the shape of DECISIONS.md §4 and §19, arriving
+   * through a third new hole. Acceptance test 2 cannot see it — all 94 of its
+   * launches leave from the ground onto ledges that do not move.
+   *
+   * @param {Solid} s
+   * @param {number} t sim time, in the same clock as `verbTime`
+   * @returns {number}
+   */
+  driftXAt(s, t) {
+    if (s.drift <= 0) return s.x;
+    const V = FEEL.verbs;
+    return s.baseX + Math.sin(t * V.driftHz * Math.PI * 2 + s.driftPhase) * s.drift;
+  }
+
+  /**
+   * Upward acceleration from a SIGNAL updraft at this position, or 0.
+   *
+   * Derived from the world rather than stored: an updraft sits above the ledge
+   * that carries it, so there is nothing to keep in step and nothing to persist.
+   * It can only ever ADD reach, which is why it cannot turn a crossable gap into
+   * a wall — the whole generator is verified without one.
+   *
+   * @param {number} x
+   * @param {number} y
+   * @returns {number}
+   */
+  updraftAt(x, y) {
+    const V = FEEL.verbs;
+    if (V.updraftRate <= 0) return 0;
+    const near = this.world.near(y - V.updraftH, y + 4);
+    for (let i = 0; i < near.length; i++) {
+      const s = near[i];
+      if (!s.updraft) continue;
+      const top = s.y + s.hh;
+      if (y < top || y > top + V.updraftH) continue;
+      if (Math.abs(x - s.x) > V.updraftW) continue;
+      // Strongest at the mouth, fading out at the top so it never feels like a
+      // lift you ride to the ceiling.
+      return V.updraftAccel * (1 - (y - top) / V.updraftH);
+    }
+    return 0;
+  }
+
   /** @param {number} [aimDir] -1, 0 or +1 of held air control */
   tick(aimDir = 0) {
     this.time += DT;
+    this.verbTime += DT;
+    this._stepVerbs();
     if (this.hitStop > 0) { this.hitStop -= DT; return; }
     if (this.phase !== PHASE.PLAY) return;
 
@@ -1020,9 +1216,10 @@ export class Sim {
    * @param {number} fromY
    * @param {number} toY
    * @param {number} x
+   * @param {number} t sim time of this body, for ledges that drift
    * @returns {Solid|null}
    */
-  _surfaceUnder(fromY, toY, x) {
+  _surfaceUnder(fromY, toY, x, t) {
     const solids = this.world.near(toY - 4, fromY + 4);
     const half = FEEL.body.w * 0.5;
     let best = null;
@@ -1033,7 +1230,7 @@ export class Sim {
       if (fromY < top || toY > top) continue;
       const hw = solidHalfWidth(s, this);
       if (hw <= 0) continue;                       // a MEMORY is not a platform
-      const over = Math.abs(x - s.x) - (hw + half);
+      const over = Math.abs(x - this.driftXAt(s, t)) - (hw + half);
       if (over > FEEL.landing.forgiveness) continue;
       if (!best || top > best.y + best.hh || (over < bestSlack && top === best.y + best.hh)) {
         best = s; bestSlack = over;
@@ -1049,7 +1246,8 @@ export class Sim {
     const top = s.y + s.hh;
     b.y = top;
     const lhw = solidHalfWidth(s, this);
-    b.x = clamp(b.x, s.x - lhw - FEEL.landing.forgiveness, s.x + lhw + FEEL.landing.forgiveness);
+    const sx = this.driftXAt(s, b.t);
+    b.x = clamp(b.x, sx - lhw - FEEL.landing.forgiveness, sx + lhw + FEEL.landing.forgiveness);
     b.vy = 0;
     b.vx *= FEEL.landing.friction;
     b.grounded = true;
@@ -1057,6 +1255,12 @@ export class Sim {
     b.onWall = 0;
     b.coyote = FEEL.coyoteTime;
     if (b.y > this.runBest) this.runBest = b.y;
+    // ASH: the hold starts failing the moment it takes your weight, and only
+    // then. An untouched crumbling ledge is a normal ledge forever.
+    if (s.crumble && s.crumbleAt === 0) {
+      s.crumbleAt = this.verbTime + FEEL.verbs.crumbleMs / 1000;
+      this.emit(EV.CRUMBLE_START, s.x, s.y);
+    }
     if (impact > FEEL.landing.hardImpactVy) this.hitStop = FEEL.juice.hitStopLand;
     this.emit(EV.LAND, impact, b.x, b.y);
     if (this.buffered && this.bufferTimer > 0) {
@@ -1089,13 +1293,14 @@ export class Sim {
       // you can no longer cling to its side.
       if (s.corpse && erosionOf(s, this) >= EROSION.TOP) continue;
       if (b.y > s.y + s.hh || b.y + FEEL.body.h < s.y - s.hh) continue;
-      const dx = b.x - s.x;
+      const sx = this.driftXAt(s, b.t);
+      const dx = b.x - sx;
       const hw = solidHalfWidth(s, this);
       if (hw <= 0) continue;
       const overlap = hw + half - Math.abs(dx);
       if (overlap <= 0 || overlap > half) continue;
       const side = dx > 0 ? 1 : -1;
-      b.x = s.x + side * (s.hw + half);
+      b.x = sx + side * (s.hw + half);
       if (Math.sign(b.vx) === -side) b.vx = 0;
       this._wall(b, side);
       return;
@@ -1133,7 +1338,10 @@ export class Sim {
   }
 }
 
-export const EV = { LAUNCH: 0, LAND: 1, DEATH: 2, BEST: 3, BIOME: 4 };
+export const EV = {
+  LAUNCH: 0, LAND: 1, DEATH: 2, BEST: 3, BIOME: 4,
+  CRUMBLE_START: 5, CRUMBLE: 6, CLOSE: 7,
+};
 
 /**
  * Simulate a launch forward and report the arc and where it first lands, using
@@ -1162,6 +1370,7 @@ export function predict(sim, vx, vy, outArc) {
   p.peakX = b.x; p.peakY = b.y;
   p.hangTimer = 0; p.onWall = 0; p.wallTimer = 0;
   p.grounded = false; p.standing = b.standing;
+  p.t = sim.verbTime;
 
   outArc.length = 0;
   const peak = sim.predictPeak;

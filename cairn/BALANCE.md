@@ -771,6 +771,65 @@ not blind, and it should be read on every generation change.
 
 ---
 
+## The verbs — how often they happen, and what they cost the curve
+
+`scripts/cairn-verbs-check.mjs`, 20 towers to 1,800 m.
+
+| | occurrences | biome | first met (median of 20 towers) |
+|---|---|---|---|
+| crumbling hold | 32 | ASH | **953 m** |
+| updraft | 76 | SIGNAL | **195 m** |
+| drifting ledge | 68 | BLOOM | **345 m** |
+
+184 verbs across 1,846 ledges — about **one ledge in ten**. Density is roughly
+flat with altitude (22.8% over 0-500 m, 7.4% at 500-1,500, 9.7% at 3,000-6,000,
+11.3% at 9,000-12,000); the low bands only look different because a 500 m window
+happens to contain all three verb biomes while a 1,000 m window contains three
+plain ones as well.
+
+**The teaching order is not an accident any more.** ASH is biome 0, so on the
+single `verbs.from` threshold the crumbling hold could land in the first ASH lap
+at 110-150 m — and in **7 towers of 18** the first verb a new player met was the
+one that takes the floor away. `verbs.crumbleFrom` (0.50, above the 0.438
+difficulty at 150 m) defers it to the second lap. Gift at 195 m, uncertainty at
+345, the floor going away at 953.
+
+**The cost of that ordering, stated plainly:** the average model met a crumbling
+hold **once in 360 attempts** (best 1,095 m) against the expert's **14 in 360**
+(best 3,976 m). For most players ASH's verb lives above where their run ends.
+
+**None of it is a wall.** 304 gaps touched by a verb, with drifting ledges swept
+at 12 phases of their cycle from the worst footing on the ledge below and the
+updraft's help switched off for the audit: **zero uncrossable**. The falsification
+runs matter as much as the pass — `verbs.driftAmp` at 16 produces 3 walls,
+`verbs.updraftAccel` at 0 turns the lift test red, `verbs.crumbleRate` at 0 turns
+the occurrence test red.
+
+**And the arc had to be taught what time it is.** Before `Sim.driftXAt` and
+`Body.t`, a launch the aim preview said would land on a drifting ledge failed to
+land on it **293 times out of 408** — 71.8%. The preview froze the tower at the
+instant the thumb went down; the flight moved it for a second and a half. After:
+**0 of 272**, with the ledge verified to have moved more than 1 u during 186 of
+those flights so the pass cannot be vacuous. Acceptance test 2 asserts this exact
+property and reported 0.000 cm throughout, because its 94 launches all land on
+ledges that do not move.
+
+Where the drift margin actually comes from is worth writing down, because the
+comment in the source said the wrong thing for a while. `driftAmp` is 4.0 u and
+`landing.forgiveness` is 3 u — the drift is *wider* than the forgiveness. What
+holds is `tower.reachSafety`: every ordinary gap is placed inside 70% of the
+physical reach envelope, and 30% of a full-power launch is a much bigger number
+than 4 u. Bisected: the first wall appears between **12 and 16 u**, so shipping
+at 4.0 is about 3x of headroom.
+
+And the bodies gate is unaffected by all of it — with the verbs in, the average
+model still stands on its own corpses on **5.71%** of 10,119 landings against a
+5% gate, the non-solid control still reads **0.00%**, and 263 constructed hard
+gaps over 10 towers still have zero that a single launch cannot leave from the
+worst footing.
+
+---
+
 ## What this does not tell you
 
 Open, not done, not claimed:
@@ -783,6 +842,10 @@ Open, not done, not claimed:
   median death height stops rising around attempt 30. The reasoning above says
   it cannot be fixed without breaking test 12, but that is an argument, not a
   measurement of an alternative.
+- **`crumbleMs` is a judgement, not a measurement.** 900 ms is how long you have
+  from landing on an ASH hold to leaving it. No bot in this repository needs any
+  time to aim, so nothing here can tell you whether 900 is generous, tight or
+  cruel to a thumb. The check proves the mechanic fires; it cannot price it.
 - **Nothing measures whether the ghost actually teaches it.** The preview is
   proven exact and proven drawn. Whether a player seeing a gold body appear at
   the apex concludes "put a body there" rather than "I failed" is a question

@@ -198,6 +198,51 @@ Three findings from doing it, all of the shape this file keeps recording:
 
 ---
 
+## The verbs, and the two things they were nearly wrong about
+
+The one complaint a real player made after 11,045 m was that *the design between
+the stages repeats itself*. Six biomes were six palettes and six silhouettes
+over one identical verb. Three of them now change what a ledge is and one
+changes what you can see (DECISIONS.md §26, PHASE3 §7). Both of the things this
+nearly got wrong were found by writing the check before believing the code.
+
+**The first version of the updraft test reported 0 of 46 on a working
+updraft.** It compared `sim.predictPeak.y` with and without lift — and
+`predictPeak` is only written when a launch *dies*. A launch that lands leaves
+the previous run's value sitting in the field, so the comparison was a number
+against itself. The apex now comes off the drawn arc. Same family as every other
+entry in this file: the instrument was broken, not the thing.
+
+**And the one that mattered: the aim arc lied on 71.8% of drifting ledges.**
+`predict` runs the integrator many times inside one aiming frame; `_stepVerbs`
+runs once per tick. The preview therefore froze the tower at the instant the
+thumb went down while the real flight moved the ledge underneath it. Acceptance
+test 2 asserts exactly this property, reports 0.000 cm, and passed throughout —
+all 94 of its launches leave from the ground onto ledges that do not move. Fixed
+with `Sim.driftXAt` and a clock on every body; **0 of 272** after. Third time
+this repository has shipped an arc that disagreed with its own flight, through a
+third new hole (DECISIONS.md §4, §19, §26).
+
+**The comment on `driftAmp` was false.** It said the 4.0 u drift was "bounded
+well inside `landing.forgiveness`", which is 3 u. What actually keeps a drifting
+ledge reachable is the 30% of the reach envelope every ordinary gap sits inside,
+and the real margin is measured rather than asserted: the check sweeps twelve
+phases of the drift cycle and the first wall appears between **12 and 16 u**.
+
+**Open and not claimed:** `crumbleMs` is 900 and no human has ever stood on a
+crumbling hold. It is a judgement about how long a player needs to aim under
+pressure, and the only measurement behind it is that a bot does not need any
+time at all. The gate proves the mechanic *fires* — 14 holds gave way under an
+expert over 360 attempts — not that 900 ms is the right number.
+
+**Also honest:** the crumbling hold waits for the second ASH lap at 900 m, so
+the average model met one **once in 360 attempts**. For most players ASH's verb
+lives above where their run ends. That was the price of not introducing the
+punishing verb before the generous one, and it is reported next to the gate
+rather than under it.
+
+---
+
 ## Two gates that flip on container noise, not on code
 
 Recorded because both cost time to attribute and neither is a regression.
@@ -255,7 +300,7 @@ These are open, not done, and not claimed:
   does. The arc is proven honest from a cling; how much slop a cling launch
   forgives is not known.
 - **Much of Phase 2 is still not built.** Chunked streaming generation, the
-  reachability solver, the four new biome verbs, momentum, close calls, the
+  reachability solver, momentum, close calls, the
   first-60-seconds choreography, Daily Climb, ghosts, milestones and the
   instrumentation dashboard are untouched. Balance (PHASE3 §1) and Monument View
   (§6) are done and have their own harnesses.

@@ -298,6 +298,60 @@ export const FEEL = {
     corpseH: 6.0,
   },
 
+  // ------------------------------------------------------------------ verbs
+  //
+  // ONE VERB PER BIOME, so each is learned in isolation, and none of them before
+  // the on-ramp is over. PHASE3 §7 asks for exactly this and warns why it ranks
+  // low: new verbs are what a designer reaches for when the loop feels thin, and
+  // this loop was thin because it was too EASY, not because it was too simple.
+  // The curve is fixed and measured now, so they can be added without balancing
+  // four systems at once.
+  //
+  // Three of the four cannot create a wall, by construction:
+  //
+  //   CRUMBLE only affects a ledge you have already landed on, so it can take a
+  //           perch away but never make one unreachable.
+  //   UPDRAFT only ever ADDS reach. A gap crossable without one stays crossable.
+  //   DARK    is presentation. The collision world is unchanged.
+  //
+  // DRIFT is the one that moves a landing target, so it is the one with a bound:
+  // `driftAmp` stays well inside the 30% margin `reachSafety` already holds back,
+  // and a gap cut out of a flight (`Solid.hard`) never drifts at all.
+  verbs: {
+    from: 0.34,           // difficulty at which verbs begin. Never on the ramp.
+
+    // ASH — the hold gives way. You have `crumbleMs` from touching it.
+    //
+    // It has its own, higher, threshold: ASH is the FIRST biome, so on the
+    // plain `from` the very first verb a new player met was the one that takes
+    // the floor away, in 7 towers of 18 measured. Anything above the difficulty
+    // at 150 m (0.438) defers it past the first ASH lap, which puts it at 900 m
+    // and puts the updraft — the verb that GIVES you something — first at 150.
+    // `cairn-verbs-check.mjs` test 6 is the gate on that ordering.
+    crumbleFrom: 0.50,
+    crumbleRate: 0.30,    // share of ASH ledges that crumble
+    crumbleMs: 900,       // long enough to aim, short enough to hurry
+    crumbleWarnMs: 380,   // it starts visibly failing this long before it goes
+
+    // SIGNAL — a column of rising air. Reach, for free, if you are inside it.
+    updraftRate: 0.34,    // share of SIGNAL gaps that carry one
+    updraftAccel: 210,    // u/s^2 upward while inside
+    updraftW: 15,         // half-width of the column
+    updraftH: 74,         // how far up it reaches
+
+    // BLOOM — the ledge will not hold still.
+    driftRate: 0.36,      // share of BLOOM ledges that drift
+    // u either side. NOT inside the landing forgiveness (3 u) — the margin
+    // that actually holds is the 30% of the physical reach envelope every
+    // ordinary gap is placed inside. Measured: cairn-verbs-check goes red
+    // somewhere between 12 and 16, so this ships with about 3x of headroom.
+    driftAmp: 4.0,
+    driftHz: 0.16,        // cycles per second
+
+    // VOID — you see what your own light reaches, and no further.
+    darkFloor: 0.30,      // how much of the normal ambient survives
+  },
+
   // --------------------------------------------------------------- erosion
   // How fast a corpse stops being a platform, measured in DEATHS, never in
   // seconds — see DECISIONS.md §16. These lived in sim.js as a bare array,

@@ -71,6 +71,18 @@ The aim arc lied **twice, by two different routes**:
 
 The rule is not "write one integrator". It is **one source per derived value**.
 
+And a third time, when BLOOM's drifting ledges arrived: `predict` runs the
+integrator many times inside one aiming frame, `_stepVerbs` moves the tower once
+per **tick** — so the preview froze the world while the real flight moved the
+ledge under it for a second and a half. **The arc lied on 71.8% of drifting
+ledges.** Test 2 reported 0.000 cm the whole time, because all 94 of its
+launches land on ledges that do not move.
+
+> **One source is not enough when the source is time-varying and only one caller
+> knows what time it is.** `Sim.driftXAt(s, t)` answers *where is this ledge*,
+> and every body carries a clock (`Body.t`) so every query about it is a query
+> about a time.
+
 ### Physics must never run on the display's clock
 
 Fixed 120 Hz step with an accumulator and render interpolation. Real time enters
@@ -216,6 +228,9 @@ node scripts/cairn-daily-check.mjs
 node scripts/cairn-bodies-check.mjs
                                # CAIRN: does anyone stand on their own corpse, and
                                # is a hard gap ever a wall. ~60 s, no browser
+node scripts/cairn-verbs-check.mjs
+                               # CAIRN: the four biome verbs — do they happen, only
+                               # where allowed, and is any of them a wall. ~30 s
 node scripts/cairn-qa.mjs      # CAIRN: 1000 runs, dead ends, save corruption
 node scripts/cairn-boundary-check.mjs
                                # CAIRN: sabotages the loop; does a crash say
@@ -262,10 +277,22 @@ direct aiming, non-blocking record, versioned persistence, share poster,
 synthesised audio, haptics, 14 passing tests.
 
 **Not done, and not claimed** — full list in `cairn/AUDIT.md`:
-chunked streaming generation, the reachability solver, the four biome verbs
-(crumbling holds / updrafts / drifting platforms / darkness), momentum, close
-calls, the first-60-seconds choreography, Daily Climb, ghosts, Monument View,
-milestones and the instrumentation dashboard.
+chunked streaming generation, the reachability solver, momentum, close calls,
+ghosts, milestones and the instrumentation dashboard.
+
+**The four biome verbs are done** (PHASE3 §7, DECISIONS §26), and they are the
+answer to the one complaint a real player made after 11,045 m: *the design
+between the stages repeats itself.* ASH's hold gives way under you, SIGNAL has
+columns of rising air, BLOOM's ledges will not hold still, VOID takes away
+everything your own light does not reach. CINDER and GLACIER carry none — two
+plain biomes per 900 m lap are what the other four read against.
+
+The updraft is the one to be careful with. `Sim._flight` lifts every body
+**except `this._probe`**, so every route the generator promised was proved
+without help and a column can only ever widen a gap that was already crossable.
+`predict` flies `_ghost`, which *does* feel it, because the drawn arc has to
+match the flight. `cairn-verbs-check.mjs` asserts both halves — either one alone
+passes on dead code.
 
 **Balance is done and written down.** `cairn/BALANCE.md` has the curves from
 30,000 headless climbs. The short version: the world did not have an easy

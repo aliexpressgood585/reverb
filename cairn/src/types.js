@@ -25,6 +25,19 @@
  * @property {boolean} corpse  a body left behind, rather than rock
  * @property {boolean} live    pooled: false means it is in the free list
  * @property {boolean} hard    a ledge cut out of a flight. Read only by audits.
+ * @property {boolean} crumble  ASH: gives way `verbs.crumbleMs` after it is stood on
+ * @property {number} crumbleAt sim time it goes, or 0 until somebody lands on it
+ * @property {number} drift     BLOOM: horizontal amplitude in units, 0 for still
+ * @property {number} driftPhase
+ * @property {boolean} updraft  SIGNAL: a column of rising air stands on this
+ *                              ledge. Never seen by the generator's probe, so
+ *                              it can only ever add reach.
+ * @property {number} baseHw    half-width as placed. A crumbled hold sets `hw`
+ *                             to 0; this is what the renderer draws its
+ *                             outline from, so it gives way rather than
+ *                             teleporting out of the world.
+ * @property {number} baseX     where it was PLACED, which is what routes were
+ *                              proved against. `x` is where it is right now.
  * @property {number} order    creation index among corpses, for the poster thread
  * @property {number} bornAt   sim time it was created
  * @property {number} [bornDeath] the death index it was born on. Erosion measures
@@ -61,6 +74,11 @@
  * @property {number} peakY
  * @property {number} airTime
  * @property {number} hangTimer
+ * @property {number} t        this body's own sim clock, in `Sim.verbTime`'s
+ *                             units. The real body's tracks the world's; the
+ *                             ghost's and the probe's run ahead through the
+ *                             flight being previewed, which is what makes a
+ *                             drifting ledge land where the arc drew it.
  */
 
 /** @typedef {{ vx: number, vy: number }} Launch */

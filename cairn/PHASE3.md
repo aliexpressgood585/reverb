@@ -212,16 +212,51 @@ exports in under 2 s.
 
 ---
 
-## 7 — The four biome verbs
+## 7 — The four biome verbs — DONE
 
 ASH crumbling holds · SIGNAL updrafts · BLOOM drifting platforms · VOID darkness
 beyond the player's own light. One per biome so each is learned in isolation,
 and **never two new verbs within 100 m of each other**.
 
-Deliberately low. New verbs are what a designer reaches for when the core loop
-feels thin — but this loop is thin because it is *too easy*, not because it is
-too simple. Fix the curve first, or you will be balancing four systems instead
-of one.
+This was ranked deliberately low, with the reasoning: *new verbs are what a
+designer reaches for when the core loop feels thin — but this loop is thin
+because it is too easy, not because it is too simple. Fix the curve first.*
+
+The curve was fixed first (§1, and BALANCE.md). Then a real player climbed to
+11,045 m and said **"the design between the stages is boring, it repeats
+itself"** — which is what this item was always about, arriving from the one
+source that outranks the ranking.
+
+Built, gated by `scripts/cairn-verbs-check.mjs`, reasoned through in
+DECISIONS.md §26. The measured facts:
+
+- One verb per biome, **only** in its own biome, never inside the 60 m on-ramp
+  and never on a gap cut out of a flight (§19's guarantee is that one launch
+  lands on one surface; a surface that crumbles or drifts is not that surface).
+- **Nothing is a wall.** 304 gaps touched by a verb, drifting ledges swept at 12
+  phases of their cycle from the worst footing, updraft help switched off for the
+  audit: zero uncrossable. `driftAmp` ships at 4.0 u and the first wall appears
+  between 12 and 16.
+- The teaching order is **gift first**: updraft at a median of 195 m, drift at
+  345, the crumbling hold at 953. That last one needed `verbs.crumbleFrom`,
+  because ASH is biome 0 and on the plain threshold 7 towers of 18 introduced
+  the hold that takes the floor away before the column that gives reach.
+- CINDER and GLACIER carry no verb, on purpose. Six special cases in a 900 m lap
+  is not variety, it is noise.
+
+**And it found a real bug on the way through.** BLOOM's ledges move, and the aim
+arc did not know that — `predict` runs the integrator many times inside one
+aiming frame while `_stepVerbs` moves the tower once per tick, so the preview
+froze the world while the flight moved the ledge underneath it. **71.8% of
+drifting ledges got an arc that lied.** Acceptance test 2 asserts exactly this
+property, reported 0.000 cm, and passed throughout, because its 94 launches all
+land on ledges that stand still. Fixed with `Sim.driftXAt` and a clock on every
+body; 0 of 272 after, with the gate asserting the ledge really moved so the pass
+cannot be vacuous.
+
+**Still open from this item:** the 100 m separation rule is satisfied by the
+biome layout rather than enforced by a check, and no human has played a
+crumbling hold — `crumbleMs` at 900 is a judgement, not a measurement.
 
 ---
 

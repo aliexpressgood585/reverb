@@ -1,4 +1,4 @@
-import { FEEL, COLUMN, biomeAt, newBiomeSlot, MEMORY_GOLD } from './feel.js';
+import { FEEL, COLUMN, BIOMES, biomeAt, newBiomeSlot, MEMORY_GOLD } from './feel.js';
 import { makeRng, erosionOf, EROSION } from './sim.js';
 
 /** @typedef {import('./sim.js').Sim} Sim */
@@ -56,6 +56,13 @@ const rgb = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
  * through it looking like the first.
  */
 const BAND_KINDS = ['spire', 'block', 'dome', 'needle', 'shard', 'facet'];
+
+/**
+ * Which biome darkness belongs to, found by NAME rather than written as 3.
+ * Insert a biome one day and a hard-coded index puts the dark in the wrong
+ * place with nothing to catch it; this moves with the palette.
+ */
+const VOID_BIOME = BIOMES.findIndex((b) => b.name === 'VOID');
 
 /**
  * One parallax layer's outline, in a biome's own geometry.
@@ -481,7 +488,14 @@ export class Renderer {
     }
 
     this._threads(ctx, B, sim);
+    this._updrafts(ctx, B, sim);
     this._solids(ctx, B, sim, cam);
+    // VOID's darkness falls on the WORLD, not on the player. It is drawn after
+    // the geometry and before the body, the trail and the aim arc, so what it
+    // takes away is knowledge of where the next ledge is — never the ability to
+    // read your own launch. A biome that hides the controls is not a biome, it
+    // is a bug with a name.
+    if (depth > 0.01) this._dark(ctx, B, sim, depth);
     this._rings(ctx, B);
     this._parts(ctx, B);
     this._trail(ctx, B);
@@ -711,6 +725,35 @@ export class Renderer {
       const d = Math.hypot(s.x - bx, s.y - by);
       const lit = clamp(1 - d / reach, 0, 1);
 
+      // A crumbling hold whose clock has started. 0 until the warning window,
+      // then a flicker that quickens. Time is encoded in BRIGHTNESS, because
+      // width is reserved for saying what the collision is.
+      let urgent = 0;
+      if (s.crumble && s.crumbleAt > 0) {
+        const left = (s.crumbleAt - sim.verbTime) * 1000;
+        const warn = FEEL.verbs.crumbleWarnMs;
+        if (left < warn) {
+          const k = clamp(1 - left / warn, 0, 1);
+          urgent = k * (0.55 + 0.45 * Math.sin(sim.verbTime * (14 + k * 40)));
+        }
+      }
+
+      if (!s.corpse && s.hw <= 0 && s.baseHw > 0) {
+        // A hold that has already given way. It is drawn, and it is not a
+        // platform — the same sentence MEMORY says about an old corpse, in the
+        // same visual language: an outline with nothing inside it. Without this
+        // a crumbling ledge does not give way, it teleports out of the world,
+        // and the player learns nothing from having stood on one.
+        const w = s.baseHw * 2 * this.scale;
+        const top = sy - s.hh * this.scale;
+        ctx.strokeStyle = rgb(B.rock, 0.10 + lit * 0.10);
+        ctx.lineWidth = Math.max(0.7, this.dpr * 0.7);
+        ctx.setLineDash([3 * this.dpr, 4 * this.dpr]);
+        ctx.strokeRect(sx - w * 0.5, top, w, s.hh * 2 * this.scale);
+        ctx.setLineDash([]);
+        continue;
+      }
+
       if (!s.corpse) {
         // Rock, pulled toward the accent by how lit it is. Geometry in this
         // game is never its own colour in isolation — it is always somewhere
@@ -738,9 +781,51 @@ export class Renderer {
         // A short bloom-catching bar on the crest, so the landing line reads
         // even when the player's light is nowhere near it.
         ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = rgb(B.accent, 0.05 + lit * 0.22);
+        ctx.fillStyle = rgb(B.accent, 0.05 + lit * 0.22 + urgent * 0.55);
         ctx.fillRect(sx - w * 0.5, top - 1.5 * this.dpr, w, 3 * this.dpr);
         ctx.globalCompositeOperation = 'source-over';
+
+        if (s.crumble) {
+          // ASH: this one gives way.
+          //
+          // THE FIRST VERSION OF THIS DREW BLACK CRACKS ACROSS THE SLAB, AND
+          // THE SLAB IS ALREADY BLACK. A screenshot settled it in one look: the
+          // only part of a ledge you can actually see is the lit crest, so the
+          // tell has to live there. Broken teeth hanging off the crest, in the
+          // accent, which is the one colour that reads against this background.
+          //
+          // The WIDTH of the crest is never touched — by this or by `urgent`.
+          // The corpse shelf obeys the same rule: colour and brightness say what
+          // state a surface is in, width says what the collision is, and a hold
+          // drawn narrower than it catches is the one lie this art direction is
+          // not allowed to tell.
+          ctx.fillStyle = rgb(B.accent, 0.22 + lit * 0.30 + urgent * 0.4);
+          const teeth = 5;
+          for (let k = 0; k < teeth; k++) {
+            const f = (k + 0.5) / teeth - 0.5;
+            const drop = h * (0.5 + ((k * 7) % 5) * 0.28);
+            ctx.fillRect(sx + w * f - this.dpr * 0.6, top,
+              Math.max(1, this.dpr * 1.2), drop);
+          }
+        }
+        if (s.drift > 0) {
+          // BLOOM: the track it travels, end to end, as a dashed rail. Dashed
+          // so it cannot be mistaken for a ledge, and bright enough to be seen —
+          // the first version was 0.05 alpha and did not survive a screenshot.
+          // Without it a drifting ledge is a moving target with no way to know
+          // where it will be; with it, the whole path is something you can aim
+          // at while it is still somewhere else.
+          const t0 = this.X(s.baseX - s.drift) - w * 0.5;
+          const t1 = this.X(s.baseX + s.drift) + w * 0.5;
+          ctx.strokeStyle = rgb(B.accent, 0.16 + lit * 0.20);
+          ctx.lineWidth = Math.max(1, this.dpr);
+          ctx.setLineDash([2.5 * this.dpr, 3.5 * this.dpr]);
+          ctx.beginPath();
+          ctx.moveTo(t0, top - 3 * this.dpr);
+          ctx.lineTo(t1, top - 3 * this.dpr);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
         continue;
       }
 
@@ -819,6 +904,105 @@ export class Renderer {
       }
       ctx.restore();
     }
+  }
+
+  /**
+   * SIGNAL's rising air.
+   *
+   * Drawn exactly `verbs.updraftW` wide and `verbs.updraftH` tall, because those
+   * are the numbers the physics tests — a column you can see the edge of is a
+   * column you can aim into, and one drawn wider than it lifts is a trap.
+   *
+   * The streaks exist for one reason: a glow says "something here", and only
+   * motion says WHICH WAY. Their positions come from `sim.verbTime`, so nothing
+   * is stored and nothing allocates.
+   *
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Sim} sim
+   */
+  _updrafts(ctx, B, sim) {
+    const V = FEEL.verbs;
+    const solids = sim.world.solids;
+    const t = sim.verbTime;
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < solids.length; i++) {
+      const s = solids[i];
+      if (!s.updraft) continue;
+      const top = s.y + s.hh;
+      const y0 = this.Y(top);
+      const y1 = this.Y(top + V.updraftH);
+      if (y1 > this.h + 80 || y0 < -80) continue;
+      const x = this.X(s.x);
+      const w = V.updraftW * this.scale;
+
+      const g = ctx.createLinearGradient(0, y0, 0, y1);
+      g.addColorStop(0, rgb(B.accent, 0.13));
+      g.addColorStop(0.55, rgb(B.accent, 0.05));
+      g.addColorStop(1, rgb(B.accent, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(x - w, y1, w * 2, y0 - y1);
+
+      // The two edges, so the column has a boundary you can be outside of.
+      ctx.fillStyle = rgb(B.accent, 0.10);
+      ctx.fillRect(x - w, y1, Math.max(1, this.dpr * 0.8), y0 - y1);
+      ctx.fillRect(x + w - Math.max(1, this.dpr * 0.8), y1, Math.max(1, this.dpr * 0.8), y0 - y1);
+
+      // RISING SPARKS, NOT RISING BARS.
+      //
+      // The first version drew horizontal streaks across the column, and a
+      // screenshot said what was wrong with them immediately: a bright
+      // horizontal line is exactly what a landing crest looks like in this
+      // game. Every mote was a ledge you might try to aim at. Short VERTICAL
+      // strokes cannot be mistaken for a surface, and they say "up" on their
+      // own without needing the animation to be watched.
+      const span = y0 - y1;
+      const len = Math.max(2, span * 0.055);
+      for (let k = 0; k < 7; k++) {
+        const f = (t * 0.42 + k * 0.1428) % 1;
+        const sy = y0 - span * f;
+        const off = ((k * 37) % 100) / 100 - 0.5;      // fixed lanes, not random
+        const a = 0.30 * (1 - f) * (f < 0.15 ? f / 0.15 : 1);
+        ctx.fillStyle = rgb(B.accent, a);
+        ctx.fillRect(x + off * w * 1.7, sy - len, Math.max(1, this.dpr), len);
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /**
+   * VOID's darkness: you see what your own light reaches, and no further.
+   *
+   * One radial wipe centred on the body. `verbs.darkFloor` is how much of the
+   * biome survives at the edge of the screen — never zero, because a black
+   * rectangle is not a biome, and a player who cannot see the shape of the
+   * tower cannot tell a hard gap from a bug.
+   *
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Sim} sim
+   * @param {number} depth 1 while playing, 0 at full monument pull-back
+   */
+  _dark(ctx, B, sim, depth) {
+    // How much of the current cross-fade is VOID. Reading it off the blend
+    // rather than off the name means the darkness arrives and leaves with the
+    // colour, over the same 20 m, instead of snapping at the boundary.
+    const a = B.index % BIOMES.length, b = (B.index + 1) % BIOMES.length;
+    const voidness = (a === VOID_BIOME ? 1 - B.blend : 0) + (b === VOID_BIOME ? B.blend : 0);
+    if (voidness <= 0.001) return;
+
+    const k = voidness * depth * (1 - FEEL.verbs.darkFloor);
+    const px = this.X(sim.body.rx ?? sim.body.x);
+    const py = this.Y(sim.body.ry ?? sim.body.y);
+    // The lit radius is generous — the point is that the NEXT ledge is unknown,
+    // not that this one is.
+    const r = this.h * 0.62;
+    const g = ctx.createRadialGradient(px, py, r * 0.22, px, py, r);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.55, `rgba(0,0,0,${(k * 0.45).toFixed(3)})`);
+    g.addColorStop(1, `rgba(0,0,0,${k.toFixed(3)})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(-40, -40, this.w + 80, this.h + 80);
   }
 
   /**

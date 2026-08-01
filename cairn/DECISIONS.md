@@ -440,25 +440,6 @@ passed while blind to the state they claimed to cover.
 
 ---
 
-## 19. Physics stays at 120 Hz, not the 60 Hz the release brief asks for
-
-The brief specifies a fixed 60 Hz simulation decoupled from render. The
-decoupling was already there; the rate is 120 and stays 120.
-
-Halving it doubles the distance a body travels between collision checks, which
-is exactly the budget `FEEL.body.sweepFraction` exists to protect — acceptance
-test 3 fires 140 max-power launches through a six-deep corpse wall and measures
-the longest sub-step at 1.34 u against a 2.10 u limit. That margin is not large
-enough to give away for nothing.
-
-And it *is* nothing: a tick costs **0.0003 ms** at 400 bodies, unmeasurable
-against a 16.67 ms frame. Two ticks per 60 Hz frame is 0.0006 ms.
-
-The real cost of changing it would be the documentation: every number in
-`BALANCE.md` — 30,000 climbs, four difficulty targets, the aim-tolerance survey,
-the hard-gap power window — was produced at `dt = 1/120`. Re-deriving all of it
-to satisfy a number in a brief is the wrong trade.
-
 ## 20. Strict type checking, on the JavaScript, through JSDoc
 
 The brief asks for TypeScript strict mode. What shipped is `tsconfig.json` with
@@ -466,7 +447,7 @@ The brief asks for TypeScript strict mode. What shipped is `tsconfig.json` with
 across all 4,300 lines that reach a player's phone**, enforced in
 `npm run typecheck` and in the pre-commit hook.
 
-Not a `.ts` conversion, and the reasoning is the same one behind §19. The
+Not a `.ts` conversion, and the reasoning is the same one behind §25. The
 physics in this repository is pinned by fourteen browser acceptance tests, 30,000
 headless climbs, a route audit over 4,506 gaps and a precision survey over 4,186
 jumps. A wholesale rewrite of every line of it buys inference-only generics and
@@ -603,3 +584,140 @@ The stages were also genuinely too close and were widened — solidity 1 / 0.66 
 grew. An external reviewer had already said this in words — *"it is not clear
 which bodies still hold weight"* — and the suite had been reading a pessimistic
 number on exactly that property for months.
+
+## 25. Physics stays at 120 Hz, not the 60 Hz the release brief asks for
+
+*(Numbered 19 for a while, which §19 already was. Renumbered rather than left
+as a collision, because two headings with one number is how a cross-reference
+quietly starts pointing at the wrong argument.)*
+
+The brief specifies a fixed 60 Hz simulation decoupled from render. The
+decoupling was already there; the rate is 120 and stays 120.
+
+Halving it doubles the distance a body travels between collision checks, which
+is exactly the budget `FEEL.body.sweepFraction` exists to protect — acceptance
+test 3 fires 140 max-power launches through a six-deep corpse wall and measures
+the longest sub-step at 1.34 u against a 2.10 u limit. That margin is not large
+enough to give away for nothing.
+
+And it *is* nothing: a tick costs **0.0003 ms** at 400 bodies, unmeasurable
+against a 16.67 ms frame. Two ticks per 60 Hz frame is 0.0006 ms.
+
+The real cost of changing it would be the documentation: every number in
+`BALANCE.md` — 30,000 climbs, four difficulty targets, the aim-tolerance survey,
+the hard-gap power window — was produced at `dt = 1/120`. Re-deriving all of it
+to satisfy a number in a brief is the wrong trade.
+
+## 26. Four biomes got a verb. The other two did not, on purpose
+
+A real player climbed to 11,045 m and said: *"the design between the stages is
+boring, it repeats itself."* He was right, and colour was not the problem — the
+six biomes already had six palettes and, since §23, six silhouette languages.
+The problem was structural. **Six biomes were six looks over one identical
+verb: jump the gap.** Nothing you *did* at 11,000 m differed from what you did
+at 200.
+
+So three biomes now change what a ledge *is*, and one changes what you can see:
+
+| biome | verb | what it costs you |
+|---|---|---|
+| ASH | the hold gives way `crumbleMs` after you land on it | time |
+| SIGNAL | a column of rising air | nothing — it is the gift |
+| BLOOM | the ledge will not hold still | certainty |
+| VOID | you see what your own light reaches | knowledge of the next ledge |
+
+CINDER and GLACIER carry none, and that is a decision rather than an omission.
+Six verbs in a 900 m cycle is not variety, it is noise: every ledge would be a
+special case and the ordinary jump — which is still the game — would stop being
+the baseline anything reads against. Two plain biomes per lap are the rest.
+
+### The updraft is invisible to the generator, and that is the whole design
+
+`Sim._flight` applies the lift to every body **except `this._probe`**, which is
+the scratch body `_probeFlight` and `_descendTo` fly. So every route the world
+promises was proved *without* help. A column can only ever widen a gap that was
+already crossable, which means three things at once: it cannot create a wall,
+it cannot be the reason a hard gap is passable, and turning `updraftAccel` down
+tomorrow cannot strand somebody standing in a tower built today.
+
+The aim arc is the opposite case and gets the opposite treatment — `predict`
+flies `_ghost`, which *does* feel the lift, because an arc that ignored a column
+the flight will pass through is the same class of lie as the two-integrator bug
+in §4. **One source per derived value; the exception is the probe, and it is
+named in the code.**
+
+`cairn-verbs-check.mjs` asserts *both halves*. Only the first would pass on an
+updraft that also lifted the probe. Only the second would pass on an updraft
+that did nothing at all — the dead-code case this repository has shipped before.
+
+### The arc lied about a moving ledge — the third time, through a third hole
+
+`predict` runs `_flight` many times inside a single aiming frame. `_stepVerbs`
+runs once per **tick**. So the preview froze the tower at the instant the thumb
+went down, while the real flight moved a BLOOM ledge underneath it for a second
+and a half. Measured before the fix: **the aim arc claimed a landing that did
+not happen on 71.8% of drifting ledges.**
+
+Acceptance test 2 asserts arc-matches-flight and passed the whole time, at
+0.000 cm — all 94 of its launches leave from the ground onto ledges that do not
+move. §4 was the two-integrator version of this bug and §19 was the eroded-vs-raw
+half-width version. This is the third, and the pattern is now unmistakable:
+
+> **A derived value with one source is not enough if the source is time-varying
+> and only one caller knows what time it is.**
+
+The fix is `Sim.driftXAt(s, t)` — the single function that answers *where is
+this ledge* — plus a clock, `Body.t`, on every body in the game. The real body's
+clock tracks `verbTime` because both advance one `DT` per tick. `_ghost` and
+`_probe` start theirs at `verbTime` and run **ahead**, through the future the
+launch is being flown through. Every collision query about a drifting ledge is
+now a query about a time.
+
+After: **0 of 272.** And the gate carries its own guard against a vacuous pass —
+it asserts the ledge actually moved more than 1 u during 186 of those 272
+flights, because a test of moving ledges that never sees one move is the
+difficulty-collapse test all over again.
+
+### `driftAmp` is wider than the landing forgiveness, and that was a lie in a comment
+
+The BLOOM ledge drifts 4.0 u either side. The comment shipped saying that was
+"bounded well inside `landing.forgiveness`", which is 3 u. It is not. What
+actually keeps a drifting ledge reachable is the **30% of the physical reach
+envelope every ordinary gap is placed inside** (`tower.reachSafety`), and the
+number is measured rather than reasoned: the check sweeps twelve phases of the
+drift cycle from the worst footing on the ledge below, and the first tower with
+a wall in it appears somewhere between **12 and 16 u**. Shipping at 4.0 is
+about three times of headroom. The comment now says that.
+
+### The crumbling hold got its own threshold because of what a new player met first
+
+Verbs start at `verbs.from` (0.34 difficulty, ~110 m). ASH is biome **0**, so on
+that single threshold the crumbling hold could appear in the *first* ASH lap at
+110-150 m — and it did, in **7 towers of 18**. That makes the first verb a new
+player ever meets the one that takes the floor away, before they have met the
+one that gives them reach.
+
+`verbs.crumbleFrom` is 0.50, which is above the difficulty at 150 m (0.438), so
+the crumbling hold defers to the second lap at 900 m. Measured after the change,
+across 20 towers: the updraft is first met at a median of **195 m**, drift at
+**345 m**, the crumbling hold at **953 m**. Gift, then uncertainty, then the
+floor going away — and none of it written in text.
+
+Worth being honest about the cost: the average model tops out near 1,100 m, so
+it met a crumbling hold **once in 360 attempts**. For most players ASH's verb is
+effectively a thing that exists past where their run ends. The check reports that
+number next to the gate rather than under it.
+
+### The verb never lands on a gap that was cut out of a flight
+
+A hard gap's entire guarantee (§19) is that one specific launch lands on one
+specific surface. A surface that crumbles or drifts **is not that surface**, so
+`World._verbs` refuses any ledge with `hard` set. Asserted, not assumed.
+
+### Both rolls are drawn unconditionally
+
+`_verbs` calls `this.rng()` twice before it looks at the biome, the difficulty
+or anything else. If the draws were inside the branches, the random stream — and
+therefore the whole tower below and above — would depend on which biome a ledge
+happened to fall in, and a one-line tuning change to a rate would silently
+rebuild every seed. Test 5 builds six seeds twice and compares every ledge.
