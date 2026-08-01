@@ -255,6 +255,16 @@ gesture lockdown · discoverable through real touch · **aim direction** ·
 **difficulty doesn't collapse** · **erosion stages readable** · **nothing blocks
 a climb**.
 
+Tests 5 and 6 sample 50, 200, 400 and **520 m**. The last one is VOID and it is
+there because VOID's verb is darkness: until it was added, no acceptance test
+ever looked above 400 m, so a darkness gone too far — a biome that had become a
+black rectangle — would have shipped behind fourteen green tests.
+
+**`cairn-verbs-check.mjs` covers what `cairn-check.mjs` structurally cannot.**
+Acceptance test 2 asserts arc-matches-flight and reports 0.000 cm, but all 94 of
+its launches leave from the ground onto ledges that stand still — so it could
+not see the arc lying on 71.8% of BLOOM's drifting ledges. Run both.
+
 **Two gates flip on container noise rather than on code, and both cost time to
 attribute** (see `cairn/AUDIT.md`). `cairn-device-check.mjs`'s sub-linearity gate
 divides two sub-millisecond numbers and prints anything from `-11x` to `+17x` on

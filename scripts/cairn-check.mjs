@@ -218,7 +218,16 @@ const page = await newPage();
 // ── 5 & 6. the look: distinguishable altitudes, no flat grey ───────────────
 {
   const shots = [];
-  for (const h of [50, 200, 400]) {
+  // 520 m IS VOID, AND IT IS HERE ON PURPOSE.
+  //
+  // VOID's verb is darkness — the renderer takes away everything the player's
+  // own light does not reach. That is a change the whole frame goes through,
+  // and until this sample was added no acceptance test ever looked above 400 m,
+  // so a darkness that had gone too far and turned the biome into a black
+  // rectangle would have shipped with fourteen green tests behind it. Both
+  // gates below now include it: distinguishable from its neighbours, and not
+  // washed out.
+  for (const h of [50, 200, 400, 520]) {
     await page.evaluate((y) => {
       const { sim, camera, renderer } = window.CAIRN;
       sim.reset(true); sim.phase = 1;
@@ -240,7 +249,10 @@ const page = await newPage();
 
   // Distinguishability: mean hue/È of each frame must differ materially.
   const d = (a, b) => Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b);
-  const pairs = [d(shots[0].stats, shots[1].stats), d(shots[1].stats, shots[2].stats), d(shots[0].stats, shots[2].stats)];
+  const pairs = [];
+  for (let i = 0; i < shots.length; i++) {
+    for (let j = i + 1; j < shots.length; j++) pairs.push(d(shots[i].stats, shots[j].stats));
+  }
   const minPair = Math.min(...pairs);
   for (const s of shots) {
     console.log(`      ${String(s.h).padStart(3)}m  mean rgb ${s.stats.r.toFixed(1)},${s.stats.g.toFixed(1)},${s.stats.b.toFixed(1)}` +

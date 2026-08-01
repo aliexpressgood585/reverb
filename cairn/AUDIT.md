@@ -229,6 +229,15 @@ ledge reachable is the 30% of the reach envelope every ordinary gap sits inside,
 and the real margin is measured rather than asserted: the check sweeps twelve
 phases of the drift cycle and the first wall appears between **12 and 16 u**.
 
+**VOID's darkness was outside every gate until it was put inside one.** Tests 5
+and 6 sampled 50, 200 and 400 m; VOID starts at 450, so no acceptance test in
+this repository had ever looked at the biome whose entire verb is a change to
+the whole frame. A darkness gone too far would have shipped behind fourteen
+green tests. The sample list is 50, 200, 400 and **520** now, and VOID measures
+mean rgb 20.1/16.1/8.9, **chroma 11.3** against a gate of 3, 0.0% flat grey,
+36.2 from its nearest neighbour. Much darker than any other biome — which is the
+design — with 3.7x of margin on the washing-out gate.
+
 **Open and not claimed:** `crumbleMs` is 900 and no human has ever stood on a
 crumbling hold. It is a judgement about how long a player needs to aim under
 pressure, and the only measurement behind it is that a bot does not need any
