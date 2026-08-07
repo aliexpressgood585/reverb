@@ -56,6 +56,29 @@ export const EROSION = { FRESH: 0, THIN: 1, TOP: 2, MEMORY: 3 };
  * instead of silently ageing a corpse differently in the physics than on screen.
  */
 /**
+ * Effective erosion age of a corpse, in deaths, after the deep-tower scaling.
+ *
+ * Split out of `erosionOf` so that "how old is it" and "which stage is that"
+ * stay one source between them. The `deaths` override exists for exactly one
+ * question — will this corpse still be a platform after the next death — and
+ * answering it by hand anywhere else would be a second ageing rule.
+ *
+ * @param {Solid} solid
+ * @param {Sim} sim
+ * @param {number} [deaths] death count to age against; defaults to now
+ * @returns {number}
+ */
+export function erosionAge(solid, sim, deaths = sim.deaths) {
+  const E = FEEL.erosion;
+  let age = deaths - (solid.bornDeath ?? 0);
+  if (E.deepScale !== 1) {
+    const t = clamp(Math.max(0, sim.best - solid.y) / E.deepSpan, 0, 1);
+    age *= 1 + (E.deepScale - 1) * t;
+  }
+  return age;
+}
+
+/**
  * @param {Solid} solid
  * @param {Sim} sim
  * @returns {number} one of EROSION
@@ -63,11 +86,7 @@ export const EROSION = { FRESH: 0, THIN: 1, TOP: 2, MEMORY: 3 };
 export function erosionOf(solid, sim) {
   if (!solid.corpse) return EROSION.FRESH;
   const E = FEEL.erosion;
-  let age = sim.deaths - (solid.bornDeath ?? 0);
-  if (E.deepScale !== 1) {
-    const t = clamp(Math.max(0, sim.best - solid.y) / E.deepSpan, 0, 1);
-    age *= 1 + (E.deepScale - 1) * t;
-  }
+  const age = erosionAge(solid, sim);
   if (age < E.fresh) return EROSION.FRESH;
   if (age < E.thin) return EROSION.THIN;
   if (age < E.top) return EROSION.TOP;
@@ -559,6 +578,7 @@ export class Sim {
     this.deaths = 0;
     this.best = 0;
     this.runBest = 0;
+    this.momentum = 0;
     /**
      * The UTC date of the Daily Climb, or null in endless. The seed is DERIVED
      * from this rather than stored, so a share card carrying the date is enough
@@ -574,6 +594,10 @@ export class Sim {
     this.hitStop = 0;
     // The longest single sub-step ever taken, for the tunnelling test.
     this.maxSubStep = 0;
+    /** Consecutive clean landings. Never drawn as a number; see DECISIONS §27. */
+    this.momentum = 0;
+    /** Edge slack of the most recent landing, in units. */
+    this._landSlack = Infinity;
     // A full body used as the scratch for predicted flight, allocated once.
     this._ghost = newBody();
     // Scratch for launchVelocity, so aiming allocates nothing per frame.
@@ -881,6 +905,7 @@ export class Sim {
     this.world.generate(FEEL.camera.viewH * 2.2);
     this._stand();
     this.runBest = 0;
+    this.momentum = 0;
     if (hard) { this.deaths = 0; this.time = 0; }
   }
 
@@ -893,6 +918,7 @@ export class Sim {
     this.world.generate(Math.max(this.best, 0) + FEEL.camera.viewH * 2.2);
     this._stand();
     this.runBest = 0;
+    this.momentum = 0;
     this.phase = PHASE.PLAY;
   }
 
@@ -1236,6 +1262,11 @@ export class Sim {
         best = s; bestSlack = over;
       }
     }
+    // How close the landing was to the edge, in units. Negative is comfortably
+    // on the surface; positive means forgiveness caught you. It is computed
+    // here anyway and was being discarded — momentum and close calls both need
+    // it, and recomputing it anywhere else would be a second source.
+    this._landSlack = best ? bestSlack : Infinity;
     return best;
   }
 
@@ -1261,8 +1292,47 @@ export class Sim {
       s.crumbleAt = this.verbTime + FEEL.verbs.crumbleMs / 1000;
       this.emit(EV.CRUMBLE_START, s.x, s.y);
     }
+    // MOMENTUM, and the near miss that ends it — ONE condition, two voices.
+    //
+    // A landing is clean when it came down with real surface under it: at least
+    // `closeCall.marginU` inside the lip. Anything closer, including a landing
+    // that only forgiveness caught, is the sloppy one — and it is exactly the
+    // landing worth remarking on. So the streak resets on precisely the landing
+    // the close call fires on. Two expressions of one fact, never two tests
+    // that could drift apart.
+    //
+    // The first draft ALSO required not having touched a wall on the way, which
+    // read as obviously right and measured as useless: 99.3% of 48,393 bot
+    // landings touch a wall, because the column is barely wider than the arc.
+    // That version was clean on 0.7% of landings — the whole feature would have
+    // been invisible. Wall contact is a verb here, not a mistake.
+    //
+    // Momentum is deliberately NOT a currency and never drawn. Light, trail and
+    // the audio bed are the whole expression — see DECISIONS §27 for why it
+    // does not touch launch power.
+    const slack = this._landSlack;
+    const near = slack > -FEEL.closeCall.marginU && slack < Infinity;
+    this.momentum = near ? 0 : Math.min(FEEL.momentum.max, this.momentum + 1);
+
     if (impact > FEEL.landing.hardImpactVy) this.hitStop = FEEL.juice.hitStopLand;
     this.emit(EV.LAND, impact, b.x, b.y);
+
+    // CLOSE CALLS, two kinds, and the second one is the point.
+    //
+    // EDGE: you came down within `marginU` of the lip, or past it and were
+    // caught. The drop you nearly took was fatal, so the game says so.
+    //
+    // DOOMED: you are standing on a body that is about to stop being a platform
+    // at all. That fact has been in the data since erosion shipped and nothing
+    // has ever said it out loud. It is the close call only this game can have,
+    // and it is rare on purpose: 0.25 of every 100 bot landings.
+    if (near) {
+      this.emit(EV.CLOSE, CLOSE.EDGE, b.x, b.y);
+    } else if (s.corpse && erosionOf(s, this) < EROSION.MEMORY
+               && erosionAge(s, this, this.deaths + FEEL.closeCall.doomedWithin)
+                  >= FEEL.erosion.top) {
+      this.emit(EV.CLOSE, CLOSE.DOOMED, b.x, b.y);
+    }
     if (this.buffered && this.bufferTimer > 0) {
       const q = this.buffered;
       this._fire(q.vx, q.vy);
@@ -1342,6 +1412,9 @@ export const EV = {
   LAUNCH: 0, LAND: 1, DEATH: 2, BEST: 3, BIOME: 4,
   CRUMBLE_START: 5, CRUMBLE: 6, CLOSE: 7,
 };
+
+/** Which kind of near-miss `EV.CLOSE` is reporting. */
+export const CLOSE = { EDGE: 0, DOOMED: 1 };
 
 /**
  * Simulate a launch forward and report the arc and where it first lands, using

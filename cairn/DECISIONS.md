@@ -721,3 +721,111 @@ or anything else. If the draws were inside the branches, the random stream — a
 therefore the whole tower below and above — would depend on which biome a ledge
 happened to fall in, and a one-line tuning change to a rate would silently
 rebuild every seed. Test 5 builds six seeds twice and compares every ledge.
+
+---
+
+## 27. Momentum brightens the world. It does not make you jump further
+
+PHASE3 §4 asks for consecutive clean landings to "brighten the player's light,
+lengthen the trail, enrich the audio bed **and add a small launch bonus**". The
+first three shipped. The fourth is deliberately not built, and this is the
+reason.
+
+Launch speed has to stay a pure function of the drag. Every generated gap in
+this game is built inside a reach envelope derived from `FEEL.launch.maxSpeed`
+— §19's hard gaps are literally cut out of a flight flown at that speed, and
+`Sim.routeExists` demotes anything it cannot prove reachable at it. `WALL =
+0.00%` across 4,516 audited gaps is a statement about that envelope.
+
+Make speed a function of run state and the envelope stops being a bound. A gap
+proven crossable is proven crossable *at the speed the prover used*; a player
+carrying a bonus is playing a different, larger envelope, and a player who just
+broke their streak is playing a smaller one — one where some gap the audit
+called DIRECT is not. The guarantee that a real player stopped getting stuck
+would quietly become a guarantee about the average case.
+
+So momentum is presentation only, and it is presentation with no gameplay
+consequence anywhere: light radius, light brightness, trail lifetime, one
+ambient filter cutoff. Nothing reads it back into the sim.
+
+### What "clean" means, and the version of it that measured as useless
+
+The first implementation called a landing clean if it was on the surface **and**
+the flight had not touched a wall. That reads as obviously right. Measured over
+48,393 bot landings, **99.3% of landings touch a wall** — the column is barely
+wider than the arc, and `_sides` fires on the face of the very ledge you are
+about to land on. That definition was clean on **0.7%** of landings: the feature
+would have shipped and done nothing, and every other test would have stayed
+green, because nothing else in the repository looks at light radius.
+
+Wall contact is a verb in this game, not a mistake. The shipped definition is
+the one the data can actually separate: a landing is clean when it came down at
+least `FEEL.closeCall.marginU` inside the lip. That is **84.8%** of landings,
+mean streak 4.72, and it moves.
+
+### The close call and the streak reset are ONE condition
+
+A landing near the lip is both the sloppy one and the one worth remarking on, so
+`_land` computes `near` once and uses it twice — reset the streak, emit
+`EV.CLOSE`. Two separate tests for "sloppy" and "close" would be two things that
+can drift apart, and the day they disagree the game congratulates you for a
+near miss while telling you it wasn't one.
+
+### DOOMED: the close call only this game can have
+
+Landing on a body that is about to stop being a platform has been in the data
+since erosion shipped and nothing ever said it out loud. The literal reading of
+the brief is "one death away from MEMORY". Measured over the same 48,393
+landings, that fires **0.095 times per 100 landings** — once per 1,050 landings,
+which is shipped and never seen. `FEEL.closeCall.doomedWithin` is 3, the last
+three deaths of a TOP corpse's ten-death shelf life: **0.248 per 100**, about
+one a session, still the rarest thing the game says.
+
+---
+
+## 28. The monument is SHOWN, not explained
+
+§6's one open item: two fingers is the only gesture that cannot collide with
+aiming — a swipe down *is* a launch downward in a direct-aim game — and this
+game teaches nothing in text, so nothing could point at it. The view is the one
+image that explains the game in three seconds without a word, and it was
+reachable only by an input nobody would try.
+
+The fix does not teach the gesture. It performs the gesture's **result**, at the
+moment the result is the truth of what just happened: the death that set a new
+record, with the new stone on top of everything you have ever left. It runs
+after `finishDeath` has already respawned, so control is back before the view
+opens, and closing it costs the one touch that closes a monument opened
+deliberately — which is how the exit is learned for free.
+
+It is a nudge, not a habit. `FEEL.monument.revealAt` is `[1, 4, 10]` record
+deaths, it needs `revealMinBodies` corpses so there is a tower worth showing, it
+never fires over a thumb that is already aiming, and **the first time the player
+opens the monument with two fingers of their own it stops forever**, persisted.
+A player who has learned it is never interrupted again.
+
+### What this can and cannot be measured against
+
+It cannot be measured that a human who is told nothing goes on to find the
+gesture. That is a question about curiosity and it needs a human; no number in
+this repository is a substitute for watching someone play, and none should be
+presented as one.
+
+What is measurable is the thing the fix actually rests on, and
+`scripts/cairn-feel-check.mjs` measures it: check 7 drives real record deaths
+through the real update loop **without ever dispatching a second pointer** and
+asserts the view opened *and that `camera.mon` actually moved* — a reveal that
+sets a flag without pulling the camera back shows the player nothing. Check 8
+opens it with two real pointers and asserts a further twelve record deaths
+reveal it zero times.
+
+### The acceptance suite turns the nudge off, on purpose
+
+`cairn-check.mjs` sets `ui.monGestured` before anything else. The harness
+manufactures record deaths at a rate no player produces — test 12 alone plays
+sixty attempts — and while the monument is open `input.locked` is true. Left
+armed, it cost test 11 its first probe (`up.vy` read 0.0, because the tap that
+should have started an aim closed the monument instead) and pulled the camera
+back underneath the biome screenshots in tests 4-6, moving their mean channel
+from 62.0 to 41.9. That is a precondition, the same kind as `ui.started` and
+`sim.phase`, not a workaround — the nudge is tested in the file built for it.

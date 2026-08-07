@@ -136,19 +136,40 @@ zero text.
 
 ---
 
-## 4 — Momentum and close calls
+## 4 — Momentum and close calls. DONE — `scripts/cairn-feel-check.mjs`
 
-The loop has no voice saying "you're doing well" or "don't blow it now".
+Both built, both measured, and the measurement is the point: this is a feature
+whose entire expression is "the light is a bit wider", so without an instrument
+it could do nothing forever while every other test stayed green.
 
-- **Momentum:** consecutive clean landings brighten the player's light, lengthen
-  the trail, enrich the audio bed and add a small launch bonus. Resets on any
-  sloppy landing. **Never draw it as a bar** — it is expressed entirely through
-  light, sound and feel.
-- **Close calls:** passing within 2 u of a fatal drop triggers a brief time
-  dilation and a low swell. This manufactures the memory of the moment, which is
-  what people actually retell.
+**Momentum.** Consecutive clean landings widen the player's light and lift its
+core, lengthen the trail, and open the ambient bed's filter by 900 Hz. Never a
+bar, never a number. The definition of "clean" is the part worth recording: the
+first version also required not having touched a wall, which reads as obviously
+right and measured as useless — **99.3% of 48,393 bot landings touch a wall**,
+because the column is barely wider than the arc, so that version was clean on
+0.7% of landings. The shipped rule is "came down at least `closeCall.marginU`
+inside the lip": **84.8% clean, mean streak 4.72, cap 8.**
 
-Cheap to build, disproportionate effect on how a run *feels* to have played.
+The brief's fourth item — a small launch bonus — is **deliberately not built**.
+Launch speed has to stay a pure function of the drag or the reach envelope that
+`WALL = 0.00%` is derived from stops being a bound. DECISIONS §27.
+
+**Close calls.** A landing within `marginU` of the lip dilates time to 0.35 for
+260 ms under a low swell — and it is the *same* condition that resets the
+streak, computed once, so the scare and the reset can never disagree. Measured
+at **15.2 per 100 landings**.
+
+And the one only this game can have: **DOOMED**, landing on a body that is about
+to stop being a platform. That fact has been in the data since erosion shipped
+and nothing ever said it out loud. `doomedWithin` is 3 rather than the brief's
+literal 1, on measurement: at 1 it fires **0.095 times per 100 landings** — once
+per 1,050, shipped and never seen — against **0.248** at 3, about one a session.
+
+Against a "done when" the brief never wrote, the eight checks in
+`cairn-feel-check.mjs` each assert the entry condition separately from the
+effect, and read the effect as pixels off the canvas or as simulated seconds
+through the real `update`, not as the flag that was supposed to cause it.
 
 ---
 
@@ -193,10 +214,20 @@ image — PNG 2225 ms / 458 KB, WebP 1033 ms / 137 KB, JPEG 1406 ms / 240 KB. It
 ships WebP with a PNG fallback, because Safari only gained canvas WebP encoding
 in 17 and JPEG bands the dark gradients this game is made of.
 
-Still open: **the gesture is not discoverable.** Two fingers is the only input
-that cannot collide with aiming — a swipe down IS a launch downward in a
-direct-aim game — but nothing teaches it, and this game's rule is that nothing
-is taught with text. Unsolved, not overlooked.
+**The gesture is not discoverable — now addressed by not teaching it.** Two
+fingers is the only input that cannot collide with aiming (a swipe down IS a
+launch downward in a direct-aim game) and this game teaches nothing in text, so
+nothing could point at it. The fix performs the gesture's RESULT instead: on
+record-setting deaths `[1, 4, 10]` the game opens the monument itself, after
+control has already come back, and one touch closes it. The first time the
+player opens it with two fingers of their own, the nudges stop forever.
+DECISIONS §28, checks 7 and 8 of `cairn-feel-check.mjs`.
+
+**What is not measured, stated plainly:** whether a human who is told nothing
+goes on to find the gesture. That needs a human. Check 7 measures what the fix
+rests on — a player who never performs the gesture still reaches the view,
+verified by driving real record deaths through the real update loop without ever
+dispatching a second pointer, and asserting `camera.mon` actually moved.
 
 ### The brief, as it stood
 

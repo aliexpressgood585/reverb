@@ -69,6 +69,7 @@ export const EVENTS = /** @type {const} */ ({
   STREAK: 'streak',               // { days }
   MODE: 'mode',                   // { daily }
   MONUMENT: 'monument',
+  MONUMENT_REVEAL: 'monument_reveal', // { at, bodies } the game opened it, not the player
   AD_OFFERED: 'ad_offered',       // { placement }
   AD_SHOWN: 'ad_shown',           // { placement }
   AD_REWARDED: 'ad_rewarded',     // { placement }

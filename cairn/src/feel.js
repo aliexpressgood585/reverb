@@ -381,6 +381,49 @@ export const FEEL = {
   // bottom of the glass and the summit near the top, the view span has to be the
   // tower's height times `pad` and the camera has to sit at `centre` of that
   // span. Change `playerOffsetY` and these two follow it.
+
+  // ---------------------------------------------------------------- momentum
+  // Consecutive clean landings. The loop had no voice saying "you are doing
+  // well"; this is that voice, and it never says it in words or in a bar.
+  //
+  // It deliberately does NOT touch launch power. Launch speed has to stay a
+  // pure function of the drag, because the reach envelope every generated gap
+  // is built inside is derived from `launch.maxSpeed`. Make speed a function of
+  // run state and WALL = 0.00% stops being a bound and becomes a coincidence.
+  // The brief's "small launch bonus" is the one part of §4 not built, on
+  // purpose. See DECISIONS §27.
+  momentum: {
+    max: 8,
+    lightGain: 0.55,      // extra player-light radius at full momentum
+    lightAlpha: 0.42,     // extra core brightness at full momentum
+    trailGain: 0.85,      // extra trail life at full momentum
+    bedGain: 900,         // extra ambient filter cutoff, Hz, at full momentum
+    ease: 5.0,            // how fast the presentation follows the counter
+  },
+
+  // -------------------------------------------------------------- close calls
+  // Manufacturing the memory of the moment, which is what people retell.
+  closeCall: {
+    // Land within this of the lip and it is a close call — AND the momentum
+    // streak breaks. One number, so the scare and the reset can never disagree.
+    marginU: 2.0,
+    dilation: 0.35,       // time scale during the beat
+    dilationMs: 260,
+    // A body this many deaths from MEMORY — the close call only this game can
+    // have. The fact has been in the data since erosion shipped and nothing
+    // ever said it out loud.
+    //
+    // Measured over 48,393 bot landings: 1 → 0.095 per 100 landings, 2 → 0.176,
+    // 3 → 0.248. The literal reading of the brief is 1, and 1 is one event per
+    // 1,050 landings: shipped and never seen by almost anyone, which defeats
+    // the point of saying it. 3 is the last three deaths of a TOP corpse's
+    // ten-death shelf life — still honestly "about to stop being a platform",
+    // and about one per session. Rare stays rare; it stops being invisible.
+    doomedWithin: 3,
+    doomedDilation: 0.28,
+    doomedMs: 420,
+  },
+
   monument: {
     ease: 2.4,            // how fast the pull-back converges, per second
     // THE ONE TIME THE GAME EXPLAINS ITSELF, and it does it with the camera.
@@ -395,6 +438,20 @@ export const FEEL = {
     centre: 0.245,        // camera height as a fraction of the span
     minSpan: 260,         // never pull back past this on a short tower
     shareDelayMs: 900,    // the pull-back finishes before anything is offered
+
+    // DISCOVERY. Two fingers is the only gesture that cannot collide with
+    // aiming — a swipe down IS a launch downward in a direct-aim game — and a
+    // game with no text has nothing to point at it with. So the game performs
+    // the gesture's RESULT instead: on the record-setting deaths listed here it
+    // opens the monument by itself, after control has already come back, and a
+    // single touch closes it. Having seen the view is what makes anyone go
+    // looking for the way back to it.
+    //
+    // A nudge, not a habit. The schedule is sparse, and the first time the
+    // player opens the monument with two fingers of their own the nudges stop
+    // forever — a player who has learned it is never interrupted again.
+    revealAt: [1, 4, 10],  // which record-setting deaths open it unprompted
+    revealMinBodies: 3,    // ... and only once there is a tower worth showing
   },
 
   // ------------------------------------------------------------------- misc

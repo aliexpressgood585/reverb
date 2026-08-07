@@ -63,6 +63,25 @@ async function newPage(ctx) {
   page.on('console', (m) => { if (m.type() === 'error') fails.push('console: ' + m.text().split('\n')[0]); });
   await page.goto(URL_, { waitUntil: 'load' });
   await page.waitForFunction(() => !!window.CAIRN);
+
+// THE MONUMENT NUDGE IS OFF FOR THIS SUITE, DELIBERATELY.
+//
+// On the record-setting deaths in `FEEL.monument.revealAt` the game opens the
+// monument by itself — that is the whole §6 discovery fix, and while it is open
+// `input.locked` is true and the next touch closes the view instead of aiming.
+// This harness manufactures record deaths at a rate no player produces (test 12
+// alone plays sixty attempts), so leaving the nudge armed lets it perturb tests
+// that are about something else entirely: it cost test 11 its first probe and
+// pulled the camera back under the biome screenshots in tests 4-6.
+//
+// So it is switched off here the same way `ui.started` and `sim.phase` are set —
+// a precondition, not a workaround. The nudge itself is tested properly in
+// scripts/cairn-feel-check.mjs, checks 7 and 8, which drive the real death loop
+// and assert the camera actually moved.
+await page.evaluate(() => {
+  window.CAIRN.ui.monGestured = true;
+  try { localStorage.setItem('cairn.mongest', '1'); } catch { /* private mode */ }
+});
   await page.evaluate(() => window.CAIRN.begin());
   return page;
 }

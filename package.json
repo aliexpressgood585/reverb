@@ -17,6 +17,7 @@
     "profile": "node scripts/cairn-profile.mjs",
     "accept": "node scripts/cairn-check.mjs",
     "bodies": "node scripts/cairn-bodies-check.mjs",
+    "feel": "node scripts/cairn-feel-check.mjs",
     "reach": "node scripts/cairn-reach-check.mjs --from=0 --span=3000 --seeds=30",
     "build:android": "vite build --config vite.android.config.js && cap sync android",
     "assets": "node scripts/cairn-assets.mjs",

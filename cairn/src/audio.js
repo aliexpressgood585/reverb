@@ -8,6 +8,8 @@
  * swapping a loop.
  */
 
+import { FEEL } from './feel.js';
+
 const BIOME_ROOT = [55, 61.74, 49, 43.65, 58.27, 65.41];  // A1, B1, G1, F1, Bb1, C2
 
 /**
@@ -176,13 +178,19 @@ export class Audio {
   /**
    * @param {number} y
    * @param {number} biomeIndex
+   * @param {number} [momentum] 0-1, eased. Opens the bed on a clean streak.
    */
-  setHeight(y, biomeIndex) {
+  setHeight(y, biomeIndex, momentum = 0) {
     const L = this._live();
     if (!L || !this.bed) return;
     const t = L.c.currentTime;
     const climb = Math.min(1, y / 900);
-    this.bed.filt.frequency.setTargetAtTime(320 + climb * 1500, t, 0.6);
+    // Momentum is folded in HERE rather than in a setter of its own, because
+    // this cutoff is one parameter and two writers to one AudioParam fight:
+    // whichever ran last wins and the bed flickers. Height and streak are the
+    // only two things that open the bed, so they are computed together.
+    this.bed.filt.frequency.setTargetAtTime(
+      320 + climb * 1500 + momentum * FEEL.momentum.bedGain, t, 0.6);
 
     // THE SOUNDSCAPE THINS AND GETS COLDER AS YOU CLIMB.
     //
@@ -343,6 +351,43 @@ export class Audio {
    * and was already scored. This is the news that arrives a moment later, so it
    * is dry, close and small: grit, not a hit.
    */
+  /**
+   * A near miss. Not a reward sound — an intake of breath: a short filtered
+   * swell that arrives UNDER the landing thud rather than on top of it, so the
+   * moment reads as the room reacting rather than the game scoring you.
+   *
+   * @param {boolean} doomed the body you are standing on is nearly MEMORY
+   */
+  close(doomed) {
+    const L = this._live();
+    if (!L || this.muted) return;
+    const c = L.c;
+    const t = c.currentTime;
+
+    const o = c.createOscillator();
+    o.type = 'sine';
+    // EDGE rises — you got away with it. DOOMED falls, and lands on the minor
+    // sixth below, which is the only interval in the game that resolves nowhere.
+    const lo = doomed ? 330 : 196;
+    const hi = doomed ? 165 : 392;
+    o.frequency.setValueAtTime(lo, t);
+    o.frequency.exponentialRampToValueAtTime(hi, t + (doomed ? 0.5 : 0.26));
+    const g = c.createGain();
+    this._env(g, doomed ? 0.09 : 0.055, 0.02, doomed ? 0.6 : 0.3);
+    o.connect(g); g.connect(L.m);
+    o.start(); o.stop(t + 0.9);
+
+    const n = this._noise(doomed ? 0.5 : 0.24, c);
+    const f = c.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.setValueAtTime(doomed ? 900 : 2200, t);
+    f.Q.value = 0.8;
+    const ng = c.createGain();
+    this._env(ng, doomed ? 0.05 : 0.03, 0.03, doomed ? 0.55 : 0.26);
+    n.connect(f); f.connect(ng); ng.connect(L.m);
+    n.start(); n.stop(t + 0.7);
+  }
+
   crumbleWarn() {
     const L = this._live();
     if (!L || this.muted) return;

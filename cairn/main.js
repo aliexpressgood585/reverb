@@ -1,5 +1,5 @@
 import { FEEL, COLUMN, BIOME_SPAN } from './src/feel.js';
-import { Sim, PHASE, EV, predict, solidHalfWidth } from './src/sim.js';
+import { Sim, PHASE, EV, CLOSE, predict, solidHalfWidth, erosionOf } from './src/sim.js';
 import { Input } from './src/input.js';
 import { Renderer, Camera } from './src/render.js';
 import { Post } from './src/post.js';
@@ -135,7 +135,21 @@ const ui = {
   runStood: 0,
   runLaunches: 0,
   runFloor: 0,
+  // CLOSE CALLS. `closeT` counts the beat down in REAL seconds — it has to,
+  // because it is the thing scaling sim time, and a timer measured in the
+  // clock it is slowing never expires.
+  closeT: 0,
+  closeScale: 1,
+  // MONUMENT DISCOVERY, persisted. `monRecords` counts record-setting deaths;
+  // `monGestured` latches the first time two real fingers opened the view, and
+  // once it is set the game never opens it unprompted again.
+  monRecords: 0,
+  monGestured: false,
 };
+try {
+  ui.monRecords = +(localStorage.getItem('cairn.monrec') || 0) || 0;
+  ui.monGestured = localStorage.getItem('cairn.mongest') === '1';
+} catch { /* private mode */ }
 
 let dpr = 1;
 let accum = 0;
@@ -264,7 +278,7 @@ function finishDeath() {
   Money.newRun();
 
   // The summary lands AFTER control has come back, so the retry is never gated.
-  if (beat) showBanner();
+  if (beat) { showBanner(); reveal(); }
   // A mark is a fragment, not a modal — same strip as everything else, and it
   // waits for the record card so two things never speak at once.
   for (const m of won) track(EVENTS.MARK, { id: m.id });
@@ -430,6 +444,38 @@ function teach() {
 try { ui.taught = localStorage.getItem('cairn.taught') === '1'; } catch { /* private mode */ }
 
 /**
+ * THE MONUMENT, SHOWN RATHER THAN EXPLAINED.
+ *
+ * The view is the one image that explains this game in three seconds without a
+ * word, and it was reachable only by a two-finger gesture nothing teaches. This
+ * does not teach the gesture — it performs its result, at the moment the result
+ * is the truth of what just happened: the death that set a new record, with the
+ * new stone on top of everything you have ever left.
+ *
+ * It runs AFTER `finishDeath` has already respawned, so control is back before
+ * the view opens and closing it costs one touch — the same touch that closes a
+ * monument opened deliberately, which is how the exit is learned for free.
+ *
+ * Sparse and self-cancelling: `FEEL.monument.revealAt` picks which record deaths
+ * get it, and the first two-finger open ends it permanently. See DECISIONS §28
+ * for why this is not a tooltip and what it can and cannot be measured against.
+ */
+function reveal() {
+  // Never over a thumb that is already on the glass. `finishDeath` runs a beat
+  // after the death, and a player who has started aiming again is a player
+  // whose aim this would eat.
+  if (ui.monGestured || ui.monument || ui.daily || input.aiming) return;
+  ui.monRecords++;
+  try { localStorage.setItem('cairn.monrec', String(ui.monRecords)); } catch { /* private mode */ }
+  if (!FEEL.monument.revealAt.includes(ui.monRecords)) return;
+  let bodies = 0;
+  for (const s of sim.world.solids) if (s.corpse) bodies++;
+  if (bodies < FEEL.monument.revealMinBodies) return;
+  monument(true);
+  track(EVENTS.MONUMENT_REVEAL, { at: ui.monRecords, bodies });
+}
+
+/**
  * THE DAILY CLIMB.
  *
  * One seed per UTC date, the same tower for everyone on earth that day, kept in
@@ -473,7 +519,14 @@ el.daily.addEventListener('pointerdown', (e) => {
   setMode(!ui.daily);
 });
 
-input.onMonument = () => monument(!ui.monument);
+input.onMonument = () => {
+  // The player found it themselves. Stop nudging, permanently.
+  if (!ui.monGestured) {
+    ui.monGestured = true;
+    try { localStorage.setItem('cairn.mongest', '1'); } catch { /* private mode */ }
+  }
+  monument(!ui.monument);
+};
 input.onTap = () => {
   if (ui.monument) { monument(false); return; }
   if (!ui.started) begin();
@@ -521,6 +574,16 @@ function drainEvents() {
     } else if (kind === EV.CRUMBLE) {
       audio.crumble();
       renderer.burst(e[i + 1], e[i + 2], 14);
+    } else if (kind === EV.CLOSE) {
+      // The game noticing something the player half-noticed. Time opens for a
+      // beat, the room breathes in, and nothing is written anywhere.
+      const C = FEEL.closeCall;
+      const doomed = e[i + 1] === CLOSE.DOOMED;
+      ui.closeScale = doomed ? C.doomedDilation : C.dilation;
+      ui.closeT = (doomed ? C.doomedMs : C.dilationMs) / 1000;
+      audio.close(doomed);
+      renderer.ring(e[i + 2], e[i + 3], doomed ? 0.55 : 0.3);
+      buzz(doomed ? [10, 60, 22] : 10);
     }
   }
   e.length = 0;
@@ -540,9 +603,15 @@ function update(real) {
   input.update(real, innerHeight);
   if (input.aiming) audio.chargeTo(input.power);
 
-  // Aiming slows time. The accumulator is fed scaled seconds; the STEP never
-  // changes, so slow motion costs precision nothing.
-  const scaled = real * input.timeScale;
+  // Aiming slows time, and so does a close call. The accumulator is fed scaled
+  // seconds; the STEP never changes, so slow motion costs precision nothing.
+  let dilate = 1;
+  if (ui.closeT > 0) {
+    ui.closeT -= real;
+    // Ease back out rather than snapping to full speed at the end of the beat.
+    dilate = ui.closeScale + (1 - ui.closeScale) * clamp(1 - ui.closeT * 4, 0, 1);
+  }
+  const scaled = real * input.timeScale * dilate;
 
   if (ui.dead > 0) {
     // The return to base: no simulation, just a fall of the camera.
@@ -617,7 +686,7 @@ function update(real) {
     audio.wash();
   }
   ui.wash = Math.max(0, ui.wash - real * 1.5);
-  audio.setHeight(Math.max(0, b.y), bi);
+  audio.setHeight(Math.max(0, b.y), bi, renderer.momentum);
 }
 
 /** @param {number} now */
@@ -651,7 +720,10 @@ function step(now, real) {
   update(real);
 
   const b = sim.body;
-  renderer.step(real);
+  // The eased momentum lives in the renderer, and the audio bed reads it from
+  // there — one smoothed value, so the light and the bed never disagree about
+  // how well the run is going.
+  renderer.step(real, sim.momentum / FEEL.momentum.max);
   const B = renderer.draw(sim, camera, input, ui, real, reduced);
 
   if (post) {
@@ -869,6 +941,10 @@ addEventListener('beforeinstallprompt', installManifest);
 const api = {
   sim, input, camera, renderer, audio, post, FEEL, Store, predict,
   begin, frame, update, ui, monument, teach, setMode, panel,
+  // Momentum and close calls are invisible by design, so the only way to check
+  // they do anything is to read the sim's own vocabulary rather than a copy of
+  // it — see scripts/cairn-feel-check.mjs.
+  EV, CLOSE, erosionOf, solidHalfWidth,
   /** @param {number} n */
   step(n) { for (let i = 0; i < n; i++) sim.tick(0); },
   /**

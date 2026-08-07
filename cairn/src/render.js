@@ -335,6 +335,12 @@ export class Renderer {
     this._bgKey = -1;
     this._bg = null;
     this._lit = [0, 0, 0];   // scratch: rock tinted by the light on it
+
+    // MOMENTUM, eased, 0-1. The counter itself lives in the sim; this is the
+    // only thing the frame is allowed to know about it, and it is deliberately
+    // not a number anyone can read off the screen — it widens the light you
+    // cast and lengthens the trail behind you, and that is the whole display.
+    this.momentum = 0;
   }
 
   /**
@@ -425,8 +431,14 @@ export class Renderer {
     }
   }
 
-  /** @param {number} dt */
-  step(dt) {
+  /**
+   * @param {number} dt
+   * @param {number} [momentum] 0-1 target; eased here so a reset fades rather
+   *   than snaps, and so a rebuilt streak arrives as a swell.
+   */
+  step(dt, momentum = 0) {
+    this.momentum += (momentum - this.momentum)
+      * Math.min(1, dt * FEEL.momentum.ease);
     for (let i = 0; i < this.trailN; i++) this.trail[i * 3 + 2] += dt;
     for (let i = this.ringN - 1; i >= 0; i--) {
       const o = i * 4;
@@ -1070,7 +1082,8 @@ export class Renderer {
    */
   _trail(ctx, B) {
     if (this.trailN < 2) return;
-    const life = FEEL.juice.trailMs / 1000;
+    const life = (FEEL.juice.trailMs / 1000)
+      * (1 + FEEL.momentum.trailGain * this.momentum);
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < this.trailN - 1; i++) {
       const a0 = this.trail[i * 3 + 2];
@@ -1102,12 +1115,16 @@ export class Renderer {
     const hw = FEEL.body.w * 0.5 * this.scale;
     const hh = FEEL.body.h * 0.5 * this.scale;
 
-    // The light it casts.
-    const R = 66 * this.scale;
+    // The light it casts. A clean streak widens it and lifts the core — the
+    // only place momentum is ever visible, and it reads as the tower getting
+    // brighter around you rather than as a score going up.
+    const M = this.momentum;
+    const R = 66 * this.scale * (1 + FEEL.momentum.lightGain * M);
+    const lift = 1 + FEEL.momentum.lightAlpha * M;
     const g = ctx.createRadialGradient(x, y, 0, x, y, R);
-    g.addColorStop(0, rgb(B.accent, 0.34));
-    g.addColorStop(0.14, rgb(B.accent, 0.15));
-    g.addColorStop(0.42, rgb(B.accent, 0.045));
+    g.addColorStop(0, rgb(B.accent, 0.34 * lift));
+    g.addColorStop(0.14, rgb(B.accent, 0.15 * lift));
+    g.addColorStop(0.42, rgb(B.accent, 0.045 * lift));
     g.addColorStop(1, rgb(B.accent, 0));
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = g;
