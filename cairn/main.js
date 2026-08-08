@@ -337,7 +337,8 @@ function showBanner() {
   el.best.append(
     mk('span', 'k', t('run.best')),
     mk('b', '', fmtHeight(sim.best)),
-    mk('span', 'k', t('run.stones', { n: sim.deaths })),
+    // "1 STONES" was on the banner people screenshot and share.
+    mk('span', 'k', t(sim.deaths === 1 ? 'run.stone' : 'run.stones', { n: sim.deaths })),
     share,
   );
   el.best.className = 'on';

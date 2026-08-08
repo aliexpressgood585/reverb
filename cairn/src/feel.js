@@ -320,6 +320,31 @@ export const FEEL = {
   verbs: {
     from: 0.34,           // difficulty at which verbs begin. Never on the ramp.
 
+    // PRESSURE THAT DOES NOT SATURATE.
+    //
+    // A person reached 4,731 m having died once, and the models agree: expert
+    // first attempts passed 600 m 76% of the time against a target that says
+    // "not on a first attempt". The tower had no ceiling, and the reason was
+    // structural rather than a number being wrong — `diff` saturates, the verb
+    // rates are constants, and each verb lives in one biome of six. The entire
+    // hazard budget repeated every 900 m instead of growing.
+    //
+    // Two things now escalate with ABSOLUTE height, and neither can create a
+    // wall. A crumbling hold gives less time the higher it is, which can take a
+    // perch away but never make one unreachable. And above `mixFrom` the tower
+    // stops respecting biome borders, so the verbs a player met one at a time
+    // start arriving together — the biomes still teach them in isolation, the
+    // altitude stops being polite about it.
+    //
+    // This is the right lever because precision is not one: a jump forgives
+    // about twenty degrees and one pixel of thumb is 0.31, so no amount of
+    // narrowing ever threatens a good hand. Time does.
+    mixFrom: 700,         // metres above which verbs cross biome borders
+    mixSpan: 1600,        // metres over which that reaches full strength
+    mixRate: 0.42,        // share of out-of-biome ledges that crumble, at full
+    tightenSpan: 1400,    // metres over which a hold's grace time halves
+    crumbleMsFloor: 420,  // never shorter than the warning it shows first
+
     // ASH — the hold gives way. You have `crumbleMs` from touching it.
     //
     // It has its own, higher, threshold: ASH is the FIRST biome, so on the
