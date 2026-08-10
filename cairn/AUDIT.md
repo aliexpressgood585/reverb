@@ -310,6 +310,11 @@ These are open, not done, and not claimed:
   close the remaining distance needs a power window near 1% against an average
   hand that is off by 5.5% — five sigma. Both routes break a contract number;
   the target stays unmet on purpose. Table in `BALANCE.md`.
+
+  Qualified the same day by a parallel session: TIME is a third axis, it is
+  wall-free, and it moves the number to 68% — and the harness had never modelled
+  a hand pausing on a ledge at all, which is the seventh blind measurement in
+  this repository. Unmet, but no longer a closed door.
 - **No human has played the retuned tower.** Three bots with gaussian error are
   not three people, and the novice model has no learning in it.
 - **The band-hazard softening above is measured, not fixed.** An expert's

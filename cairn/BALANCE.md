@@ -949,8 +949,41 @@ priced.** The two ways to meet it are 653 dead ends or a power window five sigma
 outside a real hand. Both are worse than the target being unmet, and both break
 something the repository treats as a contract. Nothing changed.
 
-What could legitimately close it is a difficulty source that is neither an
-impossible gap nor a tighter window — the biome verbs are the obvious candidate,
-since a crumbling hold kills a perfect executor without narrowing anything — but
-PHASE3 §7 is out of scope for this pass and a verb never lands on a hard gap by
-construction (DECISIONS §26). Flagged, not attempted.
+### The third axis, and it is real — merged from a parallel session
+
+The conclusion above was written as "the only remaining candidate is a
+difficulty source that is neither an impossible gap nor a tighter window, and
+the biome verbs are it — flagged, not attempted". A parallel session attempted
+it (`50d7a9f`) and it works, which means this section's verdict needs qualifying
+rather than repeating.
+
+TIME is the third axis. A crumbling hold gives less grace the higher it is, and
+above `verbs.mixFrom` the tower stops respecting biome borders so the hazard
+budget grows with absolute height instead of repeating every 900 m. Neither can
+create a wall — a hold can take a perch away, never make one unreachable — and
+the route audit confirms it: gaps still 100% DIRECT, zero walls, bodies still
+7.50% against the 5% gate.
+
+That session also found the seventh blind measurement, and it is the largest so
+far: **the bot never spends time on a ledge.** It lands and launches in the same
+tick, so every hazard denominated in seconds was invisible to every number in
+this file. With `--dwell=1.5` (off by default, so the tables above stay
+comparable) the same expert run reads:
+
+| | no dwell | dwell 1.5 s |
+|---|---|---|
+| attempt-1 median | 1,146 m | 800 m |
+| attempt-1 p90 | 2,543 m | 1,220 m |
+| attempt-1 ≥ 600 m | 80% | **68%** |
+
+**So the corrected verdict is:** target 3 cannot be met by the two axes this
+section measured — impossible gaps break `WALL = 0.00%`, tighter windows need a
+power window five sigma outside a real hand — but it is not unreachable in
+principle. Time moves it, wall-free, and 68% is not 78.5%. It is still not "not
+on a first attempt", and it is still unmet; what changed is that the remaining
+distance now has a lever pointed at it rather than a closed door.
+
+Both readings are also measured against a bot, and the dwell finding is the
+reason to be careful about that: the number moved 12 points purely because the
+harness started modelling a hand pausing on a ledge. Nothing here has watched a
+person, and a real person reached 4,731 m having died once.

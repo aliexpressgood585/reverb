@@ -19,7 +19,12 @@ route audit from **WALL 0.00% to WALL 17.64%, 653 dead ends starting at 131 m** 
 the exact mechanic that stranded a real player at 391, 481 and 567 m. The
 wall-free knob (`hardRate`, verified still 100% DIRECT at 0.90) moves it from
 78.5% to only 57.5% while dragging body landings from 7.20% toward the 5% gate.
-Target 3 stays failing with its cost priced. Full table in `BALANCE.md`.
+Target 3 stays failing with its cost priced. But a parallel session found the
+third axis in the same window — TIME, via crumble grace that tightens with
+absolute height, wall-free — and it moves the number to **68%** once the harness
+models a hand that actually pauses on a ledge (`--dwell=1.5`; the bot had been
+landing and launching in the same tick, the seventh blind measurement here).
+Still unmet, no longer a closed door. Full tables in `BALANCE.md`.
 
 The original note, kept: an expert passes 600 m on 83% of first attempts (78.5%
 on the current re-measurement), against "but not on a first

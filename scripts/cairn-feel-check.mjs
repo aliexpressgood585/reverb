@@ -243,8 +243,26 @@ await delay(300);
     const stage = window.CAIRN.erosionOf(c, sim);
     const hw = window.CAIRN.solidHalfWidth(c, sim);
 
+    // CLEAR THE DROP BAND, AND ONLY THE DROP BAND.
+    //
+    // The generator keeps putting a rock ledge between the release point and the
+    // corpse, and a landing on the wrong surface makes this check meaningless.
+    // A measurement tool in this repository once "found" a result by deleting
+    // every ledge in the world, so this deletes as little as possible and says
+    // how much: only non-corpse solids whose landable top sits strictly inside
+    // the 6u the body falls through. The `stoodOnIt` assertion below is still
+    // what proves it worked.
+    const top = c.y + c.hh;
+    const from = top + 6;
+    let cleared = 0;
+    for (const s2 of sim.world.solids.slice()) {
+      if (s2.corpse || !s2.live) continue;
+      const t2 = s2.y + s2.hh;
+      if (t2 > top && t2 <= from) { sim.world._unindex(s2); s2.live = false; cleared++; }
+    }
+
     b.x = b.px = c.x;
-    b.y = b.py = c.y + c.hh + 6;     // short drop: the generator had a ledge at 57.7
+    b.y = b.py = from;
     b.vx = 0; b.vy = -1; b.grounded = false; b.standing = null;
     sim.events.length = 0;
     for (let i = 0; i < 400 && !sim.body.grounded; i++) sim.tick(0);
@@ -255,15 +273,18 @@ await delay(300);
       }
     }
     sim.events.length = 0;
-    return { stage, hw: +hw.toFixed(2), doomed, edge,
+    let remaining = 0;
+    for (const s2 of sim.world.solids) if (s2.live) remaining++;
+    return { stage, hw: +hw.toFixed(2), doomed, edge, cleared, remaining,
              age: sim.deaths - c.bornDeath, top: F.erosion.top,
              stoodOnIt: sim.body.standing === c,
              slack: +sim._landSlack.toFixed(2) };
   });
-  check(r.stoodOnIt && r.hw > 0 && r.stage < 3 && r.doomed === 1,
+  check(r.stoodOnIt && r.hw > 0 && r.stage < 3 && r.doomed === 1 && r.remaining > 20,
     `landing on a body ${r.top - r.age} death(s) from MEMORY (stage ${r.stage}, ` +
     `still ${r.hw}u of shelf, landed ${r.slack}u inside its lip) fires DOOMED ` +
-    `${r.doomed} time(s), EDGE ${r.edge}`);
+    `${r.doomed} time(s), EDGE ${r.edge} — cleared ${r.cleared} ledge(s) from the ` +
+    `drop band, ${r.remaining} solids left standing`);
 }
 
 // ── 7. a player who never makes the gesture still reaches the view ────────
