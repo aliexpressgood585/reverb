@@ -36,6 +36,7 @@ const EN = {
   'hud.share': 'SHARE THIS',
 
   'run.best': 'NEW HIGH',
+  'run.stone': '{n} STONE',
   'run.stones': '{n} STONES',
   'run.share': 'SHARE',
 
@@ -102,6 +103,7 @@ const HE = {
   'hud.share': 'שתף את זה',
 
   'run.best': 'שיא חדש',
+  'run.stone': 'אבן {n}',
   'run.stones': '{n} אבנים',
   'run.share': 'שתף',
 

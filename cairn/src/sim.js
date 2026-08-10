@@ -387,6 +387,9 @@ export class World {
     // does not depend on which biome this ledge landed in.
     const roll = this.rng();
     const phase = this.rng();
+    // Drawn unconditionally for the same reason as the two above: the tower must
+    // not depend on which branch a ledge happens to take.
+    const mixRoll = this.rng();
     if (cut || diff < V.from || led.y < FEEL.tower.openingSpan) return;
 
     const biome = Math.floor(led.y / BIOME_SPAN) % 6;
@@ -406,6 +409,12 @@ export class World {
       // between 12 and 16 u.
       led.drift = V.driftAmp;
       led.driftPhase = phase * Math.PI * 2;
+    } else {
+      // Above `mixFrom` the verbs stop staying in their own biome. Crumble is
+      // the one that travels, because it is the only one that cannot make a gap
+      // unreachable — it takes away a perch you already reached.
+      const mix = clamp((led.y - V.mixFrom) / V.mixSpan, 0, 1);
+      if (mix > 0 && mixRoll < mix * V.mixRate) led.crumble = true;
     }
   }
 
@@ -1289,7 +1298,11 @@ export class Sim {
     // ASH: the hold starts failing the moment it takes your weight, and only
     // then. An untouched crumbling ledge is a normal ledge forever.
     if (s.crumble && s.crumbleAt === 0) {
-      s.crumbleAt = this.verbTime + FEEL.verbs.crumbleMs / 1000;
+      // The higher the hold, the less it gives you. Never below the warning.
+      const V2 = FEEL.verbs;
+      const grace = Math.max(V2.crumbleMsFloor,
+                             V2.crumbleMs / (1 + Math.max(0, s.y) / V2.tightenSpan));
+      s.crumbleAt = this.verbTime + grace / 1000;
       this.emit(EV.CRUMBLE_START, s.x, s.y);
     }
     // MOMENTUM, and the near miss that ends it — ONE condition, two voices.

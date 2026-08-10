@@ -322,6 +322,13 @@ export function climb(sim, S, rnd, scratch, cands, trace) {
     sp = clamp(sp, FEEL.launch.minSpeed, FEEL.launch.maxSpeed);
     const shot = assist(sim, Math.cos(ang) * sp, Math.sin(ang) * sp, scratch);
 
+    // A HAND TAKES TIME. Without this the bot lands and launches in the same
+    // tick, so anything measured in seconds — a hold that crumbles, a ledge that
+    // drifts — is invisible to it and reads as having no effect at all. Off by
+    // default so every number already in BALANCE.md stays comparable.
+    for (let d = 0; d < DWELL_TICKS && sim.phase === PHASE.PLAY; d++) sim.tick(0);
+    if (sim.phase !== PHASE.PLAY) break;
+
     sim.launch(shot.vx, shot.vy);
     lastThrown = !!p.desperate;
     launched++;
@@ -653,6 +660,10 @@ if (args.tune) {
     node[leaf] = v;
   }
 }
+
+// Seconds a hand spends on a ledge before it launches. 0 keeps the historic
+// behaviour; anything above it is required to see a time-based hazard at all.
+const DWELL_TICKS = Math.round((+(args.dwell ?? 0)) / FEEL.sim.dt);
 
 const seeds = +(args.seeds ?? 200);
 const attempts = +(args.attempts ?? 50);
