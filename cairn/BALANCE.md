@@ -859,8 +859,98 @@ Open, not done, not claimed:
   the game refusing them is a question about a person.
 - **Two-body routes are still unmeasured**, so "33 of 76 hard gaps are bridged by
   one body" is a floor on how often the shortcut exists, not the number.
-- **Target 3 does not hold** and is recorded as failing above rather than folded
-  into the improvement.
+- **Target 3 does not hold**, is recorded as failing above rather than folded
+  into the improvement, and has now been re-opened once and closed again with
+  measurement rather than with a citation. See the section below.
 - **The precision survey never launches from a wall.** Section A proves the arc
   is honest from a cling; section B's 4,186 sampled jumps all leave from the
   ground, because that is what the bot does. Wall-launch tolerance is unmeasured.
+
+---
+
+## Target 3, re-opened and closed on measurement (2026-08-10)
+
+> an expert can theoretically pass 600 m, but not on a first attempt
+
+This section exists because "already decided" is not a measurement. The trade
+was re-tested against every knob that could plausibly move it, and the outcome
+is that target 3 **cannot be met without breaking `WALL = 0.00%`** — not as a
+judgement call, as a number.
+
+### Where it stands, re-measured
+
+Expert, 200 seeds × 50 attempts, shipped config: **78.50% of first attempts pass
+600 m**, median first attempt **1,106.7 m**. It does not squeak past the target,
+it doubles it.
+
+### The knob that meets the target, and what it costs
+
+`overreachRate` is the only one that moves it, and it moves it completely:
+
+| `overreachRate` | expert attempt-1 ≥ 600 m | route audit, 0–3000 m, 30 seeds |
+|---|---|---|
+| **0 (shipped)** | 78.50% | **4,516 gaps, 100.00% DIRECT, WALL 0.00%** |
+| 0.45 | **0.00%** ✅ | 3,702 gaps, 82.36% DIRECT, **WALL 17.64% — 653 dead ends** |
+
+At 0.45 the audit lists walls at 131, 133, 136, 149, 215 m and 553 other
+distinct heights. A real player was stranded three times, at 391 m, 481 m and
+567 m, by exactly this mechanic, and `overreachRate` was zeroed to fix it. Target
+3 was traded away knowingly for that. Meeting it means putting the walls back,
+seventeen percent of them, starting at 131 m.
+
+### The wall-free knob does not move it
+
+Hard gaps (§19) are the construction that cannot produce a wall: the ledge is
+placed on a trajectory the physics actually flew, from the worst footing below.
+Doubling their share is the honest attempt at target 3.
+
+| config | expert attempt-1 ≥ 600 m | body landings (gate 5%) |
+|---|---|---|
+| `hardRate` 0.45 (shipped) | 78.50% | **7.20%** |
+| 0.60 | 80.00% | 5.41% |
+| 0.75 | 72.50% | 5.83% |
+| 0.75, `hardSlack` 2 | 75.00% | 5.13% |
+| **0.90** | **57.50%** | 5.61% |
+| 0.90, `hardSlack` 1.5 | 70.00% | 5.22% |
+
+The wall-free claim is measured, not assumed: the route audit at `hardRate` 0.90
+reads **4,849 gaps, 100.00% DIRECT, WALL 0.00%, no dead ends** — the
+construction holds at double the rate, so this column really is the honest
+attempt and not a second way of putting walls in.
+
+Doubling hard gaps to 0.90 buys 21 points and lands at 57.50%, which is not
+"not on a first attempt" by any reading. And it pushes the *other* contract
+number the wrong way: body landings fall from 7.20% to 5.61%, within 0.61 points
+of the 5% gate. Tighter gaps kill the bot sooner, so it accumulates fewer
+corpses high in the tower and stands on itself less — the two contract numbers
+are not independent, and the knob that attacks one erodes the other.
+
+### Why no amount of tightening can work
+
+The bodies audit measures the window a hard gap leaves: **4.5% of full power**,
+against **23 degrees** of angle. The expert model's hand is off by 2.2% of power
+(1σ), so a hard gap is roughly a 2σ event for it — about a 5% failure rate, over
+the ~8 hard gaps between the base and 600 m, which is the 78.5% survival that is
+actually observed. Getting first-attempt survival under 20% needs the power
+window down near 1%.
+
+The average model's hand is off by **5.5% of power**. A 1% window is already
+five sigma for the player this game is for. The tightening that would satisfy
+target 3 does not make the game hard, it makes it impassable for everyone who is
+not the bot — and the bot is not who the target is about. BALANCE.md has said
+since the first pass that "a jump forgives about twenty degrees while one pixel
+of thumb is 0.31, so precision was never what killed anyone. It killed bots."
+This is the same finding arriving from the other direction.
+
+### Verdict
+
+**Target 3 stays failing, deliberately, and is now failing with its cost
+priced.** The two ways to meet it are 653 dead ends or a power window five sigma
+outside a real hand. Both are worse than the target being unmet, and both break
+something the repository treats as a contract. Nothing changed.
+
+What could legitimately close it is a difficulty source that is neither an
+impossible gap nor a tighter window — the biome verbs are the obvious candidate,
+since a crumbling hold kills a perfect executor without narrowing anything — but
+PHASE3 §7 is out of scope for this pass and a verb never lands on a hard gap by
+construction (DECISIONS §26). Flagged, not attempted.

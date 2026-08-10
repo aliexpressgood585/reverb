@@ -295,10 +295,21 @@ These are open, not done, and not claimed:
   are in `BALANCE.md`. Three hold: the novice reaches 50 m by attempt 5 and 150 m
   by 25 in 100% of seeds, the average player's median curve rises 345 m with no
   40 m stall longer than 3 attempts, and no 10 m band holds more than 1.9% of any
-  model's deaths. **Target 3 fails** — an expert passes 600 m on 83% of first
-  attempts against a target of "not on a first attempt". It failed at `c1bf734`
-  too, at 95%, and closing it needs gaps that cannot be crossed at all, which is
-  the mechanic that stopped a real player three times.
+  model's deaths. **Target 3 fails** — an expert passes 600 m on 78.5% of first
+  attempts (83% when this was written) against a target of "not on a first
+  attempt". It failed at `c1bf734` too, at 95%.
+
+  Re-opened and closed on measurement 2026-08-10, so this is now a priced trade
+  rather than a citation. The only knob that meets the target, `overreachRate`
+  0.45, takes the route audit from **WALL 0.00% to 17.64% — 653 dead ends, the
+  first at 131 m**, which is the mechanic that stopped a real player at 391, 481
+  and 567 m. The wall-free knob is genuinely wall-free (`hardRate` 0.90 audits at
+  4,849 gaps, 100% DIRECT, 0 dead ends) and genuinely does not work: it moves
+  first-attempt survival only 78.5% → 57.5%, and drags body landings from 7.20%
+  to 5.61%, within 0.61 points of the 5% gate. And the tightening that would
+  close the remaining distance needs a power window near 1% against an average
+  hand that is off by 5.5% — five sigma. Both routes break a contract number;
+  the target stays unmet on purpose. Table in `BALANCE.md`.
 - **No human has played the retuned tower.** Three bots with gaussian error are
   not three people, and the novice model has no learning in it.
 - **The band-hazard softening above is measured, not fixed.** An expert's

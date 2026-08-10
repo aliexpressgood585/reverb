@@ -10,10 +10,19 @@ already been tried and rejected once, with reasons.
 
 ---
 
-## 1 — Balance. DONE, with target 3 failing — see `BALANCE.md`
+## 1 — Balance. DONE, with target 3 failing and now PRICED — see `BALANCE.md`
 
-Measured, retuned and re-measured. Targets 1, 2 and 4 hold. **Target 3 does not:**
-an expert passes 600 m on 83% of first attempts, against "but not on a first
+Measured, retuned and re-measured. Targets 1, 2 and 4 hold. **Target 3 does not**,
+and as of 2026-08-10 it has been re-opened and closed again on measurement rather
+than on a citation: the only knob that meets it (`overreachRate` 0.45) takes the
+route audit from **WALL 0.00% to WALL 17.64%, 653 dead ends starting at 131 m** —
+the exact mechanic that stranded a real player at 391, 481 and 567 m. The
+wall-free knob (`hardRate`, verified still 100% DIRECT at 0.90) moves it from
+78.5% to only 57.5% while dragging body landings from 7.20% toward the 5% gate.
+Target 3 stays failing with its cost priced. Full table in `BALANCE.md`.
+
+The original note, kept: an expert passes 600 m on 83% of first attempts (78.5%
+on the current re-measurement), against "but not on a first
 attempt". It failed at `c1bf734` too, at 95%, and it is recorded as failing rather
 than reported as improved.
 
