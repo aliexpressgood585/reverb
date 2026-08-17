@@ -187,6 +187,22 @@ through the real `update`, not as the flag that was supposed to cause it.
 
 ---
 
+## 4b — The premise arrives on the on-ramp. DONE — `scripts/cairn-hook-check.mjs`
+
+Not in the brief; added because the game read generic and the reason was
+measurable. The first constructed hard gap sat at a median of 233.6 m and was
+rolled 45% of the time, against a novice whose median death is 117 m — so the
+one idea this game has arrived late, at random, or never. The gap that LEAVES
+the on-ramp is now hard by promise: perch at a median 74.0 m, in 59 of 60
+towers, and of the novices who reach that perch **92% cross it by standing on a
+body left in the gap** (71% before).
+
+And the aim now says which kind of death it is looking at: a prospective corpse
+that buys a ledge this perch cannot reach is drawn in the living accent instead
+of the gold of memory, with a ring on the ledge it buys. No text. DECISIONS §29.
+
+---
+
 ## 5 — Daily Climb. DONE — `scripts/cairn-daily-check.mjs`
 
 One seed per UTC date, derived from the date rather than stored, so the tower is

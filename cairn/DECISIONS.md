@@ -829,3 +829,97 @@ should have started an aim closed the monument instead) and pulled the camera
 back underneath the biome screenshots in tests 4-6, moving their mean channel
 from 62.0 to 41.9. That is a precondition, the same kind as `ui.started` and
 `sim.phase`, not a workaround — the nudge is tested in the file built for it.
+
+---
+
+## 29. The game is about deciding where to die, and it never said so
+
+The complaint was that the game reads generic, and it was correct. Three
+reasons, all checkable:
+
+1. **The one non-generic idea was framed as failure.** The aim preview has drawn
+   the corpse you would leave since the ghost shipped — the game already knew
+   how to say "put a body there" — but every prospective corpse was drawn
+   identically, in the gold of memory, so the screen said "you will die here"
+   and never "and it will get you up there". The decision the whole design rests
+   on was on screen and unreadable.
+2. **The tower has one noun.** 4,541 audited gaps and every one of them is a
+   ledge. A biome changes the hue and adds a verb; the 500th metre is the 50th
+   in a different colour.
+3. **The first sixty seconds hid the hook.** `cairn-first-minute.mjs` measures
+   the on-ramp as "materially more forgiving" — deliberately — and the
+   difficulty curve then put the first constructed hard gap at a median of
+   **233.6 m** and rolled it 45% of the time, against a novice whose median
+   death is 117 m. So a new player spent their whole first session in a
+   competent, forgiving, entirely ordinary jumping game.
+
+This entry is (1) and (3). (2) is untouched and still true.
+
+### The gap that leaves the on-ramp is hard by promise, not by roll
+
+`tower.rampHard`. The first perch at or above `openingSpan` gets a constructed
+hard gap (§19) whatever the curve says — cut out of a real flight from the worst
+footing, so it is provably crossable in one launch and cannot be a wall. An
+expert clears it and never knows it was there; everyone else fails it, watches
+themselves become a ledge, and stands on it.
+
+Measured, 60 seeds: perch at a median **74.0 m**, the ledge it must reach at
+**90.5 m**, in **59 of 60** towers. The sixtieth is seed 32, where `hardStep`
+returns null in both directions and the generator falls back to an ordinary gap
+— that refusal is the entire reason WALL reads 0.00%, so the gate is 95% and not
+100% on purpose. `--tune='{"rampHard":false}'` takes the check red.
+
+What it actually bought, novice model, on the gap above the on-ramp:
+
+| | rampHard off | on |
+|---|---|---|
+| the gap leaving the on-ramp is constructed | 0 / 60 | **59 / 60** |
+| of those who reach the perch, cross it over their own body | 71% | **92%** |
+| first at attempt (median) | 8 | **6.5** |
+| cleared it in one launch, never needed a body | 13 | **4** |
+
+### Gold is a body. The accent is a plan.
+
+`Sim.gainsFrom(x, y, fromX, fromY)` asks one question: if a body came to rest
+here, would it put a ledge in reach that is **not** in reach from the perch this
+flight left? The second half is load-bearing — a body that only unlocks
+something you could already jump to costs a life for nothing, and it would light
+up just as brightly on a naive test.
+
+It is arithmetic, not a flight: the same `dy + |(dx,dy)| ≤ v²/g · reachSafety`
+envelope the generator places every ledge inside, written once in `inEnvelope`
+so "can this be jumped to" has one answer in the program. `Sim._reaches` runs up
+to 150 predictions and is exactly right; this runs six multiplications and is
+optimistic in the same direction the generator is. It is called while the thumb
+is moving.
+
+When it finds something, the ghost switches from `MEMORY_GOLD` to the living
+accent, heavier and brighter, and the ledge it buys takes a ring. The death that
+follows knows too: `sim.deathMeant` is computed **before** the corpse exists (or
+the body would be offered as the ledge its own arrival unlocks), and it adds a
+rising fifth under the collapse — under it, never instead of it, because you did
+die and softening that would be a lie about the one rule the game has — plus a
+haptic pattern that resolves instead of falling.
+
+No text anywhere near any of it. The difference between throwing yourself away
+and spending yourself is a colour.
+
+### Two bugs this earned, and why the checks are shaped this way
+
+`gainsFrom` first added half a body height to the apex to get the corpse's
+surface. `_die` passes `peakY - corpseH/2` as the **centre**, so the surface is
+exactly the apex — the same lie about the same rule that once left half of all
+overreach gaps unbridgeable and stranded a player at 391 m.
+
+And the first version of the ramp promise read
+`lastLedge.y < openingSpan && h >= openingSpan`. `lastLedge.y` **is** `h` — the
+perch is the ledge — so the condition could never be true. The change did
+nothing whatsoever, and `npm run accept` stayed 14/14, `reach` stayed at WALL
+0.00% and `bodies` stayed at 7.5%. What caught it was `cairn-hook-check.mjs`
+asking where the first hard gap actually is and reading back 233.6 m, unchanged.
+Seventh in the series of green tests blind to the state they claim to cover.
+
+`cairn-hook-check.mjs` also had to be rewritten once itself: it asserted the
+hard **ledge** lands within one rise of the on-ramp line, when it is the
+**perch** that lands within one rise and the ledge is two. It read 21 of 60 on a
+generator doing exactly what it was told.

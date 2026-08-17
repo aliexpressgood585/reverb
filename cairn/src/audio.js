@@ -326,10 +326,34 @@ export class Audio {
     n.start(); n.stop(c.currentTime + 0.12);
   }
 
-  death() {
+  /**
+   * @param {boolean} [meant] the body it leaves buys a ledge this perch cannot
+   *   reach — a spent life rather than a lost one
+   */
+  death(meant = false) {
     const L = this._live();
     if (!L || this.muted) return;
     const c = L.c;
+
+    // A DEATH YOU MEANT IS NOT A FAILURE SOUND.
+    //
+    // The collapse below still plays — you did die, and softening that would be
+    // a lie about the one rule the game has. What is added is a fifth rising
+    // underneath it, arriving as the fall bottoms out: the tower acknowledging
+    // that the body just went where it was aimed. Under the collapse, never
+    // instead of it.
+    if (meant) {
+      const t = c.currentTime;
+      const o2 = c.createOscillator();
+      o2.type = 'triangle';
+      o2.frequency.setValueAtTime(147, t);                 // D3
+      o2.frequency.exponentialRampToValueAtTime(220, t + 0.55);   // up a fifth
+      const g2 = c.createGain();
+      this._env(g2, 0.085, 0.18, 0.9);
+      o2.connect(g2); g2.connect(L.m);
+      o2.start(); o2.stop(t + 1.4);
+    }
+
     const o = c.createOscillator();
     o.type = 'sawtooth';
     const f = c.createBiquadFilter();

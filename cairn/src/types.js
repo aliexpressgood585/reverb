@@ -70,6 +70,9 @@
  * @property {number} coyote
  * @property {number} takeoff  the height the launch left from; falling below it
  *                             is what "die" means
+ * @property {number} takeoffX where along that perch it left from, so a death
+ *                             can be judged against the ledge it was thrown
+ *                             from rather than against wherever it fell to
  * @property {number} peakX    the apex, which is where a corpse is left
  * @property {number} peakY
  * @property {number} airTime

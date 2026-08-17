@@ -235,8 +235,12 @@ function begin() {
 function handleDeath() {
   ui.dead = 0.0001;
   ui.flash = 1;
-  audio.death();
-  buzz([60, 30, 90]);
+  const meant = sim.deathMeant;
+  audio.death(meant);
+  // Three short pulses that resolve, against the long fall of an ordinary
+  // death. The hand is the only channel that reaches a player who is already
+  // looking away from the screen.
+  buzz(meant ? [18, 40, 18, 40, 34] : [60, 30, 90]);
   const b = sim.body;
   if (!reduced) renderer.burst(b.peakX, b.peakY, 22);
   camera.kick(1);
@@ -562,6 +566,10 @@ function drainEvents() {
       if (force > 0.45) buzz(26);
     } else if (kind === EV.DEATH) {
       beat('firstDeath');
+      // A body that buys a ledge this perch could not reach is a life SPENT.
+      // The game has never distinguished the two, so every death read as a
+      // failure — including the ones the player aimed. See DECISIONS §29.
+      if (sim.deathMeant) beat('firstSpentDeath');
       handleDeath();
     } else if (kind === EV.LAUNCH) {
       beat('firstLaunch');

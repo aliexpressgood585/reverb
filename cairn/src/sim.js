@@ -455,8 +455,51 @@ export class World {
       // become a different tower the next time someone touches an unrelated knob.
       const hardRoll = this.rng();
       const hardT = Math.max(0, diff - T.hardFrom) / Math.max(1e-6, 1 - T.hardFrom);
+
+      // THE FIRST GAP OFF THE ON-RAMP IS ALWAYS ONE OF THESE.
+      //
+      // The premise of this game is that your own body is the step, and until
+      // now a new player met that idea by accident, late, or never: the
+      // difficulty curve puts the first hard gap past 100 m and only rolls it
+      // 45% of the time, while the novice model's median death is 119 m. So the
+      // first sixty seconds were a competent, forgiving, entirely ordinary
+      // jumping game, and the one reason this game exists showed up in minute
+      // three if it showed up at all.
+      //
+      // The gap that LEAVES the on-ramp is therefore hard by promise rather
+      // than by roll — the same way the on-ramp itself is a promise and not a
+      // curve. A hard gap is cut out of a real flight (§19), so it is provably
+      // crossable in one launch from the worst footing: an expert clears it and
+      // never knows, and everyone else fails it once, watches themselves become
+      // a ledge, and stands on it. That is the whole game, taught in the one
+      // language this game teaches in.
+      //
+      // Stateless on purpose. The roof regenerates above the record on every
+      // attempt, so a "have we done it yet" flag would make the promise depend
+      // on how far the player has already got — it would fire for a new player
+      // and quietly stop firing for one who had been past 60 m and come back.
+      // Asked of the world instead: is this perch the LOWEST ledge at or above
+      // the line? The scan is bounded to one rise above it, because the first
+      // ledge over the line is always within one rise of it and past that the
+      // answer is no without looking.
+      //
+      // The first version of this read `lastLedge.y < openingSpan && h >=
+      // openingSpan`, and `lastLedge.y` IS `h` — the perch is the ledge. The
+      // condition could never be true, the change did nothing at all, and every
+      // acceptance test and both contract audits stayed green. What caught it
+      // was `cairn-hook-check.mjs` asking where the first hard gap actually is:
+      // median 233.6 m, exactly as before. Seventh in the series.
+      let leavesRamp = false;
+      if (T.rampHard && h >= T.openingSpan && h < T.openingSpan + T.maxRise) {
+        leavesRamp = true;
+        const below = this.near(T.openingSpan, h);
+        for (let i = 0; i < below.length; i++) {
+          const q = below[i];
+          if (!q.corpse && q.y >= T.openingSpan && q.y < h) { leavesRamp = false; break; }
+        }
+      }
       const hardGap = !unreachable && h >= T.openingSpan
-        && hardRoll < hardT * T.hardRate;
+        && (leavesRamp || hardRoll < hardT * T.hardRate);
 
       const rise = unreachable
         ? lift * (T.overreachLift + this.rng() * T.overreachLiftSpan)
@@ -562,6 +605,7 @@ export function newBody() {
     wallTimer: 0,
     coyote: 0,
     takeoff: 0,
+    takeoffX: 0,          // ... and where along it the launch left from
     peakX: 0, peakY: 0,
     airTime: 0,
     hangTimer: 0,
@@ -605,6 +649,8 @@ export class Sim {
     this.maxSubStep = 0;
     /** Consecutive clean landings. Never drawn as a number; see DECISIONS §27. */
     this.momentum = 0;
+    /** Did the last death leave a body that buys a ledge? See `gainsFrom`. */
+    this.deathMeant = false;
     /** Edge slack of the most recent landing, in units. */
     this._landSlack = Infinity;
     // A full body used as the scratch for predicted flight, allocated once.
@@ -613,7 +659,11 @@ export class Sim {
     this._lv = { vx: 0, vy: 0 };
     // Where a predicted launch would freeze. Filled by `predict`, read by the
     // renderer to draw the body you are about to leave. Allocated once.
-    this.predictPeak = { x: 0, y: 0, dies: false };
+    /**
+     * Where this launch ends, and — when it ends in a death — whether the body
+     * it leaves is worth leaving. See `gainsFrom`.
+     */
+    this.predictPeak = { x: 0, y: 0, dies: false, gains: /** @type {Solid|null} */ (null) };
     // A second scratch body, for proving routes while the player is in the air.
     this._probe = newBody();
     /**
@@ -944,6 +994,7 @@ export class Sim {
     b.airTime = 0; b.hangTimer = 0;
     b.t = this.verbTime;
     b.takeoff = b.y;
+    b.takeoffX = b.x;
   }
 
   // ------------------------------------------------------------- the launch
@@ -1279,6 +1330,46 @@ export class Sim {
     return best;
   }
 
+  /**
+   * THE QUESTION THAT TURNS A DEATH INTO A DECISION.
+   *
+   * If a body came to rest here, would it put a ledge in reach that is NOT in
+   * reach from where the player is standing right now? That is the entire
+   * difference between throwing yourself away and spending yourself — and the
+   * game has never said which one it is.
+   *
+   * The aim preview has drawn the corpse you would leave since the ghost
+   * shipped, but it drew every prospective corpse identically, so the screen
+   * said "you will die here" and never "and it will get you up there". The
+   * decision the whole design rests on was on screen and unreadable.
+   *
+   * NOT REACHABLE FROM HERE is the load-bearing half. A body that only unlocks
+   * something you could already jump to is a body that costs a life for
+   * nothing, and it would light up just as brightly on a naive test.
+   *
+   * @param {number} x where the body would come to rest
+   * @param {number} y the apex — which IS the corpse's landable surface, because
+   *   `_die` passes `peakY - corpseH/2` as the centre. Adding half a body here
+   *   instead of nothing was this method's first bug, and it is the same lie
+   *   about the same rule that once left half of all gaps unbridgeable.
+   * @param {number} fromX the perch this flight left, not where the body is now
+   * @param {number} fromY
+   * @returns {Solid|null} the ledge it would buy, highest first, or null
+   */
+  gainsFrom(x, y, fromX, fromY) {
+    const surface = y;
+    const solids = this.world.near(surface, surface + FEEL.camera.viewH);
+    let best = null;
+    for (let i = 0; i < solids.length; i++) {
+      const s = solids[i];
+      if (s.y + s.hh <= surface) continue;
+      if (!inEnvelope(x, surface, s, this)) continue;
+      if (inEnvelope(fromX, fromY, s, this)) continue;  // you could already go there
+      if (!best || s.y > best.y) best = s;
+    }
+    return best;
+  }
+
   /** @param {Solid} s */
   _land(s) {
     const b = this.body;
@@ -1412,6 +1503,12 @@ export class Sim {
     //
     // Now the surface is exactly where you froze. Throw, freeze, and the top of
     // what is left is the height you earned.
+    // WAS THIS A DEATH YOU MEANT? Asked BEFORE the corpse exists, or the body
+    // would be offered as the ledge its own arrival unlocks. The answer is the
+    // difference between spending a life and losing one, and it is the same
+    // question the aim preview answered while the thumb was still down — so a
+    // player who took the shot the ghost lit up gets told they were right.
+    this.deathMeant = !!this.gainsFrom(b.peakX, b.peakY, b.takeoffX, b.takeoff);
     this.world.corpse(b.peakX, b.peakY - FEEL.tower.corpseH * 0.5,
                       rot, pose, this.time, this.deaths);
     this.deaths++;
@@ -1438,6 +1535,35 @@ export const CLOSE = { EDGE: 0, DOOMED: 1 };
  * Writes flat [x,y,...] into `outArc` and returns the landing solid or null.
  */
 /**
+ * Is `to` inside the reach envelope of a full-power launch from `(fx, fy)`?
+ *
+ * dy + |(dx,dy)| <= v²/g, the same envelope `World.generate` places every
+ * ordinary ledge inside, written once so the question "can this be jumped to"
+ * has one answer in the whole program. The generator asks it about a ledge it
+ * is about to place; `gainsFrom` asks it about a ledge that already exists.
+ *
+ * Deliberately arithmetic and not a flight. `Sim._reaches` runs up to 150
+ * predictions and is right; this runs six multiplications and is optimistic in
+ * the same direction the generator is. It is called while the thumb is moving,
+ * so it has to cost nothing.
+ *
+ * @param {number} fx
+ * @param {number} fy standing surface height
+ * @param {Solid} to
+ * @param {Sim} sim
+ * @returns {boolean}
+ */
+function inEnvelope(fx, fy, to, sim) {
+  const dy = (to.y + to.hh) - fy;
+  if (dy <= 0) return false;
+  const hw = solidHalfWidth(to, sim);
+  if (hw <= 0) return false;                       // a MEMORY is not a target
+  const dx = Math.max(0, Math.abs(sim.driftXAt(to, sim.verbTime) - fx) - hw);
+  const reach = ((FEEL.launch.maxSpeed ** 2) / FEEL.gravityRise) * FEEL.tower.reachSafety;
+  return dy + Math.hypot(dx, dy) <= reach;
+}
+
+/**
  * @param {Sim} sim
  * @param {number} vx
  * @param {number} vy
@@ -1453,6 +1579,7 @@ export function predict(sim, vx, vy, outArc) {
   const v = sim.launchVelocity(b, vx, vy, sim._lv);
   p.vx = v.vx; p.vy = v.vy;
   p.takeoff = b.y;
+  p.takeoffX = b.x;
   p.peakX = b.x; p.peakY = b.y;
   p.hangTimer = 0; p.onWall = 0; p.wallTimer = 0;
   p.grounded = false; p.standing = b.standing;
@@ -1461,6 +1588,7 @@ export function predict(sim, vx, vy, outArc) {
   outArc.length = 0;
   const peak = sim.predictPeak;
   peak.dies = false;
+  peak.gains = null;
   const ticks = Math.ceil(FEEL.aim.arcSeconds / DT);
   for (let i = 0; i < ticks; i++) {
     const r = sim._flight(p, 0);
@@ -1471,6 +1599,8 @@ export function predict(sim, vx, vy, outArc) {
       // body and the real one are the same body. One source, again: a preview
       // of where you will land that is merely close is a preview that lies.
       peak.x = p.peakX; peak.y = p.peakY; peak.dies = true;
+      peak.gains = sim.gainsFrom(p.peakX, p.peakY, b.x,
+        b.standing ? b.standing.y + b.standing.hh : b.y);
       return null;
     }
     if (r) {

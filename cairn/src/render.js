@@ -1221,20 +1221,50 @@ export class Renderer {
     // which is a decision instead of a punishment.
     const pk = sim.predictPeak;
     if (!pk.dies) return;
-    const a = FEEL.aim.ghostAlpha;
+
+    // GOLD IS A BODY. THE ACCENT IS A PLAN.
+    //
+    // Gold is the colour of memory everywhere in this game — old corpses, the
+    // thread between them, the monument. A prospective corpse drawn in gold
+    // says "you will die here" and nothing else, which is what every ghost said
+    // for as long as the ghost existed. When `sim.gainsFrom` finds that this
+    // body would put a ledge in reach that this perch cannot reach, the
+    // silhouette switches to the LIVING accent — the colour of the player, the
+    // arc and the light — and the ledge it buys takes a ring.
+    //
+    // That is the entire difference between throwing yourself away and spending
+    // yourself, said in a colour, with no text anywhere near it.
+    const gain = pk.gains;
+    const A = FEEL.aim;
+    const ghostCol = gain ? B.accent : MEMORY_GOLD;
+    const a = gain ? A.ghostGainAlpha : A.ghostAlpha;
+
+    if (gain) {
+      const r = A.gainRingU * this.scale;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = rgb(B.accent, A.gainRingAlpha);
+      ctx.lineWidth = Math.max(1, 1.2 * this.dpr);
+      ctx.beginPath();
+      ctx.arc(this.X(sim.driftXAt(gain, sim.verbTime)), this.Y(gain.y + gain.hh),
+              r, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.translate(this.X(pk.x), this.Y(pk.y));
     this._figurePath(ctx, FEEL.tower.corpseW * 0.5 * this.scale,
                      FEEL.tower.corpseH * 0.5 * this.scale, 0);
-    ctx.fillStyle = rgb(MEMORY_GOLD, a * 0.30);
+    ctx.fillStyle = rgb(ghostCol, a * 0.30);
     ctx.fill();
-    ctx.strokeStyle = rgb(MEMORY_GOLD, a);
+    ctx.strokeStyle = rgb(ghostCol, a);
     // Solid, not dashed. A body is 5.2 x 6.0 u — about fifteen CSS pixels tall
     // on a phone — and a dash pattern at that size breaks the silhouette into a
     // dotted blob that reads as a marker rather than as a person. The SIZE is
     // left honest: this is exactly how much room the corpse will take up, and
     // that is the thing the player is deciding about.
-    ctx.lineWidth = Math.max(1, 1.3 * this.dpr);
+    ctx.lineWidth = Math.max(1, (gain ? A.ghostGainWidth : 1.3) * this.dpr);
     ctx.stroke();
     ctx.restore();
   }

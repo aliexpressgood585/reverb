@@ -121,6 +121,20 @@ export const FEEL = {
     // reads as "the game cheated"; with it, the same gap reads as "put a body
     // there", which is the decision the whole design is built to offer.
     ghostAlpha: 0.52,
+    // AND WHETHER IT BUYS ANYTHING.
+    //
+    // The ghost drew every prospective corpse identically, so the screen said
+    // "you will die here" and never "and it will get you up there" — the
+    // decision the whole design rests on was on screen and unreadable. When the
+    // body would put a ledge in reach that is not in reach from this perch, it
+    // is drawn in the LIVING accent instead of the gold of memory, brighter and
+    // heavier, and the ledge it buys takes a ring. Nothing is written; the
+    // difference between throwing yourself away and spending yourself is a
+    // colour. See DECISIONS §29.
+    ghostGainAlpha: 0.92,
+    ghostGainWidth: 2.1,
+    gainRingU: 9,         // radius of the ring on the ledge it buys, in units
+    gainRingAlpha: 0.5,
   },
 
   // ---------------------------------------------------------------- camera
@@ -275,6 +289,19 @@ export const FEEL = {
     // shortcut, never a rescue, and there is nothing to be rescued from.
     hardFrom: 0.32,       // difficulty at which hard gaps start appearing
     hardRate: 0.45,       // their share of gaps at full difficulty
+    // THE GAP THAT LEAVES THE ON-RAMP IS ONE, ALWAYS.
+    //
+    // The curve alone put the first constructed gap at a median of 233.6 m and
+    // rolled it 45% of the time, against a novice whose median death is 119 m —
+    // so the premise of the whole game arrived late, at random, or never, and
+    // the first sixty seconds were an ordinary jumping game. This makes it a
+    // promise instead, the same way the on-ramp itself is a promise and not a
+    // curve. Measured after: perch at a median 74.0 m, the ledge it must reach
+    // at 90.5 m, in 59 of 60 towers.
+    //
+    // A knob rather than a constant so `cairn-hook-check.mjs` can be falsified:
+    // --tune='{"rampHard":false}' must take that check red.
+    rampHard: true,
     // How far short of the physical limit the ledge is pulled back. The
     // constructed gap sits exactly at the end of a real trajectory, which leaves
     // slack on the short side only; a few units of give makes the window

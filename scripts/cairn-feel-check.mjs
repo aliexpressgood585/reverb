@@ -382,6 +382,166 @@ await delay(300);
     `record deaths revealed it 0 times`);
 }
 
+// ── 9. the ghost tells you whether the body buys anything ─────────────────
+//
+// `gainsFrom` has to DISCRIMINATE or the feature is a light that is always on.
+// Both cases are constructed and both are asserted: a body under a ledge only
+// it can reach must return that ledge, and the same body under a ledge the
+// perch can already reach must return null. A check that only tested the first
+// would pass on a function that returned the nearest ledge unconditionally.
+{
+  const r = await page.evaluate(() => {
+    const { sim, ui } = window.CAIRN;
+    const F = window.CAIRN.FEEL;
+    sim.reset(true); sim.phase = 1; ui.started = true; ui.dead = 0;
+    const b = sim.body;
+    const perch = sim.world.ledge(50, b.y, 22);
+    b.x = b.px = perch.x; b.y = b.py = perch.y + perch.hh;
+    b.grounded = true; b.standing = perch;
+    const from = perch.y + perch.hh;
+
+    // The reach envelope from the perch, so both ledges can be placed against
+    // it rather than at heights guessed to be on the right side of it.
+    const reach = ((F.launch.maxSpeed ** 2) / F.gravityRise) * F.tower.reachSafety;
+
+    // CLEAR THE COLUMN ABOVE THE PERCH. `gainsFrom` returns the HIGHEST ledge
+    // it buys, and the generated tower is full of them — the first version of
+    // this asserted the identity of a ledge it had placed and got back a
+    // perfectly correct answer about a different one. Bounded and counted, for
+    // the same reason check 6 counts: a tool here once "found" a result by
+    // deleting every ledge in the world.
+    let cleared = 0;
+    for (const q of sim.world.solids.slice()) {
+      if (q.corpse || !q.live || q === perch) continue;
+      if (q.y + q.hh > from) { sim.world._unindex(q); q.live = false; cleared++; }
+    }
+    let remaining = 0;
+    for (const q of sim.world.solids) if (q.live) remaining++;
+
+    // FAR: out of reach from the perch, in reach from a body halfway up.
+    const far = sim.world.ledge(perch.x, from + reach * 0.62, 12);
+    const mid = from + reach * 0.34;
+    const gain = sim.gainsFrom(perch.x, mid, b.x, from);
+    const gainFromPerch = sim.gainsFrom(b.x, from, b.x, from);
+
+    // NEAR: comfortably inside the envelope from the perch already, so a body
+    // under it buys nothing at all.
+    sim.world._unindex(far); far.live = false;
+    const near = sim.world.ledge(perch.x, from + reach * 0.18, 12);
+    const none = sim.gainsFrom(perch.x, from + reach * 0.09, b.x, from);
+
+    return {
+      farHit: gain === far, nearIsNull: none === null,
+      perchNull: gainFromPerch === null,
+      cleared, remaining,
+      reach: +reach.toFixed(1),
+      farY: +(far.y - from).toFixed(1), nearY: +(near.y - from).toFixed(1),
+    };
+  });
+  check(r.farHit && r.nearIsNull && r.perchNull,
+    `against a ${r.reach}u envelope: a body buys the ledge ${r.farY}u above the ` +
+    `perch that the perch cannot reach, buys nothing under one ${r.nearY}u up ` +
+    `that it can, and standing still buys nothing ` +
+    `(cleared ${r.cleared} ledges above the perch, ${r.remaining} solids left)`);
+}
+
+// ── 10. and the frame actually looks different ────────────────────────────
+//
+// Pixels again, and the entry condition first: `predictPeak.dies` has to be
+// true or there is no ghost on screen at all and both frames are trivially
+// identical. Read off the canvas in the same expression that drew it.
+{
+  const r = await page.evaluate(() => {
+    const { sim, renderer, camera, ui } = window.CAIRN;
+    // ITS OWN WORLD. Check 9 unindexes every ledge above its perch to isolate
+    // what `gainsFrom` returns, and this check inherited that gutted world: the
+    // target search found nothing, `lit` was assigned `plain` by construction,
+    // and the two frames were identical for a reason that had nothing to do
+    // with the renderer. Test order is not a fixture.
+    sim.reset(true); sim.phase = 1; ui.started = true; ui.dead = 0;
+    const pk = sim.predictPeak;
+    // The ghost lives inside `_aim`, and `draw` only calls `_aim` when
+    // `input.aiming` is true. The first version of this passed `input: null`,
+    // drew no ghost at all, and compared two identical frames — twice, because
+    // adding an arc without `aiming` changed nothing either. `aiming`, `arc`
+    // and `landing` are the three fields on the path, so this is the whole
+    // shape it consumes.
+    const b = sim.body;
+    const fakeInput = { aiming: true, landing: null,
+      arc: [b.x, b.y, b.x + 6, b.y + 20, b.x + 10, b.y + 30] };
+    pk.dies = true;
+    pk.x = b.x + 10; pk.y = b.y + 30;
+    // SAMPLE WHERE THE GHOST IS, not the whole frame. A body is about fifteen
+    // CSS pixels tall in a 1.3-megapixel canvas, so a full-frame mean moved by
+    // 0.33 when the ghost APPEARED and by 0.00 when it changed colour — the
+    // metric was reporting the background. This reads a box around the apex and
+    // reports the hue as well as the level, because gold and the accent differ
+    // far more in the red/blue balance than in brightness.
+    const shot = (gains, input) => {
+      pk.gains = gains;
+      renderer.draw(sim, camera, input, ui, 1 / 60, false);
+      const cv = renderer.canvas;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      // X/Y are CSS pixels; the backing store is dpr-scaled, and getImageData
+      // indexes the backing store. Reading the box at CSS coordinates sampled
+      // the wrong part of the frame and reported all three states identical.
+      const cx = Math.round(renderer.X(pk.x) * renderer.dpr);
+      const cy = Math.round(renderer.Y(pk.y) * renderer.dpr);
+      const half = Math.round(34 * renderer.dpr);
+      const x0 = Math.max(0, cx - half), y0 = Math.max(0, cy - half);
+      const w = Math.min(cv.width - x0, half * 2), h = Math.min(cv.height - y0, half * 2);
+      const px = g.getImageData(x0, y0, w, h).data;
+      let sum = 0, rb = 0;
+      for (let i = 0; i < px.length; i += 4) {
+        sum += px[i] + px[i + 1] + px[i + 2];
+        rb += px[i] - px[i + 2];
+      }
+      const n = px.length / 4;
+      return { lum: +(sum / n).toFixed(2), rb: +(rb / n).toFixed(2), n };
+    };
+    const target = sim.world.ledge(b.x, b.y + 70, 12);
+
+    // Three frames, so "the ghost changed colour" cannot be confused with "the
+    // ghost was never there": no arc at all, gold ghost, accent ghost.
+    pk.dies = false;
+    const noGhost = shot(null, null);
+    pk.dies = true;
+    const plain = shot(null, fakeInput);
+    const lit = shot(target, fakeInput);
+    pk.dies = false; pk.gains = null;
+    return { noGhost, plain, lit, hadTarget: !!target };
+  });
+  const appeared = r.plain.lum !== r.noGhost.lum;
+  const recoloured = Math.abs(r.lit.rb - r.plain.rb) > 1;
+  check(r.hadTarget && appeared && recoloured,
+    `in a ${r.plain.n}px box around the apex — no ghost lum ${r.noGhost.lum} ` +
+    `r-b ${r.noGhost.rb} · gold ghost lum ${r.plain.lum} r-b ${r.plain.rb} · ` +
+    `accent ghost lum ${r.lit.lum} r-b ${r.lit.rb}`);
+}
+
+// ── 11. a real death knows whether it was meant ───────────────────────────
+//
+// Through the real loop and the real `_die`, not by setting the field. Both
+// outcomes asserted: a launch off the side of the base into nothing must read
+// false, or `deathMeant` is a flag that is simply always on.
+{
+  const r = await page.evaluate(() => {
+    const { sim, update, ui } = window.CAIRN;
+    sim.reset(true); sim.phase = 1; ui.started = true; ui.dead = 0;
+    sim.deathMeant = true;                       // start wrong, so a no-op fails
+    sim.launch(126, 18);                         // sideways, into the void
+    let died = false;
+    for (let i = 0; i < 900; i++) {
+      update(1 / 60);
+      if (sim.deaths > 0) { died = true; break; }
+    }
+    return { died, meant: sim.deathMeant };
+  });
+  check(r.died && r.meant === false,
+    `a body thrown off the side of the base into nothing reads deathMeant=` +
+    `${r.meant} — the flag is not simply always on`);
+}
+
 console.log('\n  NOT MEASURED HERE: whether a human who is told nothing goes on to');
 console.log('  find the two-finger gesture. That needs a human. Checks 7 and 8');
 console.log('  measure what the fix rests on — the view reaches a player who never');
