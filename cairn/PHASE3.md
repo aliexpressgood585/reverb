@@ -203,6 +203,20 @@ of the gold of memory, with a ring on the ledge it buys. No text. DECISIONS §29
 
 ---
 
+## 4c — The tower has nouns in it. DONE — `scripts/cairn-landmark-check.mjs`
+
+The third reason the game read generic, and the one §29 left open. One structure
+per biome — a collapsed stair, a lattice mast, a root system, a chain into the
+dark, a furnace mouth, a frozen fall — at the CENTRE of each band, which puts
+the first at 75 m and therefore in the opening view from the ground.
+
+Decoration and only decoration: no solid, no collision, and `World.generate`
+cannot see one. 61 ledges over 1,200 m rebuild byte-identical from the seed with
+them present. Frame cost is below what the instrument can resolve (~0.03 ms
+against a ~0.04 ms noise floor). DECISIONS §30.
+
+---
+
 ## 5 — Daily Climb. DONE — `scripts/cairn-daily-check.mjs`
 
 One seed per UTC date, derived from the date rather than stored, so the tower is

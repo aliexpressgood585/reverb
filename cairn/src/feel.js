@@ -506,6 +506,39 @@ export const FEEL = {
     revealMinBodies: 3,    // ... and only once there is a tower worth showing
   },
 
+  // ------------------------------------------------------------- landmarks
+  //
+  // THE TOWER HAD ONE NOUN.
+  //
+  // Four and a half thousand audited gaps and every one of them was "a ledge".
+  // A biome changed the hue and added a verb; the 500th metre was the 50th in a
+  // different colour. Nothing in the world was a THING — no structure, no ruin,
+  // nothing to say what this place is or to climb TOWARD. A climb with no
+  // destination is a number going up.
+  //
+  // A landmark is DECORATION AND ONLY DECORATION. It has no collision, the
+  // generator does not know it exists, and it cannot move a single ledge — so
+  // it cannot touch `WALL = 0.00%`, which is the one thing that must never be
+  // risked for a picture. What it changes is that there is now something large
+  // and specific above you, at a known height, in every biome.
+  //
+  // One per biome, at the CENTRE of the band, which puts the first at 75 m —
+  // inside the opening view from the ground, so the very first screen a player
+  // ever sees has a structure in it.
+  landmark: {
+    spanU: 190,           // world units of height the shape occupies
+    // A 390x844 phone at the default 150u view shows about 69u of WIDTH, not
+    // the 100u column — the camera tracks x. The first draft was 132u wide, so
+    // every shape overflowed the glass and the furnace's brick courses read as
+    // full-width scanlines rather than as masonry. 86u fills the frame and
+    // still overhangs it slightly, which is what a large structure should do.
+    widthU: 86,
+    alpha: 0.30,          // it is scenery; the ledges must stay the readable layer
+    lineU: 1.5,           // stroke weight in world units, so it scales with zoom
+    detail: 9,            // repeated elements per shape — keep the path cheap
+    fadeU: 150,           // fades in over this much approach, so it arrives
+  },
+
   // ------------------------------------------------------------------- misc
   bestLineFadeU: 90,      // how near the best-height marker must be to show
   deathToPlayMs: 900,     // budget for the death → next attempt transition

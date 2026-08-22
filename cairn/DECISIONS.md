@@ -923,3 +923,86 @@ Seventh in the series of green tests blind to the state they claim to cover.
 hard **ledge** lands within one rise of the on-ramp line, when it is the
 **perch** that lands within one rise and the ledge is two. It read 21 of 60 on a
 generator doing exactly what it was told.
+
+---
+
+## 30. The tower gets nouns, and they are allowed to touch nothing
+
+§29 named three reasons the game reads generic and fixed two. This is the
+third: **the tower had one noun.** 4,541 audited gaps and every one of them is
+"a ledge". A biome changed the hue and added a verb; the 500th metre was the
+50th in a different colour. There was nothing in the world that was a THING, and
+nothing to climb toward — a climb with no destination is a number going up.
+
+### Decoration, and only decoration. That is the whole safety argument.
+
+A landmark has no solid, no collision, no entry in `world.solids`. `World.generate`
+does not read `landmarkOf` and cannot: the placement is a pure function of the
+world seed and the band index, using its own integer hash rather than the world
+rng, because the world's random stream IS the tower and drawing from it here
+would make the terrain depend on how many landmarks had been asked about.
+
+That is not a convenience, it is the reason this was safe to build at all.
+`WALL = 0.00%` is a property of the reach envelope; scenery that cannot touch a
+ledge cannot touch it. Check 1 of `cairn-landmark-check.mjs` holds the argument
+to account rather than trusting it — 61 ledges over 1,200 m rebuild
+byte-identical from the seed with landmarks present, and no solid sits at any
+anchor.
+
+### One per biome, at the CENTRE of the band
+
+Which puts the first at **75 m**, inside the 150 u opening view. The first
+screen a new player ever sees now has a structure standing above them. Placing
+them on the biome BOUNDARY was the obvious alternative and it is wrong: the
+first would be at 150 m and the novice model's median death is 117 m, so most
+players would never see one.
+
+### Six shapes, and four of them had to be drawn twice
+
+The check that all six differ measures ink distribution over an 8×8 grid. It
+passed on the first draft. Four of the six still did not read as anything, which
+is the limit of what that check can know — "different from each other" and
+"legible as a thing" are different questions and only one of them is
+measurable here. Looking at the frames:
+
+- **SIGNAL, a lattice mast** — worked immediately. Guy-wires are what stop a
+  tapered lattice reading as a ladder.
+- **VOID, a chain into the dark** — worked immediately, and is the best image
+  of the six.
+- **ASH, a collapsed stair** — failed. Drawn as detached L-brackets along a
+  diagonal it read as debris. A stair is legible only as ONE CONTINUOUS ZIGZAG,
+  so it is now a single polyline of riser-tread-riser-tread with a real break in
+  it and the upper flight offset sideways. The gap is the thing worth drawing
+  and it needs intact run either side to be a gap at all.
+- **BLOOM, roots** — parallel strands edge to edge read as cables. Roots read as
+  roots when they converge to a trunk and divide going down.
+- **GLACIER, a frozen fall** — stroked lines of constant weight read as pipes.
+  Ice reads as ice when it TAPERS; they are filled triangles now.
+- **CINDER, a furnace mouth** — the arch read, the brick courses read as
+  scanlines. Two causes: they were not clipped tightly to the arch, and every
+  shape was too wide (below).
+
+### 132 u wide against a 69 u window
+
+A 390×844 phone at the default 150 u view shows about **69 u of width**, not the
+100 u column — the camera tracks x. Every shape was authored at 132 u and
+overflowed the glass, which is why the furnace's courses ran off both edges as
+stripes. 86 u fills the frame and overhangs it slightly, which is what a large
+structure should do.
+
+### Two measurements that were measuring the rasteriser
+
+Both caught by asking for a NOISE FLOOR before believing a difference.
+
+The frame-cost check reported **+1.57 ms** on one run and **−0.12 ms** on the
+next, on identical code. A negative cost is a thermometer describing a different
+room. Interleaving the two conditions inside one loop and taking a median was
+not enough either; the honest answer came from sampling "with" against "with"
+to see what the instrument can resolve. It resolves about **0.04 ms**, and the
+landmarks cost about **0.03 ms** — so the reading is "too small for this
+instrument to see", which is what it now prints instead of a number.
+
+The monument check asserted the frame is *identical* with and without landmarks
+at full pull-back, and read a 0.075 difference. Two draws of the same scene with
+nothing changed also differ by 0.075. The check now measures that floor first
+and compares against it.

@@ -1,5 +1,6 @@
 import { FEEL, COLUMN, BIOME_SPAN } from './src/feel.js';
-import { Sim, PHASE, EV, CLOSE, predict, solidHalfWidth, erosionOf } from './src/sim.js';
+import { Sim, PHASE, EV, CLOSE, predict, solidHalfWidth, erosionOf,
+  landmarkOf, landmarksIn } from './src/sim.js';
 import { Input } from './src/input.js';
 import { Renderer, Camera } from './src/render.js';
 import { Post } from './src/post.js';
@@ -953,7 +954,7 @@ const api = {
   // Momentum and close calls are invisible by design, so the only way to check
   // they do anything is to read the sim's own vocabulary rather than a copy of
   // it — see scripts/cairn-feel-check.mjs.
-  EV, CLOSE, erosionOf, solidHalfWidth,
+  EV, CLOSE, erosionOf, solidHalfWidth, landmarkOf, landmarksIn,
   /** @param {number} n */
   step(n) { for (let i = 0; i < n; i++) sim.tick(0); },
   /**

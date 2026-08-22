@@ -106,6 +106,68 @@ export function solidHalfWidth(solid, sim) {
   return st === EROSION.FRESH ? solid.hw : solid.hw * 0.45;
 }
 
+// --------------------------------------------------------------- landmarks
+
+/**
+ * WHERE THE TOWER HAS SOMETHING IN IT.
+ *
+ * One structure per biome, at the CENTRE of the band. This is placement only —
+ * a landmark has NO SOLID, no collision and no entry in `world.solids`, the
+ * generator never sees one, and no ledge moves because of one. That is
+ * deliberate and it is the whole safety argument: `WALL = 0.00%` is a property
+ * of the reach envelope, and scenery that cannot touch a ledge cannot touch it.
+ *
+ * The band centre puts the first at 75 m, which is inside the 150 u opening
+ * view from the ground — so the first screen a new player ever sees has a
+ * structure standing above them, and the climb has somewhere to go instead of
+ * a number to raise.
+ *
+ * Deterministic from the world seed, so a daily code is the same tower and the
+ * same skyline for everyone, and so a landmark does not jump when the roof
+ * regenerates above the record.
+ *
+ * @param {number} band which biome band, 0 upward
+ * @param {number} seed the world seed
+ * @returns {{y: number, x: number, kind: number, phase: number}}
+ */
+export function landmarkOf(band, seed) {
+  // One draw of a cheap integer hash rather than the world rng: the world's
+  // random stream IS the tower, and pulling from it here would make the terrain
+  // depend on how many landmarks had been asked about.
+  let h = (seed ^ (band * 0x9e3779b1)) >>> 0;
+  h ^= h << 13; h >>>= 0;
+  h ^= h >>> 17;
+  h ^= h << 5; h >>>= 0;
+  const r = (h % 100000) / 100000;
+  return {
+    y: (band + 0.5) * BIOME_SPAN,
+    // Off centre, but never so far that the shape leaves the column entirely.
+    x: COLUMN * (0.32 + r * 0.36),
+    kind: band % 6,
+    phase: r,
+  };
+}
+
+/**
+ * Every landmark whose shape overlaps `[loY, hiY]`, written into `out`.
+ *
+ * @param {number} loY
+ * @param {number} hiY
+ * @param {number} seed
+ * @param {{y: number, x: number, kind: number, phase: number}[]} out cleared and refilled
+ */
+export function landmarksIn(loY, hiY, seed, out) {
+  out.length = 0;
+  const half = FEEL.landmark.spanU * 0.5 + FEEL.landmark.fadeU;
+  const first = Math.max(0, Math.floor((loY - half) / BIOME_SPAN - 0.5));
+  const last = Math.floor((hiY + half) / BIOME_SPAN + 0.5);
+  for (let b = first; b <= last; b++) {
+    const m = landmarkOf(b, seed);
+    if (m.y + half < loY || m.y - half > hiY) continue;
+    out.push(m);
+  }
+}
+
 // --------------------------------------------------------------------- rng
 
 /** xorshift32. A seed is a tower, on every device and every run. */

@@ -1,4 +1,5 @@
 import { FEEL, COLUMN, BIOMES, biomeAt, newBiomeSlot, MEMORY_GOLD } from './feel.js';
+import { landmarksIn } from './sim.js';
 import { makeRng, erosionOf, EROSION } from './sim.js';
 
 /** @typedef {import('./sim.js').Sim} Sim */
@@ -341,6 +342,12 @@ export class Renderer {
     // not a number anyone can read off the screen — it widens the light you
     // cast and lengthens the trail behind you, and that is the whole display.
     this.momentum = 0;
+
+    /**
+     * Scratch for `landmarksIn`, so the landmark pass allocates nothing.
+     * @type {{y: number, x: number, kind: number, phase: number}[]}
+     */
+    this._marks = [];
   }
 
   /**
@@ -496,6 +503,15 @@ export class Renderer {
       if (ui.started) this._bigNumber(ctx, B, Math.max(0, sim.body.ry ?? sim.body.y));
       if (!reduced) this._shafts(ctx, B, cam);
       this._dust(ctx, B, cam, dt);
+      ctx.globalAlpha = 1;
+    }
+
+    // Behind the ledges, in front of the parallax. It fades with the monument
+    // pull-back like the rest of the atmosphere: at full zoom the tower is a
+    // portrait of the bodies in it, and a skyline drawn across that is clutter.
+    if (depth > 0.01) {
+      ctx.globalAlpha = depth;
+      this._landmarks(ctx, B, cam, sim);
       ctx.globalAlpha = 1;
     }
 
@@ -681,12 +697,273 @@ export class Renderer {
   }
 
   /**
+   * THE TOWER'S NOUNS.
+   *
+   * One structure per biome, drawn behind the ledges and in front of the
+   * parallax bands, in world units so it zooms with everything else. It has no
+   * collision, the generator does not know it exists, and nothing about a route
+   * changes because one is here — see `landmarkOf` for why that is the whole
+   * safety argument rather than an implementation detail.
+   *
+   * Six shapes, one per biome, each a silhouette that says what this place is
+   * in the time it takes to look at it: a collapsed stair, a lattice mast, a
+   * root system, a hanging chain, a furnace mouth, a frozen fall. They are
+   * drawn as strokes rather than fills, because a filled mass at this size
+   * competes with the ledges for the eye and the ledges have to win.
+   *
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {{y: number, viewH: number}} cam
+   * @param {Sim} sim
+   */
+  _landmarks(ctx, B, cam, sim) {
+    const L = FEEL.landmark;
+    const lo = cam.y - cam.viewH, hi = cam.y + cam.viewH;
+    landmarksIn(lo, hi, sim.world.seed, this._marks);
+    if (!this._marks.length) return;
+
+    const sc = this.scale;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < this._marks.length; i++) {
+      const m = this._marks[i];
+      // Fade with distance so a landmark ARRIVES rather than popping in at the
+      // edge of the view, and so two of them never fight at a biome border.
+      const d = Math.abs(m.y - cam.y);
+      const fade = clamp(1 - (d - L.spanU * 0.5) / L.fadeU, 0, 1);
+      if (fade <= 0.02) continue;
+      ctx.globalAlpha = L.alpha * fade;
+      ctx.strokeStyle = rgb(B.rock, 1);
+      ctx.lineWidth = Math.max(1, L.lineU * sc);
+      ctx.save();
+      ctx.translate(this.X(m.x), this.Y(m.y));
+      this._landmarkPath(ctx, m, L.widthU * sc, L.spanU * sc, B);
+      ctx.restore();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  /**
+   * One shape, centred on the origin, `w` by `h` in device pixels. Everything
+   * here is a stroked path and a handful of trig — no gradients, no per-element
+   * fills, no allocation — because this draws every frame underneath a scene
+   * that already has a frame budget.
+   *
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {{kind: number, phase: number}} m
+   * @param {number} w
+   * @param {number} h
+   * @param {BiomeSlot} B
+   */
+  _landmarkPath(ctx, m, w, h, B) {
+    const n = FEEL.landmark.detail;
+    const hw = w * 0.5, hh = h * 0.5;
+    const ph = m.phase;
+
+    switch (m.kind) {
+      // ASH — A COLLAPSED STAIR. It went somewhere once.
+      //
+      // The first draft drew treads as detached L-brackets scattered along a
+      // diagonal and it read as debris, not as a stair. A stair is legible only
+      // as ONE CONTINUOUS ZIGZAG — riser, tread, riser, tread — so this walks a
+      // single polyline up and to the right, and the collapse is a real break
+      // in that line with the upper flight offset sideways from the lower one.
+      // The gap is the thing worth drawing; it needs the intact run either side
+      // of it to be a gap at all.
+      case 0: {
+        const steps = n + 3;
+        const gone = 2 + ((ph * 3) | 0);           // which step the flight fails at
+        const rise = h / steps, run = w * 0.66 / steps;
+        /**
+         * @param {number} from @param {number} to
+         * @param {number} x0 @param {number} y0
+         */
+        const flight = (from, to, x0, y0) => {
+          ctx.beginPath();
+          let x = x0, y = y0;
+          ctx.moveTo(x, y);
+          for (let i = from; i < to; i++) {
+            y -= rise;  ctx.lineTo(x, y);          // riser
+            x += run;   ctx.lineTo(x, y);          // tread
+          }
+          ctx.stroke();
+          return { x, y };
+        };
+        const lower = flight(0, gone, -hw * 0.72, hh);
+        // The upper flight survived, out of line with what used to carry it.
+        const upX = lower.x + run * 2.6, upY = lower.y - rise * 2.2;
+        flight(gone + 1, steps, upX, upY);
+        // The stringer that used to run under the whole thing, snapped.
+        ctx.beginPath();
+        ctx.moveTo(-hw * 0.72, hh);
+        ctx.lineTo(lower.x, lower.y + rise * 0.9);
+        ctx.moveTo(upX, upY + rise * 0.9);
+        ctx.lineTo(upX + run * (steps - gone), upY - rise * (steps - gone) + rise);
+        ctx.stroke();
+        break;
+      }
+
+      // SIGNAL — A LATTICE MAST, still lit.
+      case 1: {
+        /** @param {number} t */
+        const taper = (t) => hw * 0.30 * (1 - t * 0.72);
+        ctx.beginPath();
+        ctx.moveTo(-taper(0), hh); ctx.lineTo(-taper(1), -hh);
+        ctx.moveTo(taper(0), hh); ctx.lineTo(taper(1), -hh);
+        for (let i = 0; i <= n; i++) {
+          const t = i / n, y = hh - t * h, a = taper(t);
+          ctx.moveTo(-a, y); ctx.lineTo(a, y);
+          if (i < n) {
+            const t2 = (i + 1) / n, y2 = hh - t2 * h, a2 = taper(t2);
+            ctx.moveTo(-a, y); ctx.lineTo(a2, y2);
+          }
+        }
+        // Guy-wires to the ground, which is what makes it read as a mast and
+        // not as a ladder.
+        ctx.moveTo(-taper(0.72), hh - h * 0.72); ctx.lineTo(-hw, hh);
+        ctx.moveTo(taper(0.72), hh - h * 0.72); ctx.lineTo(hw, hh);
+        ctx.stroke();
+        // The lamp. The one filled thing in any of these shapes, because a
+        // light at the top of a mast is the whole reason a mast is drawn.
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = rgb(B.accent, 0.5);
+        ctx.beginPath();
+        ctx.arc(0, -hh, Math.max(1.5, w * 0.018), 0, TAU);
+        ctx.fill();
+        ctx.restore();
+        break;
+      }
+
+      // BLOOM — A ROOT SYSTEM. It has to come FROM somewhere.
+      //
+      // The first draft drew parallel strands from edge to edge and they read as
+      // cables. Roots read as roots when they converge to a single mass at the
+      // top and divide on the way down, so this draws a trunk, splits it, and
+      // splits the splits.
+      case 2: {
+        ctx.beginPath();
+        ctx.moveTo(0, -hh);
+        ctx.lineTo(0, -hh + h * 0.18);
+        const forks = Math.max(3, (n / 2) | 0);
+        for (let i = 0; i < forks; i++) {
+          const t = forks === 1 ? 0.5 : i / (forks - 1);
+          const spread = (t - 0.5) * w * 0.92;
+          const wob = Math.sin((t + ph) * 7.0) * w * 0.07;
+          // trunk -> primary
+          ctx.moveTo(0, -hh + h * 0.18);
+          ctx.bezierCurveTo(spread * 0.25 + wob, -hh + h * 0.42,
+                            spread * 0.80 - wob, hh - h * 0.30,
+                            spread, hh);
+          // primary -> a fine root that leaves it half way down
+          const bx = spread * 0.62, by = hh - h * 0.46;
+          ctx.moveTo(bx, by);
+          ctx.quadraticCurveTo(bx + wob * 1.6, by + h * 0.20,
+                               bx + (t < 0.5 ? -1 : 1) * w * 0.14, hh - h * 0.06);
+        }
+        ctx.stroke();
+        break;
+      }
+
+      // VOID — A CHAIN, and whatever it is holding is out of sight.
+      case 3: {
+        const link = h / (n * 2);
+        ctx.beginPath();
+        for (let i = 0; i < n * 2; i++) {
+          const y = -hh + i * link;
+          const sway = Math.sin((i * 0.5 + ph * 6)) * w * 0.05;
+          ctx.ellipse(sway, y + link * 0.5, w * 0.045, link * 0.52,
+                      0, 0, TAU);
+        }
+        ctx.stroke();
+        // The ring it ends in.
+        ctx.beginPath();
+        ctx.arc(Math.sin((n + ph * 6)) * w * 0.05, hh, w * 0.10, 0, TAU);
+        ctx.stroke();
+        break;
+      }
+
+      // CINDER — A FURNACE MOUTH.
+      case 4: {
+        ctx.beginPath();
+        ctx.moveTo(-hw * 0.8, hh);
+        ctx.lineTo(-hw * 0.8, hh - h * 0.28);
+        ctx.quadraticCurveTo(0, -hh, hw * 0.8, hh - h * 0.28);
+        ctx.lineTo(hw * 0.8, hh);
+        ctx.stroke();
+        // Courses of brick, kept strictly INSIDE the arch so they read as
+        // masonry rather than as scanlines laid across the screen — which is
+        // exactly how they read while the shape was wider than the glass.
+        ctx.beginPath();
+        for (let i = 1; i < n; i++) {
+          const t = i / n;
+          const y = hh - t * h * 0.72;
+          const spanX = hw * 0.78 * Math.sqrt(Math.max(0, 1 - t * t * 0.94));
+          if (spanX < w * 0.04) continue;
+          ctx.moveTo(-spanX, y); ctx.lineTo(spanX, y);
+          // A perpend every other course, so the courses are bricks and not
+          // stripes.
+          if (i % 2 === 0) {
+            const px2 = spanX * 0.45;
+            ctx.moveTo(-px2, y); ctx.lineTo(-px2, y + h * 0.72 / n);
+            ctx.moveTo(px2, y); ctx.lineTo(px2, y + h * 0.72 / n);
+          }
+        }
+        ctx.stroke();
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = rgb(B.accent, 0.16);
+        ctx.beginPath();
+        ctx.moveTo(-hw * 0.62, hh);
+        ctx.quadraticCurveTo(0, -hh * 0.55, hw * 0.62, hh);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        break;
+      }
+
+      // GLACIER — A FROZEN FALL, mid-pour.
+      //
+      // Stroked lines of constant weight read as pipes. Ice reads as ice when it
+      // TAPERS, so each column is a filled triangle from the lip down to a
+      // point, with the strokes kept only for the lip it poured over.
+      default: {
+        ctx.save();
+        ctx.fillStyle = ctx.strokeStyle;
+        for (let i = 0; i < n; i++) {
+          const t = i / (n - 1);
+          const x = (t - 0.5) * w * 0.92;
+          const len = h * (0.35 + 0.65 * Math.abs(Math.sin((t + ph) * 5.1)));
+          const halfW = w * 0.030 * (0.5 + Math.abs(Math.sin((t + ph * 2) * 3.3)));
+          const lean = Math.sin((t + ph) * 3.0) * w * 0.02;
+          ctx.beginPath();
+          ctx.moveTo(x - halfW, -hh);
+          ctx.lineTo(x + halfW, -hh);
+          ctx.lineTo(x + lean, -hh + len);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+        // The lip it poured over, and the shelf behind it.
+        ctx.beginPath();
+        ctx.moveTo(-hw * 0.98, -hh);
+        ctx.lineTo(hw * 0.98, -hh);
+        ctx.moveTo(-hw * 0.72, -hh - h * 0.06);
+        ctx.lineTo(hw * 0.72, -hh - h * 0.06);
+        ctx.stroke();
+        break;
+      }
+    }
+  }
+
+  /**
    * The thread of light joining each corpse to the next in death order. It is
    * what makes a hundred separate failures read as one continuous history, and
    * it fades in as the camera pulls back so it never competes with the jump you
    * are about to make.
-   */
-  /**
+   *
    * @param {CanvasRenderingContext2D} ctx
    * @param {BiomeSlot} _B unused; the thread is always memory-gold
    * @param {Sim} sim
