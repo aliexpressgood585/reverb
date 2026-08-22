@@ -144,7 +144,21 @@ await page.touchscreen.tap(270, 480);
 await delay(300);
 
 // 1 — THE TOWER. The hook, with no explanation needed.
-await tower(90, 520);
+//
+// 90 bodies over 520 m made a THIN spine, and it read as empty: corpses older
+// than 25 deaths are MEMORY, so all but the top handful drew as faint gold
+// outline and the frame was mostly background. A real tower with a session in
+// it is denser than that. 190 over 430 m is the same game, photographed after
+// somebody has actually played it.
+//
+// And it holds three of the six landmarks, because a held structure is the one
+// thing in this game nobody would guess exists, and a listing image is where
+// you show what is in the box.
+await tower(190, 430);
+await page.evaluate(() => {
+  const { sim } = window.CAIRN;
+  sim.claimed.add(0); sim.claimed.add(1); sim.claimed.add(2);
+});
 await page.evaluate(() => window.CAIRN.monument(true));
 await delay(2600);
 // The share chip belongs to the game, not to the listing. It appears once the

@@ -254,17 +254,26 @@ await delay(300);
     ` (software rasteriser; a phone GPU is 20-40x faster)`);
 }
 
-// ── 5. and they are gone in the monument ──────────────────────────────────
+// ── 5. unheld ones are gone in the monument, held ones are not ───────────
 //
-// The monument is a portrait of the bodies in the tower. A skyline drawn across
-// it is clutter, and every other atmosphere layer already fades out with the
-// pull-back; this asserts the new one joins them instead of being the one thing
-// that stays.
+// The monument is a portrait of the bodies in the tower, so every atmosphere
+// layer fades out with the pull-back and a skyline drawn across it is clutter.
+// A HELD landmark is the exception and the exception is the point: it is not
+// scenery, it is something the player did that almost nobody knows is possible,
+// and this is the image they share.
+//
+// Both halves asserted against a measured noise floor, because two draws of an
+// unchanged scene are not identical here and a bare "they differ" would be
+// testing the rasteriser.
 {
   const r = await page.evaluate(() => {
     const { sim, renderer, camera, ui } = window.CAIRN;
     const F = window.CAIRN.FEEL;
+    sim.reset(true); sim.phase = 1; ui.started = true;
+    sim.world.generate(700);
+    const m = window.CAIRN.landmarkOf(1, sim.world.seed);
     camera.mon = 1; camera.monTarget = 1;
+    camera.y = m.y; camera.x = m.x;
     const frame = () => {
       renderer.draw(sim, camera, null, ui, 1 / 60, false);
       const cv = renderer.canvas;
@@ -274,23 +283,27 @@ await delay(300);
       for (let i = 0; i < px.length; i += 4) sum += px[i] + px[i + 1] + px[i + 2];
       return sum / (px.length / 4);
     };
-    // THE NOISE FLOOR FIRST. Two draws of the same scene are not bit-identical
-    // here — this rasteriser wobbles — so "identical" has to be measured against
-    // how much two frames differ when NOTHING changed, or the check is really
-    // testing the renderer's repeatability and calling it a landmark.
-    const keep = F.landmark.alpha;
+    sim.claimed.clear();
     const a1 = frame(), a2 = frame();
     const noise = Math.abs(a1 - a2);
+    const keep = F.landmark.alpha;
     F.landmark.alpha = 0;
-    const off = frame();
+    const unheldOff = frame();
     F.landmark.alpha = keep;
+    sim.claimed.add(1);
+    const heldOn = frame();
+    sim.claimed.clear();
     camera.mon = 0; camera.monTarget = 0;
-    return { on: +a2.toFixed(3), off: +off.toFixed(3), noise: +noise.toFixed(3) };
+    return { unheld: +a2.toFixed(3), unheldOff: +unheldOff.toFixed(3),
+             heldOn: +heldOn.toFixed(3), noise: +noise.toFixed(3),
+             floor: F.landmark.monHeld };
   });
-  const diff = Math.abs(r.on - r.off);
-  check(diff <= Math.max(0.02, r.noise * 1.5),
-    `at full monument pull-back the frame differs by ${diff.toFixed(3)} with and ` +
-    `without them, against a ${r.noise} noise floor between two identical draws`);
+  const gone = Math.abs(r.unheld - r.unheldOff);
+  const stays = Math.abs(r.heldOn - r.unheld);
+  check(gone <= Math.max(0.02, r.noise * 1.5) && stays > Math.max(0.05, r.noise * 3),
+    `at full pull-back an UNHELD landmark is gone (${gone.toFixed(3)} against a ` +
+    `${r.noise} noise floor) and a HELD one stays (${stays.toFixed(3)} brighter, ` +
+    `floor ${r.floor})`);
 }
 
 // ── 6. the secret: is it reachable, and is it findable? ───────────────────

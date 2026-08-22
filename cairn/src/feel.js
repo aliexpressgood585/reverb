@@ -563,6 +563,14 @@ export const FEEL = {
     heartU: 16,
     claimAlpha: 0.62,     // a held landmark is drawn in the living accent
     claimLightU: 26,      // and carries a light at its heart
+    // AND A HELD ONE STAYS IN THE MONUMENT.
+    //
+    // Every other atmosphere layer fades out with the pull-back because the
+    // monument is a portrait of the bodies in the tower and a skyline drawn
+    // across it is clutter. A HELD landmark is not scenery though — it is
+    // something the player did, on purpose, that almost nobody knows is
+    // possible. It belongs in the one image they share. Unheld ones still go.
+    monHeld: 0.34,
     claimPullMs: 1400,    // the camera steps back for a beat to let you see it
     claimPull: 0.42,
   },

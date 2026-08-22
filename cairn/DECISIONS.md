@@ -1064,3 +1064,31 @@ now give up `insideFade` (0.78) of their alpha at the centre, and the separation
 is back to **36.3**. The remaining cost is real and is the price of having
 scenery at all; the ledges and the bodies stay the readable layer, which was
 always the rule.
+
+---
+
+## 32. A held landmark stays in the monument. Nothing else does.
+
+Every atmosphere layer — parallax ridges, light shafts, dust, the enormous
+background height, and as of §30 the landmarks — fades out with the monument
+pull-back, because the monument is a portrait of the bodies in the tower and a
+skyline drawn across it is clutter (§6's "done when").
+
+A HELD landmark is the exception, and the exception is the whole point. It is
+not scenery. It is something the player did on purpose that almost nobody knows
+is possible, and the monument is the one image they share. So an unheld
+structure still vanishes at full pull-back and a held one never drops below
+`FEEL.landmark.monHeld`.
+
+This was found by making the store's hero screenshot hold three landmarks and
+discovering the change did nothing, because the shot is taken in monument view.
+The listing image was the thing that asked the design question.
+
+### The hero screenshot was selling a thinner game than exists
+
+90 bodies over 520 m. Corpses older than 25 deaths are MEMORY, so all but the
+top handful drew as faint gold outline and the frame was mostly background — an
+accurate picture of a tower nobody had really played. 190 bodies over 430 m is
+the same game photographed after somebody has actually played it, and with three
+structures lit through the spine it now shows the thing that is hardest to
+explain in words.

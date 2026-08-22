@@ -506,14 +506,14 @@ export class Renderer {
       ctx.globalAlpha = 1;
     }
 
-    // Behind the ledges, in front of the parallax. It fades with the monument
-    // pull-back like the rest of the atmosphere: at full zoom the tower is a
-    // portrait of the bodies in it, and a skyline drawn across that is clutter.
-    if (depth > 0.01) {
-      ctx.globalAlpha = depth;
-      this._landmarks(ctx, B, cam, sim);
-      ctx.globalAlpha = 1;
-    }
+    // Behind the ledges, in front of the parallax. Unheld ones fade out with
+    // the monument pull-back like the rest of the atmosphere — at full zoom the
+    // tower is a portrait of the bodies in it and a skyline across that is
+    // clutter. A HELD one stays, because it is not scenery: it is something the
+    // player did that almost nobody knows is possible, and this is the image
+    // they share. `_landmarks` decides per structure; `depth` goes in as a
+    // parameter rather than as a globalAlpha wrapped round the whole pass.
+    this._landmarks(ctx, B, cam, sim, depth);
 
     this._threads(ctx, B, sim);
     this._updrafts(ctx, B, sim);
@@ -715,8 +715,9 @@ export class Renderer {
    * @param {BiomeSlot} B
    * @param {{y: number, viewH: number}} cam
    * @param {Sim} sim
+   * @param {number} depth 1 while playing, 0 at full monument pull-back
    */
-  _landmarks(ctx, B, cam, sim) {
+  _landmarks(ctx, B, cam, sim, depth = 1) {
     const L = FEEL.landmark;
     const lo = cam.y - cam.viewH, hi = cam.y + cam.viewH;
     landmarksIn(lo, hi, sim.world.seed, this._marks);
@@ -743,7 +744,10 @@ export class Renderer {
       // with a light at its heart. Six of them exist and nothing anywhere says
       // so — see FEEL.landmark.heartU.
       const held = sim.claimed.has(Math.floor(m.y / BIOME_SPAN));
-      ctx.globalAlpha = (held ? L.claimAlpha : L.alpha) * near;
+      // Unheld: gone by full pull-back. Held: never below `monHeld`.
+      const mon = held ? Math.max(depth, L.monHeld) : depth;
+      if (mon <= 0.01) continue;
+      ctx.globalAlpha = (held ? L.claimAlpha : L.alpha) * near * mon;
       ctx.strokeStyle = rgb(held ? B.accent : B.rock, 1);
       ctx.lineWidth = Math.max(1, L.lineU * sc * (held ? 1.25 : 1));
       ctx.save();
@@ -751,7 +755,7 @@ export class Renderer {
       if (held) {
         const r = L.claimLightU * sc;
         const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
-        g.addColorStop(0, rgb(B.accent, 0.30 * near));
+        g.addColorStop(0, rgb(B.accent, 0.30 * near * mon));
         g.addColorStop(1, rgb(B.accent, 0));
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
