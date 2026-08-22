@@ -584,6 +584,20 @@ function drainEvents() {
     } else if (kind === EV.CRUMBLE) {
       audio.crumble();
       renderer.burst(e[i + 1], e[i + 2], 14);
+    } else if (kind === EV.CLAIM) {
+      // A STRUCTURE ANSWERED. Six of these exist in a lifetime of play and
+      // nothing in the game says they do. The camera steps back for a beat so
+      // the thing that just changed is impossible to miss — the same move the
+      // first-corpse beat makes, for the same reason, and with no text either.
+      audio.claim();
+      buzz([22, 50, 22, 50, 90]);
+      ui.bestFlash = 1;
+      renderer.burst(e[i + 2], e[i + 3], 26);
+      camera.monTop = Math.max(sim.best, sim.body.y, e[i + 3] + 80);
+      camera.monTarget = FEEL.landmark.claimPull;
+      setTimeout(() => { if (!ui.monument) camera.monTarget = 0; },
+                 FEEL.landmark.claimPullMs);
+      track(EVENTS.CLAIM, { band: e[i + 1], height: Math.round(e[i + 3]) });
     } else if (kind === EV.CLOSE) {
       // The game noticing something the player half-noticed. Time opens for a
       // beat, the room breathes in, and nothing is written anywhere.

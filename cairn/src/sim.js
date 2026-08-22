@@ -713,6 +713,13 @@ export class Sim {
     this.momentum = 0;
     /** Did the last death leave a body that buys a ledge? See `gainsFrom`. */
     this.deathMeant = false;
+    /**
+     * Biome bands whose landmark holds one of your bodies. History, like the
+     * corpses and the record — survives a death, saved, never reset by an
+     * attempt. See `FEEL.landmark.heartU`.
+     * @type {Set<number>}
+     */
+    this.claimed = new Set();
     /** Edge slack of the most recent landing, in units. */
     this._landSlack = Infinity;
     // A full body used as the scratch for predicted flight, allocated once.
@@ -1571,6 +1578,25 @@ export class Sim {
     // question the aim preview answered while the thumb was still down — so a
     // player who took the shot the ghost lit up gets told they were right.
     this.deathMeant = !!this.gainsFrom(b.peakX, b.peakY, b.takeoffX, b.takeoff);
+
+    // THE SECRET, and it is checked here because here is where the body's
+    // resting place is known and nowhere else is. Die inside the heart of a
+    // structure and it is yours — once, permanently, saved.
+    //
+    // No hint exists anywhere in the game. The key is the ghost: the aim
+    // preview draws the exact spot this corpse will occupy, so a player who
+    // has understood that preview has everything, and one who has not cannot
+    // stumble in. `landmarkOf` is a pure function of seed and band, so this
+    // costs one hash and two subtractions on a path that runs once per death.
+    const band = Math.floor(b.peakY / BIOME_SPAN);
+    if (band >= 0 && !this.claimed.has(band)) {
+      const m = landmarkOf(band, this.world.seed);
+      const dx = b.peakX - m.x, dy = b.peakY - m.y;
+      if (dx * dx + dy * dy <= FEEL.landmark.heartU * FEEL.landmark.heartU) {
+        this.claimed.add(band);
+        this.emit(EV.CLAIM, band, m.x, m.y);
+      }
+    }
     this.world.corpse(b.peakX, b.peakY - FEEL.tower.corpseH * 0.5,
                       rot, pose, this.time, this.deaths);
     this.deaths++;
@@ -1582,7 +1608,7 @@ export class Sim {
 
 export const EV = {
   LAUNCH: 0, LAND: 1, DEATH: 2, BEST: 3, BIOME: 4,
-  CRUMBLE_START: 5, CRUMBLE: 6, CLOSE: 7,
+  CRUMBLE_START: 5, CRUMBLE: 6, CLOSE: 7, CLAIM: 8,
 };
 
 /** Which kind of near-miss `EV.CLOSE` is reporting. */

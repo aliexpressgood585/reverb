@@ -1006,3 +1006,61 @@ The monument check asserted the frame is *identical* with and without landmarks
 at full pull-back, and read a 0.075 difference. Two draws of the same scene with
 nothing changed also differ by 0.075. The check now measures that floor first
 and compares against it.
+
+---
+
+## 31. Six secrets, and the key is a thing the game already shows you
+
+A game that teaches nothing in text is the ideal place for something nobody
+explains — but a secret is only worth building if it is *aimable*. A secret you
+find by luck is a slot machine; a secret you find by understanding is the thing
+people post about.
+
+**Leave a body inside the heart of a landmark and the structure answers.**
+Permanently, saved, six of them in a tower. Nothing anywhere says so.
+
+### Why it is findable without a hint
+
+The key is the ghost. Since §29 the aim preview draws the exact spot a corpse
+will come to rest, and lights it in the living accent when that body buys
+something. A player who has understood that preview already has everything
+needed to aim a death at a point in space. A player who has not cannot stumble
+in — and that is measured, not asserted:
+
+| | |
+|---|---|
+| hearts reachable by a real launch that dies there | **4 of 4** tested, from 29–57 u below |
+| accidental claims over 114 untargeted deaths | **1 (0.88%)** |
+
+Both numbers matter and the second is the one that would kill the feature if it
+were high. A secret the bot trips over while playing normally is not a secret,
+it is an unexplained mechanic. The reachability sweep uses the same `predict()`
+the aim preview draws with, because that is literally the tool the player uses.
+
+### It is history, so it is saved
+
+`sim.claimed` is a set of biome bands, persisted next to the corpses and the
+record. Not schema-versioned: it is an optional array that older code ignores
+and the loader tolerates being absent, so it needs no migration in either
+direction. Every band is range-checked on load the same way every corpse row is.
+
+The reload check asserts **both halves**, because acceptance test 8 once
+verified that corpses survive a reload without verifying they still hold weight,
+and they came back non-solid. So: the bands come back, AND the renderer still
+draws that landmark as held.
+
+### The recede, which was a bug the whole time
+
+A landmark was at FULL strength exactly when the player was in the middle of it.
+Backwards twice over. Artistically a structure should read as enormous on
+approach and become ambience once you are climbing through it. Practically its
+strokes were crossing the corpses at the one distance where telling FRESH from
+TOP from MEMORY matters most: **acceptance test 13's separation between
+neighbouring erosion stages fell from 49.2 to 4.8** with landmarks in.
+
+It still passed. That is the point worth recording — the gate was not the thing
+that caught this, the 10× drop in a number nobody was gating on was. Landmarks
+now give up `insideFade` (0.78) of their alpha at the centre, and the separation
+is back to **36.3**. The remaining cost is real and is the price of having
+scenery at all; the ledges and the bodies stay the readable layer, which was
+always the rule.

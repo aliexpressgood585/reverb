@@ -293,6 +293,162 @@ await delay(300);
     `without them, against a ${r.noise} noise floor between two identical draws`);
 }
 
+// ── 6. the secret: is it reachable, and is it findable? ───────────────────
+//
+// Two different questions and the second is the one that matters.
+//
+// REACHABLE asks whether the physics admits a death inside the heart at all —
+// a secret nobody can perform is a dead branch. It is answered by sweeping real
+// launches from the ledges below and asking where each one's apex lands, using
+// the same `predict` the aim preview draws, because the preview IS the key: a
+// player aims this by reading the ghost.
+//
+// FINDABLE asks whether it happens BY ACCIDENT, and the answer must be no. A
+// secret the bot trips over while playing normally is not a secret, it is a
+// mechanic nobody explained. So the accident rate is measured too, and a HIGH
+// number here would be the failure.
+{
+  const r = await page.evaluate(() => {
+    const { sim, predict } = window.CAIRN;
+    const F = window.CAIRN.FEEL;
+    const DEG = Math.PI / 180;
+    const arc = [];
+
+    sim.reset(true); sim.phase = 1;
+    sim.world.generate(700);
+    let reachable = 0, tested = 0;
+    const from = [];
+
+    for (let band = 0; band < 4; band++) {
+      const m = window.CAIRN.landmarkOf(band, sim.world.seed);
+      if (m.y > 650) break;
+      tested++;
+      // Every ledge inside one screen below the heart is a candidate perch.
+      const perches = sim.world.near(m.y - 170, m.y)
+        .filter((s) => !s.corpse && s.live && s.y + s.hh < m.y);
+      let hit = false;
+      for (const p of perches) {
+        if (hit) break;
+        const b = sim.body;
+        for (const edge of [-1, 0, 1]) {
+          if (hit) break;
+          b.x = b.px = p.x + edge * p.hw;
+          b.y = b.py = p.y + p.hh;
+          b.vx = b.vy = 0; b.grounded = true; b.standing = p;
+          b.onWall = 0; b.wallTimer = 0; b.coyote = F.coyoteTime;
+          b.takeoff = b.y; b.takeoffX = b.x; b.peakX = b.x; b.peakY = b.y;
+          b.hangTimer = 0;
+          for (let a = 20; a <= 160 && !hit; a += 2) {
+            for (let sp = F.launch.minSpeed; sp <= F.launch.maxSpeed && !hit; sp += 3) {
+              const land = predict(sim, Math.cos(a * DEG) * sp, Math.sin(a * DEG) * sp, arc);
+              if (land) continue;                       // it lands; no body left
+              const pk = sim.predictPeak;
+              if (!pk.dies) continue;
+              const dx = pk.x - m.x, dy = pk.y - m.y;
+              if (dx * dx + dy * dy <= F.landmark.heartU * F.landmark.heartU) {
+                hit = true;
+                from.push(+(m.y - (p.y + p.hh)).toFixed(1));
+              }
+            }
+          }
+        }
+      }
+      if (hit) reachable++;
+    }
+    return { tested, reachable, from, heart: F.landmark.heartU };
+  });
+  check(r.tested >= 3 && r.reachable === r.tested,
+    `the heart of ${r.reachable} of ${r.tested} landmarks can be reached by a ` +
+    `real launch that dies there — from ${r.from.join('/')}u below, inside a ` +
+    `${r.heart}u radius, found with the same predict() the ghost draws`);
+}
+
+// ── 7. ... and nobody trips over it ───────────────────────────────────────
+{
+  const r = await page.evaluate(() => {
+    const { sim } = window.CAIRN;
+    const F = window.CAIRN.FEEL;
+    // Every death the acceptance bot's style of play produces, over many
+    // attempts, and how many of them land in a heart without trying.
+    sim.reset(true); sim.phase = 1;
+    let deaths = 0, claims = 0;
+    let seed = 99;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return (seed % 10000) / 10000; };
+    for (let a = 0; a < 400; a++) {
+      const b = sim.body;
+      if (sim.phase !== 1) sim.respawn();
+      sim.launch(-60 + rnd() * 120, 40 + rnd() * 90);
+      for (let f = 0; f < 500; f++) {
+        const d0 = sim.deaths;
+        sim.tick(0);
+        if (sim.deaths > d0) { deaths++; break; }
+        if (b.grounded) break;
+      }
+      sim.events.length = 0;
+      claims = sim.claimed.size;
+    }
+    return { deaths, claims, heart: F.landmark.heartU };
+  });
+  const rate = r.deaths ? (100 * r.claims / r.deaths).toFixed(2) : '0';
+  check(r.deaths > 100 && r.claims <= 1,
+    `${r.deaths} untargeted deaths produced ${r.claims} accidental claim(s) ` +
+    `(${rate}%) — a secret has to be aimed at, not stumbled into`);
+}
+
+// ── 8. a claim is permanent, which means it survives a reload ─────────────
+//
+// Test 8 of the acceptance suite once checked that corpses survive a reload
+// without checking that they still HOLD WEIGHT, and they came back non-solid.
+// So this asserts both halves: the claim comes back, AND the renderer still
+// draws that landmark as held — which is the only thing a claim actually does.
+{
+  await page.evaluate(() => {
+    const { sim, Store } = window.CAIRN;
+    sim.reset(true); sim.phase = 1;
+    sim.claimed.clear();
+    sim.claimed.add(0);
+    sim.claimed.add(3);
+    sim.best = 260; sim.deaths = 9;
+    Store.save(sim);
+  });
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => !!window.CAIRN);
+  await page.touchscreen.tap(195, 500);
+  await delay(300);
+
+  const r = await page.evaluate(() => {
+    const { sim, renderer, camera, ui } = window.CAIRN;
+    const F = window.CAIRN.FEEL;
+    const held = [...sim.claimed].sort((a, b) => a - b);
+
+    // And it still DRAWS as held: park the camera on band 0's landmark and
+    // compare the frame against the same frame with the claim removed.
+    const m = window.CAIRN.landmarkOf(0, sim.world.seed);
+    ui.started = true; camera.mon = 0; camera.y = m.y; camera.x = m.x;
+    sim.world.generate(m.y + 300);
+    const frame = () => {
+      renderer.draw(sim, camera, null, ui, 1 / 60, false);
+      const cv = renderer.canvas;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      const px = g.getImageData(0, 0, cv.width, cv.height).data;
+      let sum = 0;
+      for (let i = 0; i < px.length; i += 4) sum += px[i] + px[i + 1] + px[i + 2];
+      return sum / (px.length / 4);
+    };
+    const a1 = frame(), a2 = frame();
+    const noise = Math.abs(a1 - a2);
+    sim.claimed.delete(0);
+    const plain = frame();
+    sim.claimed.add(0);
+    return { held, lit: +a2.toFixed(3), plain: +plain.toFixed(3),
+             noise: +noise.toFixed(3), heart: F.landmark.heartU };
+  });
+  const drawn = Math.abs(r.lit - r.plain);
+  check(r.held.join(',') === '0,3' && drawn > Math.max(0.05, r.noise * 2),
+    `bands [${r.held}] came back from a hard reload, and band 0 still DRAWS as ` +
+    `held — ${drawn.toFixed(3)} brighter than unheld, against a ${r.noise} noise floor`);
+}
+
 // A look at each one, for a human.
 for (const [i, name] of ['ash', 'signal', 'bloom', 'void', 'cinder', 'glacier'].entries()) {
   await page.evaluate((band) => {

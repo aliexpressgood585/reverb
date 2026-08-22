@@ -537,6 +537,34 @@ export const FEEL = {
     lineU: 1.5,           // stroke weight in world units, so it scales with zoom
     detail: 9,            // repeated elements per shape — keep the path cheap
     fadeU: 150,           // fades in over this much approach, so it arrives
+    // AND RECEDES AGAIN ONCE YOU ARE INSIDE IT.
+    //
+    // The first version was at FULL strength exactly when the player was in the
+    // middle of it, which is backwards twice over. Artistically, a structure
+    // reads as enormous while you approach and should become ambience once you
+    // are climbing through it. Practically, its strokes were crossing the
+    // corpses at the one distance where telling FRESH from TOP from MEMORY
+    // matters most — acceptance test 13's separation between neighbouring
+    // erosion stages fell from 49.2 to 4.8 with landmarks in, which is the
+    // readable layer losing to the scenery layer.
+    insideFade: 0.78,     // share of the alpha given up at the centre
+
+    // THE SECRET. Nothing says this and nothing ever will.
+    //
+    // Leave a body within `heartU` of a landmark's anchor and the structure
+    // answers — permanently, in your tower, saved. There are six of them and
+    // the monument shows which ones you hold.
+    //
+    // It is aimable rather than lucky BECAUSE of the ghost: the aim preview
+    // already draws the exact spot the corpse will come to rest (§29), so a
+    // player who has noticed that has everything they need and a player who has
+    // not will never stumble into it. That is the whole design — a secret whose
+    // key is a thing the game already shows you and never mentions.
+    heartU: 16,
+    claimAlpha: 0.62,     // a held landmark is drawn in the living accent
+    claimLightU: 26,      // and carries a light at its heart
+    claimPullMs: 1400,    // the camera steps back for a beat to let you see it
+    claimPull: 0.42,
   },
 
   // ------------------------------------------------------------------- misc

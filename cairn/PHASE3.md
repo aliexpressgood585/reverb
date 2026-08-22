@@ -217,6 +217,18 @@ against a ~0.04 ms noise floor). DECISIONS §30.
 
 ---
 
+## 4d — A secret nobody explains. DONE — `cairn-landmark-check.mjs` 6-8
+
+Leave a body inside the heart of a landmark and the structure answers —
+permanently, saved, six per tower, and nothing anywhere says so. The key is the
+ghost: the aim preview already draws exactly where a corpse will come to rest,
+so a player who reads it can aim a death at a point in space, and one who cannot
+will never stumble in. Measured: **4 of 4 hearts reachable** by a real launch
+that dies there, and **1 accidental claim in 114 untargeted deaths (0.88%)**.
+DECISIONS §31.
+
+---
+
 ## 5 — Daily Climb. DONE — `scripts/cairn-daily-check.mjs`
 
 One seed per UTC date, derived from the date rather than stored, so the tower is

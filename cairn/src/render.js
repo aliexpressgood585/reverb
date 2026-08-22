@@ -1,4 +1,4 @@
-import { FEEL, COLUMN, BIOMES, biomeAt, newBiomeSlot, MEMORY_GOLD } from './feel.js';
+import { FEEL, COLUMN, BIOME_SPAN, BIOMES, biomeAt, newBiomeSlot, MEMORY_GOLD } from './feel.js';
 import { landmarksIn } from './sim.js';
 import { makeRng, erosionOf, EROSION } from './sim.js';
 
@@ -732,12 +732,34 @@ export class Renderer {
       // edge of the view, and so two of them never fight at a biome border.
       const d = Math.abs(m.y - cam.y);
       const fade = clamp(1 - (d - L.spanU * 0.5) / L.fadeU, 0, 1);
-      if (fade <= 0.02) continue;
-      ctx.globalAlpha = L.alpha * fade;
-      ctx.strokeStyle = rgb(B.rock, 1);
-      ctx.lineWidth = Math.max(1, L.lineU * sc);
+      // ... and recedes again once you are inside it. Full strength at the
+      // centre put the scenery on top of the corpses at exactly the distance
+      // where reading their erosion stage matters most.
+      const inside = clamp(1 - d / (L.spanU * 0.5), 0, 1);
+      const near = fade * (1 - inside * L.insideFade);
+      if (near <= 0.02) continue;
+      // A HELD LANDMARK ANSWERS. One of your bodies is inside it, so it stops
+      // being rock the colour of rock and takes the living accent, brighter,
+      // with a light at its heart. Six of them exist and nothing anywhere says
+      // so — see FEEL.landmark.heartU.
+      const held = sim.claimed.has(Math.floor(m.y / BIOME_SPAN));
+      ctx.globalAlpha = (held ? L.claimAlpha : L.alpha) * near;
+      ctx.strokeStyle = rgb(held ? B.accent : B.rock, 1);
+      ctx.lineWidth = Math.max(1, L.lineU * sc * (held ? 1.25 : 1));
       ctx.save();
       ctx.translate(this.X(m.x), this.Y(m.y));
+      if (held) {
+        const r = L.claimLightU * sc;
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+        g.addColorStop(0, rgb(B.accent, 0.30 * near));
+        g.addColorStop(1, rgb(B.accent, 0));
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = g;
+        ctx.fillRect(-r, -r, r * 2, r * 2);
+        ctx.restore();
+      }
       this._landmarkPath(ctx, m, L.widthU * sc, L.spanU * sc, B);
       ctx.restore();
     }

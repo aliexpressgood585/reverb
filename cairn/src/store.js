@@ -150,6 +150,12 @@ export function save(sim) {
       // localStorage entry parses as valid JSON surprisingly often.
       n: trim.length / FIELDS,
       corpses: trim,
+      // THE HELD LANDMARKS. Not schema-versioned, on purpose: it is an optional
+      // array that older code ignores and the loader below tolerates being
+      // absent, so it needs no migration in either direction. A claim is
+      // permanent (FEEL.landmark.heartU) and permanent has to mean across a
+      // reload or it means nothing.
+      held: [...sim.claimed].filter((b) => Number.isFinite(b) && b >= 0 && b < 4096),
     });
 
     // Demote the current save to the backup slot before overwriting it, but only
@@ -221,6 +227,17 @@ export function load(sim) {
 
   sim.best = Number.isFinite(+d.best) ? Math.max(0, +d.best) : 0;
   sim.deaths = Number.isFinite(+d.deaths) ? Math.max(0, d.deaths | 0) : 0;
+
+  // Held landmarks. Absent in every save written before they existed, so the
+  // guard is the migration. Each band is range-checked the same way every
+  // corpse row is: one bad number costs one landmark, never the tower.
+  sim.claimed.clear();
+  if (Array.isArray(d.held)) {
+    for (const raw of d.held) {
+      const b = +raw;
+      if (Number.isFinite(b) && b >= 0 && b < 4096) sim.claimed.add(b | 0);
+    }
+  }
 
   // Every row is checked before it reaches the world. A single bad number costs
   // one body, never the tower — and never the collision buckets.

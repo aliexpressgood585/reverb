@@ -70,6 +70,7 @@ export const EVENTS = /** @type {const} */ ({
   MODE: 'mode',                   // { daily }
   MONUMENT: 'monument',
   MONUMENT_REVEAL: 'monument_reveal', // { at, bodies } the game opened it, not the player
+  CLAIM: 'claim',                 // { band, height } a landmark answered
   AD_OFFERED: 'ad_offered',       // { placement }
   AD_SHOWN: 'ad_shown',           // { placement }
   AD_REWARDED: 'ad_rewarded',     // { placement }

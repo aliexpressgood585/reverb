@@ -412,6 +412,44 @@ export class Audio {
     n.start(); n.stop(t + 0.7);
   }
 
+  /**
+   * A STRUCTURE ANSWERS. The largest sound in the game, and it should be —
+   * six of these exist in a lifetime of play and nothing tells you they do.
+   *
+   * A struck bell rather than a fanfare: a low fundamental with two inharmonic
+   * partials over it and a very long tail, so it rings out under whatever the
+   * player does next instead of interrupting them.
+   */
+  claim() {
+    const L = this._live();
+    if (!L || this.muted) return;
+    const c = L.c;
+    const t = c.currentTime;
+    // Fundamental, twelfth, and a partial slightly off the octave — the third
+    // one is what makes it metal instead of an organ.
+    for (const [f, g0, dur] of [[110, 0.20, 4.2], [330, 0.11, 3.4], [842, 0.055, 2.6]]) {
+      const o = c.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f, t);
+      // Struck bodies go slightly flat as they ring down.
+      o.frequency.exponentialRampToValueAtTime(f * 0.988, t + dur);
+      const g = c.createGain();
+      this._env(g, g0, 0.004, dur);
+      o.connect(g); g.connect(L.m);
+      o.start(); o.stop(t + dur + 0.4);
+    }
+    // The strike itself.
+    const n = this._noise(0.12, c);
+    const f2 = c.createBiquadFilter();
+    f2.type = 'bandpass';
+    f2.frequency.setValueAtTime(1800, t);
+    f2.Q.value = 0.9;
+    const ng = c.createGain();
+    this._env(ng, 0.09, 0.001, 0.12);
+    n.connect(f2); f2.connect(ng); ng.connect(L.m);
+    n.start(); n.stop(t + 0.3);
+  }
+
   crumbleWarn() {
     const L = this._live();
     if (!L || this.muted) return;
