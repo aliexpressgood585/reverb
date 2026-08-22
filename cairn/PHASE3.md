@@ -375,16 +375,38 @@ cheapens the tone.
 
 ## Standing engineering debts
 
-Small, but they will bite:
+**Three of the four debts this section listed were already paid and it had not
+noticed.** A debt list with stale entries is a list nobody reads, so they are
+retired here with the numbers that retired them (`npm run profile`, 3-minute
+soak, this container).
 
-- **No 4× throttled mobile profile has ever been run.** Test 4 measures CPU
-  only and says so. The debug overlay (triple-tap top-left) is the only place a
-  real number exists.
-- **No heap profile of the frame loop.** Pools exist for particles, rings,
-  trail, dust and solids, and scratch bodies are allocated once — designed for,
-  never verified.
-- **Persistence has a schema version but no migration path and no corruption
-  recovery.** Losing a player's tower is the worst possible bug in this game.
-  Write the backup and the recovery before the format ever changes.
-- **`Store` keeps the most recent 600 corpses.** Fine today; decide what
-  Monument View does at 5,000.
+| the old debt | actual state |
+|---|---|
+| "no 4x throttled mobile profile has ever been run" | **paid.** `cairn-profile.mjs` throttles CPU 4x via CDP. A 60 Hz frame at 4x with 200 bodies costs **1.50 ms**, 9.0% of the 16.67 ms budget, before the GPU grade. |
+| "no heap profile of the frame loop" | **paid.** 10,800 frames, 300 bodies, 202 launches, 58 deaths: **45 B/frame retained** after GC, 0 live particles at the end. |
+| "schema version but no migration path and no corruption recovery" | **paid.** `SCHEMA = 2` with a real v1→v2 migration, a backup slot demoted only when the current save validates, per-row range checks on load, and `loadStats` reporting which slot answered and how many rows were dropped. |
+| "`Store` keeps 600 corpses — decide what Monument View does at 5,000" | **answered.** It cannot reach 5,000; the save trims to the most recent 600 and the monument renders 220 at 2.21 ms/frame. 600 is the decision. |
+
+Also measured and worth keeping visible: the whole game is **37.5 KB gzipped**
+(1.79% of the 2 MB budget) and reaches interactive in **604 ms** on a simulated
+1.6 Mbps / 150 ms link.
+
+### What is actually open
+
+- **45 B/frame is small but it is not zero**, and it extrapolates to ~9 MB an
+  hour. That is harmless on any phone made this decade, and the measurement
+  covers one second of wall time, so the extrapolation is weak in both
+  directions. Worth a longer soak before anyone calls it fixed or broken.
+- **Milestones** — the second half of §8. Cosmetic shard variants at meaningful
+  heights and death counts. Not built.
+- **Two-body routes are unmeasured.** "33 of 76 hard gaps are bridged by one
+  body" is a floor on how often the shortcut exists, not the number.
+- **Wall-launch aim tolerance is unmeasured.** The precision survey's sampled
+  jumps all leave from the ground, because that is what the bot does. The arc is
+  proven honest from a cling; how much slop a cling launch forgives is not known.
+- **No human has played the retuned tower.** Three bots with gaussian error are
+  not three people. Specifically outside reach here: whether anyone finds the
+  two-finger gesture, whether the six secrets are found and are fun to hunt, and
+  whether the difficulty reads as fair.
+- **The Android SDK and the Play account** — `BLOCKED.md`, neither a code
+  problem.

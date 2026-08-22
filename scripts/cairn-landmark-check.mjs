@@ -408,6 +408,59 @@ await delay(300);
     `(${rate}%) — a secret has to be aimed at, not stumbled into`);
 }
 
+// ── 7b. the structure answers the aim before the death ────────────────────
+//
+// The risk `heartAt` exists to answer: six secrets with no hint anywhere can be
+// perfectly designed and still never be found. So while the aim is pointed at
+// an unclaimed heart the structure lights as though already held.
+//
+// Three states asserted, not two, because "it lights when aimed at" is
+// worthless if it also lights when aimed anywhere near — and the entry
+// condition (the aim genuinely reports a heart) is asserted separately from the
+// effect (the frame changed).
+{
+  const r = await page.evaluate(() => {
+    const { sim, renderer, camera, ui, predict } = window.CAIRN;
+    const F = window.CAIRN.FEEL;
+    sim.reset(true); sim.phase = 1; ui.started = true; ui.dead = 0;
+    sim.claimed.clear();
+    sim.world.generate(700);
+    const m = window.CAIRN.landmarkOf(1, sim.world.seed);
+    camera.mon = 0; camera.y = m.y; camera.x = m.x;
+
+    const pk = sim.predictPeak;
+    const frame = () => {
+      renderer.draw(sim, camera, null, ui, 1 / 60, false);
+      const cv = renderer.canvas;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      const px = g.getImageData(0, 0, cv.width, cv.height).data;
+      let sum = 0;
+      for (let i = 0; i < px.length; i += 4) sum += px[i] + px[i + 1] + px[i + 2];
+      return sum / (px.length / 4);
+    };
+
+    // The entry condition, asked of the sim rather than assumed: dead centre
+    // reports the band, and a point just outside the radius reports nothing.
+    const inHeart = sim.heartAt(m.x, m.y);
+    const outside = sim.heartAt(m.x + F.landmark.heartU * 1.6, m.y);
+
+    pk.dies = false; pk.heart = -1;
+    const a1 = frame(), a2 = frame();
+    const noise = Math.abs(a1 - a2);
+    pk.heart = 1;
+    const lit = frame();
+    pk.heart = -1;
+    return { inHeart, outside, dark: +a2.toFixed(3), lit: +lit.toFixed(3),
+             noise: +noise.toFixed(3), r: F.landmark.heartU };
+  });
+  const answered = Math.abs(r.lit - r.dark);
+  check(r.inHeart === 1 && r.outside === -1
+        && answered > Math.max(0.05, r.noise * 3),
+    `the sim reports the heart at dead centre and nothing ${(r.r * 1.6).toFixed(0)}u ` +
+    `out; aiming into it brightens the structure by ${answered.toFixed(3)} ` +
+    `against a ${r.noise} noise floor`);
+}
+
 // ── 8. a claim is permanent, which means it survives a reload ─────────────
 //
 // Test 8 of the acceptance suite once checked that corpses survive a reload

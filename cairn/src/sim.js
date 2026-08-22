@@ -754,7 +754,11 @@ export class Sim {
      * Where this launch ends, and — when it ends in a death — whether the body
      * it leaves is worth leaving. See `gainsFrom`.
      */
-    this.predictPeak = { x: 0, y: 0, dies: false, gains: /** @type {Solid|null} */ (null) };
+    this.predictPeak = {
+      x: 0, y: 0, dies: false, gains: /** @type {Solid|null} */ (null),
+      /** Biome band whose unclaimed heart this body would land in, or -1. */
+      heart: -1,
+    };
     // A second scratch body, for proving routes while the player is in the air.
     this._probe = newBody();
     /**
@@ -1465,6 +1469,36 @@ export class Sim {
     return best;
   }
 
+  /**
+   * WOULD A BODY RESTING HERE BE INSIDE THE HEART OF A STRUCTURE?
+   *
+   * Six secrets exist and nothing in the game says so (§31), which is the point
+   * and was also a real risk: a secret whose key is "notice the ghost, then aim
+   * a death at a specific point in a structure you have no reason to think is
+   * special" can be perfect and still never be found by anybody.
+   *
+   * This is the answer, and it is not a hint. The aim preview already reports
+   * what the body you are about to leave WOULD BE — dead weight, or a step that
+   * buys a ledge (§29). This adds the third thing it can be. The reply is the
+   * structure lighting up as though already held, for as long as the aim is on
+   * it, which is the same grammar and still not a word of text.
+   *
+   * It can only fire once the thumb is already within `heartU`, so it gives
+   * away nothing at a distance — it makes the last step legible, not the
+   * discovery. Claimed bands return -1: a held structure has nothing to offer.
+   *
+   * @param {number} x
+   * @param {number} y the apex, which is the corpse's surface
+   * @returns {number} the band, or -1
+   */
+  heartAt(x, y) {
+    const band = Math.floor(y / BIOME_SPAN);
+    if (band < 0 || this.claimed.has(band)) return -1;
+    const m = landmarkOf(band, this.world.seed);
+    const dx = x - m.x, dy = y - m.y;
+    return dx * dx + dy * dy <= FEEL.landmark.heartU * FEEL.landmark.heartU ? band : -1;
+  }
+
   /** @param {Solid} s */
   _land(s) {
     const b = this.body;
@@ -1614,14 +1648,15 @@ export class Sim {
     // has understood that preview has everything, and one who has not cannot
     // stumble in. `landmarkOf` is a pure function of seed and band, so this
     // costs one hash and two subtractions on a path that runs once per death.
-    const band = Math.floor(b.peakY / BIOME_SPAN);
-    if (band >= 0 && !this.claimed.has(band)) {
+    // The SAME question the aim preview answered while the thumb was down, so
+    // the structure that lit up is the structure that is claimed. Two copies of
+    // this test would be two tests that can disagree, and the day they did the
+    // game would light up a promise it then refused to keep.
+    const band = this.heartAt(b.peakX, b.peakY);
+    if (band >= 0) {
       const m = landmarkOf(band, this.world.seed);
-      const dx = b.peakX - m.x, dy = b.peakY - m.y;
-      if (dx * dx + dy * dy <= FEEL.landmark.heartU * FEEL.landmark.heartU) {
-        this.claimed.add(band);
-        this.emit(EV.CLAIM, band, m.x, m.y);
-      }
+      this.claimed.add(band);
+      this.emit(EV.CLAIM, band, m.x, m.y);
     }
     this.world.corpse(b.peakX, b.peakY - FEEL.tower.corpseH * 0.5,
                       rot, pose, this.time, this.deaths);
@@ -1703,6 +1738,7 @@ export function predict(sim, vx, vy, outArc) {
   const peak = sim.predictPeak;
   peak.dies = false;
   peak.gains = null;
+  peak.heart = -1;
   const ticks = Math.ceil(FEEL.aim.arcSeconds / DT);
   for (let i = 0; i < ticks; i++) {
     const r = sim._flight(p, 0);
@@ -1715,6 +1751,7 @@ export function predict(sim, vx, vy, outArc) {
       peak.x = p.peakX; peak.y = p.peakY; peak.dies = true;
       peak.gains = sim.gainsFrom(p.peakX, p.peakY, b.x,
         b.standing ? b.standing.y + b.standing.hh : b.y);
+      peak.heart = sim.heartAt(p.peakX, p.peakY);
       return null;
     }
     if (r) {

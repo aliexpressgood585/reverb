@@ -745,7 +745,11 @@ export class Renderer {
       // being rock the colour of rock and takes the living accent, brighter,
       // with a light at its heart. Six of them exist and nothing anywhere says
       // so — see FEEL.landmark.heartU.
-      const held = sim.claimed.has(Math.floor(m.y / BIOME_SPAN));
+      const band = Math.floor(m.y / BIOME_SPAN);
+      // Held, OR the aim is currently pointed at its heart — in which case it
+      // answers as though already held, for as long as the thumb stays there.
+      // The structure IS the reply; nothing is written. See DECISIONS §31.
+      const held = sim.claimed.has(band) || sim.predictPeak.heart === band;
       // Unheld: gone by full pull-back. Held: never below `monHeld`.
       const mon = held ? Math.max(depth, L.monHeld) : depth;
       if (mon <= 0.01) continue;
