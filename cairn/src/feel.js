@@ -575,6 +575,18 @@ export const FEEL = {
     claimPull: 0.42,
   },
 
+  // ----------------------------------------------------------------- ghost
+  //
+  // PHASE3 §8. Your record run, standing where it stood at the same LAUNCH
+  // NUMBER you are on — not at the same second. See DECISIONS §33 for why a
+  // clock race is the one shape this game cannot take.
+  ghost: {
+    alpha: 0.30,          // memory-gold and clearly not you
+    ease: 3.4,            // how fast it steps between its launch positions
+    trailU: 30,           // how far back its path is drawn from where it stands
+    fadeU: 120,           // fades out once it is this far off screen-centre
+  },
+
   // ------------------------------------------------------------------- misc
   bestLineFadeU: 90,      // how near the best-height marker must be to show
   deathToPlayMs: 900,     // budget for the death → next attempt transition

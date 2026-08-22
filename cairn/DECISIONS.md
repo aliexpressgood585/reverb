@@ -1092,3 +1092,51 @@ accurate picture of a tower nobody had really played. 190 bodies over 430 m is
 the same game photographed after somebody has actually played it, and with three
 structures lit through the spine it now shows the thing that is hardest to
 explain in words.
+
+---
+
+## 33. The ghost races your jumps, not your clock
+
+PHASE3 §8 asks for the best run replayed as a **translucent racer**. It is built,
+and it is not a racer against time. That is the one shape this game cannot take
+and it is worth saying exactly why.
+
+Aiming dilates time on purpose (`FEEL.aim.timeScale` is 0.15) and the entire
+loop is deliberation — the player is meant to hold a thumb still and read an arc.
+A ghost running against real seconds would be beaten, or would beat you, on **how
+long you thought**, not on how well you jumped. It would measure the wrong thing,
+and worse, it would pressure the player out of the one behaviour the game exists
+to reward.
+
+So the ghost is indexed by LAUNCH. At your seventh jump it stands where your best
+self stood at its seventh. That compares climbing, is immune to thinking time,
+and rewards exactly what the game rewards: fewer, better jumps.
+
+This is the second time the brief's literal wording lost to its intent, after the
+momentum launch bonus in §27. Both are recorded rather than quietly dropped.
+
+### Why the whole recorded path stays valid forever
+
+The shifting roof regenerates everything **above** `best` on every attempt, which
+would normally make a recorded path meaningless a few deaths later. It does not
+here, because the ghost is only ever replaced by a run that **set** the record:
+such a run finishes at or below the new `best`, so every ledge it touched is at
+or below the frontier and is therefore stable ground from then on.
+
+Which gives the ghost its ending for free. It runs out exactly at the record
+height and leaves you there — at the edge of the known world, which is the only
+honest place for it to stop.
+
+### Only a record run replaces it
+
+A ghost that updates on every death is a ghost of your **last** run, not your
+best, and chasing your last run is chasing nothing. Captured in `finishDeath`
+under the same `beat` test the record banner uses, and captured *before*
+`respawn`, which clears the path.
+
+### What the check has to hold
+
+That it steps on launches and not on the clock is the design claim, so it is the
+falsifiable one: 240 frames of pure time move it 0.000 u, and two launches move
+it 79.6 u. A ghost that never moved at all would pass the first half alone, which
+is why both halves are asserted.

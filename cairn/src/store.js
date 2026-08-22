@@ -156,6 +156,11 @@ export function save(sim) {
       // permanent (FEEL.landmark.heartU) and permanent has to mean across a
       // reload or it means nothing.
       held: [...sim.claimed].filter((b) => Number.isFinite(b) && b >= 0 && b < 4096),
+      // THE GHOST — where the record run stood at each of its launches. Two
+      // decimals is far finer than a body is wide, and the array is capped at
+      // 4096 numbers by the sim, so this cannot run away with the quota.
+      // Optional and unversioned for the same reason `held` is.
+      ghost: sim.ghostPath.map((v) => Math.round(v * 100) / 100),
     });
 
     // Demote the current save to the backup slot before overwriting it, but only
@@ -231,6 +236,18 @@ export function load(sim) {
   // Held landmarks. Absent in every save written before they existed, so the
   // guard is the migration. Each band is range-checked the same way every
   // corpse row is: one bad number costs one landmark, never the tower.
+  // The ghost. Pairs only — an odd-length array is a truncated write, and half
+  // a coordinate would put the ghost somewhere that never happened.
+  sim.ghostPath.length = 0;
+  if (Array.isArray(d.ghost) && d.ghost.length % 2 === 0) {
+    for (let i = 0; i < d.ghost.length && i < 4096; i += 2) {
+      const x = +d.ghost[i], y = +d.ghost[i + 1];
+      if (!Number.isFinite(x) || x < -COLUMN || x > COLUMN * 2) continue;
+      if (!Number.isFinite(y) || y < -64 || y > 1e6) continue;
+      sim.ghostPath.push(x, y);
+    }
+  }
+
   sim.claimed.clear();
   if (Array.isArray(d.held)) {
     for (const raw of d.held) {

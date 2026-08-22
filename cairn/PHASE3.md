@@ -347,7 +347,24 @@ crumbling hold — `crumbleMs` at 900 is a judgement, not a measurement.
 
 ---
 
-## 8 — Ghosts and milestones
+## 8 — Ghosts and milestones. GHOST DONE — `cairn-feel-check.mjs` 12-14
+
+**The ghost is built, and it races your JUMPS rather than your clock.** At your
+seventh launch it stands where your best self stood at its seventh. A race
+against real seconds is the one shape this game cannot take — aiming dilates
+time on purpose and the loop is deliberation, so a clock ghost would be decided
+by how long you thought rather than how well you jumped, and would pressure the
+player out of the behaviour the game exists to reward. DECISIONS §33.
+
+Its whole path stays valid forever because only a run that SET the record
+replaces it, and such a run finishes at or below the new best — so every ledge it
+touched is stable ground from then on. Which gives it its ending for free: it
+runs out exactly at the record height and leaves you at the frontier.
+
+**Milestones are NOT built.** The remaining half of this section — cosmetic
+procedural shard variants at meaningful heights and death counts — is untouched.
+
+### The brief, as it stood
 
 Replay the best run as a translucent racer on the same seed (free content,
 cheap). Purely cosmetic procedural shard variants at meaningful heights and

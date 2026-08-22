@@ -251,6 +251,19 @@ function finishDeath() {
   ui.dead = 0;
   const beat = sim.best > ui.bestAtRunStart + 0.5;
 
+  // THE GHOST IS THE RECORD RUN, captured here because `respawn` clears the
+  // path and this is the last moment it still describes the attempt that just
+  // ended. Only a run that beat the record replaces it — anything else and the
+  // ghost drifts down to whatever you did most recently, which is the opposite
+  // of the thing worth racing.
+  //
+  // Its whole path is valid forever after: the shifting roof only regenerates
+  // ABOVE `best`, and this run finished at or below the new best, so every
+  // ledge it touched is now stable ground. The ghost therefore ends exactly at
+  // the frontier and leaves you there — which is also the only honest place for
+  // it to stop.
+  if (beat) sim.ghostPath = sim.runPath.slice();
+
   // Bank the run BEFORE respawning, while the numbers still describe it.
   const apex = sim.body.peakY;
   Progress.record({

@@ -714,6 +714,28 @@ export class Sim {
     /** Did the last death leave a body that buys a ledge? See `gainsFrom`. */
     this.deathMeant = false;
     /**
+     * WHERE YOU WERE AT EACH LAUNCH THIS ATTEMPT, flat [x, y, ...].
+     *
+     * PHASE3 §8 asks for the best run replayed as a translucent racer. A race
+     * against the CLOCK is the one shape this game cannot take: aiming dilates
+     * time on purpose and the whole loop is deliberation, so a ghost racing in
+     * real seconds would be beaten or beat you on how long you THINK rather
+     * than on how well you jump. It would measure the wrong thing and it would
+     * pressure the player to stop doing the thing the game is for.
+     *
+     * So the ghost is indexed by LAUNCH, not by time. At your seventh jump it
+     * stands where your best self stood at its seventh. That is a comparison of
+     * climbing, immune to thinking time, and it rewards exactly what the game
+     * rewards: fewer, better jumps. See DECISIONS §33.
+     * @type {number[]}
+     */
+    this.runPath = [];
+    /**
+     * The same, for the run that set the record. Persisted; the ghost.
+     * @type {number[]}
+     */
+    this.ghostPath = [];
+    /**
      * Biome bands whose landmark holds one of your bodies. History, like the
      * corpses and the record — survives a death, saved, never reset by an
      * attempt. See `FEEL.landmark.heartU`.
@@ -1047,6 +1069,7 @@ export class Sim {
     this._stand();
     this.runBest = 0;
     this.momentum = 0;
+    this.runPath.length = 0;
     this.phase = PHASE.PLAY;
   }
 
@@ -1144,6 +1167,9 @@ export class Sim {
     // position `_stepVerbs` drew it at.
     b.t = this.verbTime;
     this.buffered = null;
+    // Where this attempt was standing when it committed. Capped so a very long
+    // climb cannot grow the save without bound.
+    if (this.runPath.length < 4096) this.runPath.push(b.x, b.y);
     this.emit(EV.LAUNCH, Math.hypot(b.vx, b.vy));
     return true;
   }

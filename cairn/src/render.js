@@ -17,6 +17,7 @@ import { makeRng, erosionOf, EROSION } from './sim.js';
  * @property {boolean} started
  * @property {boolean} monument
  * @property {boolean} [daily]
+ * @property {number} [runLaunches] launches this attempt; the ghost's index
  */
 
 /**
@@ -527,6 +528,7 @@ export class Renderer {
     this._rings(ctx, B);
     this._parts(ctx, B);
     this._trail(ctx, B);
+    this._ghostRun(ctx, B, sim, ui, dt);
     this._player(ctx, B, sim, ui);
     if (input && input.aiming) this._aim(ctx, B, input, sim);
     this._bestLine(ctx, B, sim);
@@ -1400,6 +1402,82 @@ export class Renderer {
       ctx.stroke();
     }
     ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /**
+   * YOUR BEST RUN, STANDING WHERE IT STOOD AT THIS LAUNCH NUMBER.
+   *
+   * Not a clock race — see DECISIONS §33. It steps forward when YOU launch, so
+   * the read is "at your seventh jump, your best self was here", which compares
+   * climbing rather than deliberation and cannot punish a player for thinking.
+   *
+   * Drawn in memory-gold, hollow, and smaller than you: it must never for a
+   * moment be mistaken for the shard the player is steering. The path it took
+   * to get here trails behind it, which is what makes it read as a run rather
+   * than as a marker.
+   *
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} _B unused; a ghost is always memory-gold
+   * @param {Sim} sim
+   * @param {UiState} ui
+   * @param {number} dt
+   */
+  _ghostRun(ctx, _B, sim, ui, dt) {
+    const G = FEEL.ghost;
+    const p = sim.ghostPath;
+    if (!ui.started || p.length < 4) return;
+
+    // Its launch index is yours, clamped to how far it ever got. Standing on
+    // its own last position after it has run out is exactly right: that is
+    // where it died, and it is the frontier.
+    const n = p.length >> 1;
+    const i = Math.min((ui.runLaunches ?? 0) | 0, n - 1);
+    const tx = p[i * 2], ty = p[i * 2 + 1];
+
+    // Eased, so it steps between perches instead of teleporting.
+    let at = this._ghostAt;
+    if (!at) { at = this._ghostAt = [tx, ty]; }
+    const k = Math.min(1, dt * G.ease);
+    at[0] += (tx - at[0]) * k;
+    at[1] += (ty - at[1]) * k;
+    const gx = at[0], gy = at[1];
+
+    // Off screen by more than a fade's worth: nothing to draw.
+    const sy = this.Y(gy);
+    if (sy < -G.fadeU * this.scale || sy > this.h + G.fadeU * this.scale) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    // The path it took to get here.
+    ctx.strokeStyle = rgb(MEMORY_GOLD, G.alpha * 0.5);
+    ctx.lineWidth = Math.max(1, 1.1 * this.dpr);
+    ctx.beginPath();
+    let started = false;
+    for (let j = i; j >= 0; j--) {
+      const px = p[j * 2], py = p[j * 2 + 1];
+      if (gy - py > G.trailU) break;
+      if (!started) { ctx.moveTo(this.X(gx), this.Y(gy)); started = true; }
+      ctx.lineTo(this.X(px), this.Y(py));
+    }
+    if (started) ctx.stroke();
+
+    // The runner: hollow, and two thirds your size.
+    const hw = FEEL.body.w * 0.34 * this.scale;
+    const hh = FEEL.body.h * 0.34 * this.scale;
+    ctx.translate(this.X(gx), this.Y(gy) - hh);
+    ctx.beginPath();
+    ctx.moveTo(0, -hh);
+    ctx.lineTo(hw, 0);
+    ctx.lineTo(0, hh);
+    ctx.lineTo(-hw, 0);
+    ctx.closePath();
+    ctx.strokeStyle = rgb(MEMORY_GOLD, G.alpha * 2.2);
+    ctx.lineWidth = Math.max(1, 1.2 * this.dpr);
+    ctx.stroke();
+    ctx.fillStyle = rgb(MEMORY_GOLD, G.alpha * 0.45);
+    ctx.fill();
+    ctx.restore();
   }
 
   /**

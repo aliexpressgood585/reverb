@@ -542,6 +542,94 @@ await delay(300);
     `${r.meant} — the flag is not simply always on`);
 }
 
+// ── 12. the ghost steps with LAUNCHES, not with the clock ─────────────────
+//
+// The design claim of PHASE3 §8 as built (DECISIONS §33), and the one thing
+// that would quietly stop being true if anyone "fixed" it into a timer. Hold
+// the clock still for a long time with no launches and the ghost must not move;
+// launch once and it must. Both halves, because a ghost that never moves at all
+// passes the first half on its own.
+{
+  const r = await page.evaluate(() => {
+    const { sim, renderer, camera, ui, update } = window.CAIRN;
+    sim.reset(true); sim.phase = 1; ui.started = true; ui.dead = 0;
+    // A path with clearly separated rungs, so "did it move" is unambiguous.
+    sim.ghostPath = [50, 0, 50, 40, 50, 80, 50, 120];
+    ui.runLaunches = 0;
+    renderer._ghostAt = null;
+
+    const settle = () => { for (let i = 0; i < 90; i++) renderer._ghostRun(
+      renderer.ctx, { rock: [1, 1, 1], accent: [1, 1, 1] }, sim, ui, 1 / 60); };
+
+    settle();
+    const atStart = renderer._ghostAt ? renderer._ghostAt[1] : null;
+    // 240 frames of pure time. Nothing may move.
+    settle(); settle();
+    const afterTime = renderer._ghostAt ? renderer._ghostAt[1] : null;
+    // One launch.
+    ui.runLaunches = 2;
+    settle();
+    const afterLaunch = renderer._ghostAt ? renderer._ghostAt[1] : null;
+    ui.runLaunches = 0; renderer._ghostAt = null; sim.ghostPath = [];
+    return { atStart, afterTime, afterLaunch };
+  });
+  const stillOnClock = Math.abs(r.afterTime - r.atStart) < 0.01;
+  const movedOnLaunch = r.afterLaunch - r.afterTime > 30;
+  check(stillOnClock && movedOnLaunch,
+    `240 frames of clock moved the ghost ${(r.afterTime - r.atStart).toFixed(3)}u; ` +
+    `two launches moved it ${(r.afterLaunch - r.afterTime).toFixed(1)}u`);
+}
+
+// ── 13. only a RECORD run replaces it ─────────────────────────────────────
+//
+// A ghost that updates on every death is not a ghost of your best, it is a
+// ghost of your last — which is the opposite of the thing worth chasing. Driven
+// through the real death loop, not by assigning the field.
+{
+  const r = await page.evaluate(() => {
+    const { sim, update, ui } = window.CAIRN;
+    sim.reset(true); sim.phase = 1; ui.started = true; ui.dead = 0;
+    sim.ghostPath = [];
+
+    const attempt = (record) => {
+      ui.bestAtRunStart = sim.best;
+      if (record) sim.best += 50;                 // this attempt set a record
+      sim.launch(120, 30);
+      for (let i = 0; i < 900; i++) {
+        update(1 / 60);
+        if (sim.phase === 1 && sim.body.grounded && ui.dead === 0 && i > 60) break;
+      }
+      return sim.ghostPath.length;
+    };
+
+    const afterRecord = attempt(true);
+    const kept = sim.ghostPath.slice();
+    const afterPlain = attempt(false);
+    const same = kept.length === sim.ghostPath.length
+      && kept.every((v, i) => v === sim.ghostPath[i]);
+    return { afterRecord, afterPlain, same };
+  });
+  check(r.afterRecord > 0 && r.same,
+    `a record run stored a ${r.afterRecord / 2}-launch ghost, and a following ` +
+    `non-record run left it untouched`);
+}
+
+// ── 14. and it survives a reload ──────────────────────────────────────────
+{
+  await page.evaluate(() => {
+    const { sim, Store } = window.CAIRN;
+    sim.reset(true); sim.phase = 1;
+    sim.ghostPath = [12.5, 0, 44.25, 38.5, 71, 77.75];
+    sim.best = 120; sim.deaths = 4;
+    Store.save(sim);
+  });
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => !!window.CAIRN);
+  const r = await page.evaluate(() => ({ path: window.CAIRN.sim.ghostPath.slice() }));
+  check(r.path.join(',') === '12.5,0,44.25,38.5,71,77.75',
+    `the ghost came back from a hard reload intact: [${r.path.join(', ')}]`);
+}
+
 console.log('\n  NOT MEASURED HERE: whether a human who is told nothing goes on to');
 console.log('  find the two-finger gesture. That needs a human. Checks 7 and 8');
 console.log('  measure what the fix rests on — the view reaches a player who never');
