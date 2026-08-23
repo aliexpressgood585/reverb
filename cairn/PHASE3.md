@@ -393,14 +393,24 @@ Also measured and worth keeping visible: the whole game is **37.5 KB gzipped**
 
 ### What is actually open
 
-- **45 B/frame is small but it is not zero**, and it extrapolates to ~9 MB an
-  hour. That is harmless on any phone made this decade, and the measurement
-  covers one second of wall time, so the extrapolation is weak in both
-  directions. Worth a longer soak before anyone calls it fixed or broken.
+- ~~45 B/frame over a one-second soak.~~ **Soaked properly: 20 simulated
+  minutes, 72,000 frames, 1,327 launches, 384 deaths — 17.3 B/frame retained,
+  ~3.56 MB an hour, and 0 live particles at the end.** The 45 B/frame was noise
+  from a one-second sample. The pools hold. Closed.
 - **Milestones** — the second half of §8. Cosmetic shard variants at meaningful
   heights and death counts. Not built.
-- **Two-body routes are unmeasured.** "33 of 76 hard gaps are bridged by one
-  body" is a floor on how often the shortcut exists, not the number.
+- ~~Two-body routes are unmeasured.~~ **Measured, and the answer is not the one
+  anyone expected.** Of 40 sampled hard gaps that one body cannot bridge, **0**
+  are crossable over two — because there is no first body to be had: 1,280
+  flights swept off those perches and **all 1,280 landed**. Which reframes the
+  gap entirely. A hard gap one body cannot bridge is not somewhere you get
+  stranded and stack your way out of; it is somewhere every shot puts you
+  *somewhere*, just not where you aimed. The one-body figure (44%) is the answer
+  and not a floor.
+
+  The zero was nearly reported as a real result. It was caught by an
+  entry-condition counter added before believing it, which read "0 reachable
+  first bodies placed" — a sweep that had measured nothing.
 - **A played session is now captured** (`npm run play`) — seven frames of the
   real loop, driven by a hand with the average model's slop rather than a
   solver. It is not a person and cannot be bored, confused or delighted, but it

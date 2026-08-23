@@ -119,8 +119,11 @@ await page.evaluate(() => {
     for (let i = 0; i < 1200; i++) {
       update(1 / 60);
       if (sim.deaths > before) {
-        // Let the death beat and the respawn play out through the real timer.
-        for (let j = 0; j < 90; j++) update(1 / 60);
+        // STOP ON THE DEATH, not after it. The caller may want to photograph
+        // the body freezing at the apex — which is the single image this game
+        // is about — and running the 900 ms transition here first meant the
+        // frame that got captured was the respawn at 2 m with the record banner
+        // up. Honest, but not the picture the caption promised.
         return { died: true, thrown: !!shot.thrown };
       }
       if (sim.body.grounded && i > 20) {
@@ -151,8 +154,17 @@ for (let jump = 0; jump < 140; jump++) {
 
   if (r.died && !firstDeath) {
     firstDeath = true;
-    await delay(150);
-    await shot('02-first-death', 'the body it left, and the tower one stone taller');
+    await shot('02-first-death', 'the instant it freezes — this is the whole game');
+    // Then let the transition run, so the banner and the return to base are
+    // seen too. They are a different frame and deserve their own.
+    await page.evaluate(() => {
+      for (let j = 0; j < 110; j++) window.CAIRN.update(1 / 60);
+    });
+    await shot('02b-back-at-the-base', 'the record banner that does not stop you');
+  } else if (r.died) {
+    await page.evaluate(() => {
+      for (let j = 0; j < 110; j++) window.CAIRN.update(1 / 60);
+    });
   }
   if (r.onCorpse && !firstCorpse) {
     firstCorpse = true;

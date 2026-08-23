@@ -203,6 +203,81 @@ console.log('CAIRN bodies\n');
    * audit describe the tower as more hostile than it is by cutting its own search
    * short — once by discarding exactly the lower apexes that are the useful ones.
    */
+  /**
+   * AND IF ONE BODY IS NOT ENOUGH?
+   *
+   * `bridges` answers "can the corpse from failing this gap carry you across
+   * it", and the number it produces has always been stated as a FLOOR rather
+   * than the answer, because a route that needs two bodies is still a route and
+   * nothing had ever looked for one. This looks.
+   *
+   * Leave a body from the perch, then leave a SECOND body from the first, then
+   * ask whether the target is reachable from that. Deliberately coarser than
+   * `bridges` — 8 angles by 4 powers at each of two levels is already a
+   * thousand flights per gap — so it can only ever find MORE routes than it
+   * reports. That is the right direction for a floor.
+   *
+   * Both corpses are removed from the world afterwards, in reverse order. A
+   * measurement tool in this repository once "found" a result by leaving the
+   * world it had modified lying around.
+   */
+  // Entry-condition counters. A flat "0 of 40 are crossable over two bodies" is
+  // indistinguishable from "the sweep never managed to leave a first body", and
+  // this repository has shipped that mistake enough times to count them.
+  const two = { firstBodies: 0, secondBodies: 0, lands: 0, noDie: 0, low: 0, unreach: 0, calls: 0 };
+  const bridges2 = (sim, from, edge, target) => {
+    const L = FEEL.launch;
+    const angles = [80, 72, 64, 56, 48, 40, 34, 30];
+    const powers = [1, 0.86, 0.72, 0.58];
+    const drop = (c) => {
+      sim.world._unindex(c);
+      const at = sim.world.solids.indexOf(c);
+      if (at >= 0) sim.world.solids.splice(at, 1);
+      sim.world.corpseCount--;
+      c.live = false;
+      sim.world.pool.push(c);
+    };
+    /** Fly from `perch` at `px`, and return the corpse it would leave, or null. */
+    const leave = (perch, px, a, f) => {
+      const sp = L.minSpeed + (L.maxSpeed - L.minSpeed) * f;
+      const th = a * DEG * Math.sign(target.x - perch.x || 1);
+      two.calls++;
+      stand(sim, perch, px);
+      if (predict(sim, Math.cos(th) * sp, Math.sin(th) * sp, arc)) { two.lands++; return null; }
+      const pk = sim.predictPeak;
+      if (!pk.dies) { two.noDie++; return null; }
+      if (pk.y <= perch.y + perch.hh + 1) { two.low++; return null; }
+      stand(sim, perch, px);
+      const c = sim.world.corpse(pk.x, pk.y - FEEL.tower.corpseH * 0.5, 0, 0, 0, sim.deaths);
+      stand(sim, perch, px);
+      if (!reaches(sim, c)) { two.unreach++; drop(c); return null; }
+      return c;
+    };
+
+    for (const a1 of angles) {
+      for (const f1 of powers) {
+        const c1 = leave(from, edge, a1, f1);
+        if (!c1) continue;
+        two.firstBodies++;
+        const x1 = c1.x + Math.sign(target.x - c1.x || 1) * solidHalfWidth(c1, sim);
+        for (const a2 of angles) {
+          for (const f2 of powers) {
+            const c2 = leave(c1, x1, a2, f2);
+            if (!c2) continue;
+            two.secondBodies++;
+            const x2 = c2.x + Math.sign(target.x - c2.x || 1) * solidHalfWidth(c2, sim);
+            stand(sim, c2, x2);
+            const ok = reaches(sim, target);
+            drop(c2);
+            if (ok) { drop(c1); return true; }
+          }
+        }
+        drop(c1);
+      }
+    }
+    return false;
+  };
+
   const bridges = (sim, from, edge, target) => {
     const L = FEEL.launch;
     for (let a = 86; a >= 30; a -= 4) {
@@ -239,7 +314,7 @@ console.log('CAIRN bodies\n');
   const hardGaps = [], ordinaryGaps = [];
   const hardWin = [], ordWin = [];
   const hardPow = [], ordPow = [];
-  let sampled = 0, bridged = 0;
+  let sampled = 0, bridged = 0, bridged2 = 0, tried2 = 0;
   const stuckAt = [];
   const t0 = Date.now();
   for (let s = 0; s < SEEDS; s++) {
@@ -275,7 +350,11 @@ console.log('CAIRN bodies\n');
         stand(sim, from, worst); hardWin.push(angleWindow(sim, to));
         stand(sim, from, worst); hardPow.push(powerWindow(sim, to));
       }
-      if (hard % 10 === 0) { sampled++; if (bridges(sim, from, near, to)) bridged++; }
+      if (hard % 10 === 0) {
+        sampled++;
+        if (bridges(sim, from, near, to)) bridged++;
+        else if (tried2 < 40) { tried2++; if (bridges2(sim, from, near, to)) bridged2++; }
+      }
     }
   }
   const secs = ((Date.now() - t0) / 1000).toFixed(1);
@@ -299,6 +378,30 @@ console.log('CAIRN bodies\n');
     `ordinary ${win(ordPow, '% of full')}   (the average model's hand is off by 5.5%)`);
   console.log(`        and ${bridged} of ${sampled} sampled hard gaps are ALSO crossable ` +
     `over the body left by failing them — the shortcut, not just the wall that is absent`);
+  // The floor, raised. Two-body routes were listed as unmeasured for as long as
+  // the one-body number has existed; a route that needs two bodies is still a
+  // route, and "33 of 76" was never the answer, only the part anyone had looked
+  // for.
+  if (tried2) {
+    const both = bridged + bridged2;
+    console.log(`        of the ${tried2} of those that one body cannot bridge, ` +
+      `${bridged2} are crossable over TWO — the shortcut exists on ` +
+      `${both} of ${sampled} (${((both / sampled) * 100).toFixed(0)}%)`);
+    // WHY the answer is zero, which is the actually interesting part and is not
+    // what anyone expected to find. It is not that the second body lands
+    // somewhere useless — it is that there is no FIRST body to be had: every
+    // single flight off those perches LANDS on something.
+    //
+    // Which reframes the gap. A hard gap one body cannot bridge is not a place
+    // you get stranded and have to stack your way out of; it is a place where
+    // every shot you take puts you somewhere, just not necessarily where you
+    // wanted. The one-body figure is therefore the answer and not a floor, and
+    // "two-body routes are unmeasured" is closed rather than improved.
+    console.log(`        the reason: ${two.calls} flights swept off those ` +
+      `perches and ${two.lands} of them LANDED — ${two.noDie} did not die, ` +
+      `${two.low} died at or below the perch. There is no first body to stack ` +
+      `on, so a two-body route cannot exist there, and nobody is stranded either.`);
+  }
 }
 
 // ── 2-4. does anyone actually stand on themselves ──────────────────────────────

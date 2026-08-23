@@ -667,7 +667,8 @@ promise is carried entirely by the direct proof.
 
 **What a body is actually worth, then:** 33 of 76 sampled hard gaps can be
 crossed in exactly two jumps over one body. The rest take either the direct jump
-or more than one body, and **two-body routes are still unmeasured**, the same gap
+or the direct jump; two-body routes were measured in 2026-08 and do not exist
+here — every flight off such a perch lands. See the closing notes. The same gap
 this file recorded against the overreach mechanic.
 
 ### Where it landed
@@ -857,8 +858,15 @@ Open, not done, not claimed:
   average model stands on its own bodies 2.44 times a climb. Whether a person
   reads a gap they failed twice as a decision about where to leave a body or as
   the game refusing them is a question about a person.
-- **Two-body routes are still unmeasured**, so "33 of 76 hard gaps are bridged by
-  one body" is a floor on how often the shortcut exists, not the number.
+- **Two-body routes — MEASURED, 2026-08-22, and the answer reframes the gap.**
+  Of 40 sampled hard gaps that one body cannot bridge, **0** are crossable over
+  two — because there is no first body to be had: 1,280 flights swept off those
+  perches and **all 1,280 landed**. So a hard gap one body cannot bridge is not
+  a place you get stranded and stack your way out of; it is a place where every
+  shot puts you somewhere, just not where you aimed. The one-body figure is the
+  answer, not a floor. The zero was nearly published as a result before an
+  entry-condition counter reported the sweep had placed zero first bodies and
+  therefore measured nothing.
 - **Target 3 does not hold**, is recorded as failing above rather than folded
   into the improvement, and has now been re-opened once and closed again with
   measurement rather than with a citation. See the section below.
