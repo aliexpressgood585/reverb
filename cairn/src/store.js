@@ -1,4 +1,5 @@
 import { FEEL, COLUMN, biomeAt, newBiomeSlot } from './feel.js';
+import { figurePath } from './render.js';
 
 /** @typedef {import('./sim.js').Sim} Sim */
 /** @typedef {import('./types.js').Solid} Solid */
@@ -304,11 +305,30 @@ export function poster(sim, W = 1080, H = 1920) {
   cv.width = W; cv.height = H;
   const ctx = ctx2d(cv);
 
+  const corpsesAll = sim.world.solids.filter((s) => s.corpse);
+
+  // FIT THE FRAME TO THE TOWER, rather than to the column.
+  //
+  // `toX` used to be `(wx / 100) * W` — the whole 100 u playfield stretched
+  // across the poster whether anything stood in it or not. A player whose
+  // bodies happened to fall between x 65 and 95 got a poster that was two
+  // thirds empty with the tower jammed against one edge, and that image is the
+  // entire distribution channel for this game.
+  //
+  // The span is clamped to a minimum so a tight tower is not blown up into
+  // giants, and padded so nothing touches an edge.
+  let lo = COLUMN, hi = 0;
+  for (const s of corpsesAll) { if (s.x < lo) lo = s.x; if (s.x > hi) hi = s.x; }
+  if (!corpsesAll.length || hi <= lo) { lo = 20; hi = 80; }
+  const midX = (lo + hi) * 0.5;
+  const spanX = Math.max(hi - lo + 22, 46);
+  const left = Math.max(0, Math.min(midX - spanX * 0.5, COLUMN - spanX));
+
   const top = Math.max(sim.best, 60) * 1.06;
   /** @type {(wy: number) => number} */
   const toY = (wy) => H - (wy / top) * H * 0.88 - H * 0.06;
   /** @type {(wx: number) => number} */
-  const toX = (wx) => (wx / 100) * W;
+  const toX = (wx) => ((wx - left) / spanX) * W;
 
   // Background: the whole climb's worth of biomes, stacked.
   const slot = newBiomeSlot();
@@ -321,15 +341,28 @@ export function poster(sim, W = 1080, H = 1920) {
   ctx.fillRect(0, 0, W, H);
 
   // The thread, then the bodies.
-  const corpses = sim.world.solids.filter((s) => s.corpse).sort((a, b) => a.order - b.order);
-  ctx.strokeStyle = 'rgba(201,154,74,0.30)';
+  const corpses = corpsesAll.slice().sort((a, b) => a.order - b.order);
+  // THE THREAD, FADED BY LENGTH.
+  //
+  // It joins each body to the next in death order, which reads as one
+  // continuous history when the deaths are near each other and as a stray line
+  // across the whole poster when they are not. Two deaths three hundred metres
+  // apart are not telling a story about a climb; they are a chord. Segments
+  // fade out with their own length so the near ones carry the history and the
+  // far ones stop drawing a sail over the tower.
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  corpses.forEach((s, i) => {
-    const x = toX(s.x), y = toY(s.y);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
+  for (let i = 1; i < corpses.length; i++) {
+    const a = corpses[i - 1], b = corpses[i];
+    const x0 = toX(a.x), y0 = toY(a.y), x1 = toX(b.x), y1 = toY(b.y);
+    const len = Math.hypot(x1 - x0, y1 - y0) / H;
+    const alpha = 0.34 * Math.max(0, 1 - len / 0.34);
+    if (alpha < 0.012) continue;
+    ctx.strokeStyle = `rgba(201,154,74,${alpha.toFixed(3)})`;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+  }
 
   corpses.forEach((s, i) => {
     const b = biomeAt(s.y, slot);
@@ -340,14 +373,25 @@ export function poster(sim, W = 1080, H = 1920) {
       b.accent[2] * (1 - age) + 74 * age,
     ];
     const x = toX(s.x), y = toY(s.y);
+    // The same silhouette the game draws, at the same proportions as a body.
+    //
+    // Sized against the POSTER, not against the world scale. Deriving it from
+    // `W / spanX` was the obvious thing and it is wrong: a tower whose bodies
+    // fall in a narrow band gets a huge scale factor, and the first attempt
+    // rendered 141-pixel corpses — the figures were right and enormous. How big
+    // a body should look on a poster has nothing to do with how wide the tower
+    // it came from happened to be.
+    const bodyPx = H / 64;
+    const k = bodyPx / FEEL.tower.corpseH;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(s.rot);
+    figurePath(ctx, FEEL.tower.corpseW * 0.5 * k, FEEL.tower.corpseH * 0.5 * k, s.pose);
     ctx.fillStyle = rgb(col, 0.55);
-    ctx.fillRect(-7, -11, 14, 22);
+    ctx.fill();
     ctx.strokeStyle = rgb(col, 0.95);
     ctx.lineWidth = 1.4;
-    ctx.strokeRect(-7, -11, 14, 22);
+    ctx.stroke();
     ctx.restore();
   });
 

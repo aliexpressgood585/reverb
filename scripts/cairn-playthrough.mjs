@@ -142,10 +142,17 @@ async function shot(name, note) {
   console.log(`  ${name.padEnd(26)} ${note}`);
 }
 
+// BEFORE THE TAP. The title is the actual first impression and no script in
+// this repository had ever photographed it — every capture starts by tapping
+// past it. It is a live scene drifting up whatever tower this player has, so it
+// is also the only frame that is different for a returning player.
+await delay(900);
+await shot('00-title', 'the frame before anybody has touched anything');
+
 // A real tap starts it, the way a thumb does.
 await page.touchscreen.tap(195, 620);
 await delay(500);
-await shot('01-opening', 'the first thing anyone sees, before they have moved');
+await shot('01-opening', 'the first thing anyone sees after starting');
 
 // Play. Stop at each moment worth looking at, once.
 let firstDeath = false, firstCorpse = false, sawLandmark = false;
@@ -222,6 +229,25 @@ await page.evaluate(() => window.CAIRN.monument(true));
 await delay(2600);
 await shot('07-monument', 'everything this session left behind');
 await page.evaluate(() => window.CAIRN.monument(false));
+
+// THE SHARE IMAGE ITSELF, not a screenshot of the monument. This is the file
+// that leaves the phone and is the entire distribution channel for a game with
+// no marketing budget, and nothing had ever looked at it.
+{
+  const dataUrl = await page.evaluate(async () => {
+    const { sim, Store } = window.CAIRN;
+    const cv = Store.poster(sim, 1080, 1920);
+    return cv && cv.toDataURL ? cv.toDataURL('image/png') : null;
+  });
+  if (dataUrl) {
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(`${OUT}/08-share-poster.png`,
+      Buffer.from(dataUrl.split(',')[1], 'base64'));
+    console.log('  08-share-poster            the file that actually leaves the phone');
+  } else {
+    console.log('  08-share-poster            NOT PRODUCED — Store.poster returned nothing');
+  }
+}
 
 const state = await page.evaluate(() => ({
   best: Math.round(window.CAIRN.sim.best),

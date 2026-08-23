@@ -1174,3 +1174,68 @@ That it steps on launches and not on the clock is the design claim, so it is the
 falsifiable one: 240 frames of pure time move it 0.000 u, and two launches move
 it 79.6 u. A ghost that never moved at all would pass the first half alone, which
 is why both halves are asserted.
+
+---
+
+## 34. The share image is the distribution channel, and it was the worst thing in the product
+
+A game with no marketing budget has exactly one way to spread: the picture a
+player posts. Eleven suites were green, the monument view had been tuned, the
+store screenshots had been regenerated twice — and nobody had ever looked at the
+**file that actually leaves the phone**. `Store.poster` had been shipping since
+before any of this and had never been opened.
+
+It was the worst-looking artifact in the game. Three separate defects:
+
+**Bodies were `fillRect(-7, -11, 14, 22)`.** A game whose entire subject is that
+the platforms are people, exporting its tower as a column of little boxes. The
+silhouette now comes from `figurePath`, exported from `render.js` so the poster
+and the scene draw the same body — a second copy of that path would have been a
+second copy that drifts.
+
+**The frame was fitted to the column, not to the tower.** `toX` was
+`(wx / 100) * W`, so the whole 100 u playfield stretched across the poster
+whether anything stood in it or not. A player whose bodies fell between x 65
+and 95 got a poster two thirds empty with the tower jammed against one edge. It
+now fits the bodies' own span, clamped to a minimum so a tight tower is not
+blown up, and padded so nothing touches an edge.
+
+**And the first fix produced 141-pixel corpses.** Scaling the figure by
+`W / spanX` is the obvious thing and it is wrong: a tower whose bodies fall in a
+narrow band gets a huge scale factor. How big a body should look on a poster has
+nothing to do with how wide the tower it came from happened to be. It is
+`H / 64` now.
+
+**The thread was a sail.** It joins each body to the next in death order, which
+reads as one continuous history when the deaths are near each other and as a
+chord across the whole image when they are not. Segments fade with their own
+length: the near ones carry the history, the far ones stop drawing over the
+tower.
+
+What is left is honest rather than flattering. A 26-body, 387 m session renders
+sparse and bottom-heavy, because deaths concentrate low and that is the true
+shape of a short session. The store hero shows 190 bodies and is dense. Neither
+is retouched.
+
+### And the listing was making claims the product does not support
+
+Same class of problem: the copy was written before the landmarks, the secrets
+and the ghost, and it had drifted into being wrong.
+
+- **"the whole game is under 30 kilobytes"** — it is 36.7 KB gzipped. A false
+  measurable claim in a store listing.
+- **"One purchase removes ads and unlocks every cosmetic"** — `money.js` has
+  `PROVIDER = 'none'`, an empty ad unit and no billing wired anywhere. The
+  listing described an in-app purchase that cannot be made, which is a Play
+  rejection risk and, more simply, not true. The honest line is stronger: **no
+  ads, no purchases, nothing to unlock with money.**
+- Three of the game's most distinctive features were missing from it entirely.
+
+The structures and the ghost are now in both listings. **The secret is not**,
+and that is deliberate: a listing that explains it destroys it, and word of
+mouth is the right channel for a thing nobody is told. The copy says only that
+there are things in the tower nobody will tell you about.
+
+Character counts are now verified by counting the fenced blocks rather than by
+eye — the short description was annotated "79 characters" and is 80, which is
+exactly at Play's cap.

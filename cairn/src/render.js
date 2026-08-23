@@ -21,6 +21,33 @@ import { makeRng, erosionOf, EROSION } from './sim.js';
  */
 
 /**
+ * THE SILHOUETTE OF A BODY, and there is one of these in the program.
+ *
+ * Exported because the share poster draws corpses too, and it used to draw them
+ * as `fillRect(-7, -11, 14, 22)` — so the single image that leaves a player's
+ * phone showed the tower as a column of little boxes, in a game whose whole
+ * subject is that the boxes are people. A poster that does not look like the
+ * game is worse than no poster.
+ *
+ * @param {CanvasRenderingContext2D} ctx centred on the body
+ * @param {number} hw
+ * @param {number} hh
+ * @param {number} pose 0-3, the four ways a body comes to rest
+ */
+export function figurePath(ctx, hw, hh, pose) {
+  const w = hw * 2;
+  ctx.beginPath();
+  const tilt = [0, 0.22, -0.18, 0.34][pose & 3];
+  ctx.moveTo(-hw * 0.55, hh);
+  ctx.lineTo(hw * 0.55 + tilt * w, hh * 0.55);
+  ctx.lineTo(hw * 0.75, -hh * 0.1);
+  ctx.lineTo(hw * 0.30 - tilt * w, -hh);
+  ctx.lineTo(-hw * 0.35, -hh * 0.86);
+  ctx.lineTo(-hw * 0.80, hh * 0.1);
+  ctx.closePath();
+}
+
+/**
  * The scene, drawn in Canvas2D. The post chain lives in post.js; everything
  * here produces the raw image it grades.
  *
@@ -1336,18 +1363,7 @@ export class Renderer {
    * @param {number} hh
    * @param {number} pose
    */
-  _figurePath(ctx, hw, hh, pose) {
-    const w = hw * 2;
-    ctx.beginPath();
-    const tilt = [0, 0.22, -0.18, 0.34][pose & 3];
-    ctx.moveTo(-hw * 0.55, hh);
-    ctx.lineTo(hw * 0.55 + tilt * w, hh * 0.55);
-    ctx.lineTo(hw * 0.75, -hh * 0.1);
-    ctx.lineTo(hw * 0.30 - tilt * w, -hh);
-    ctx.lineTo(-hw * 0.35, -hh * 0.86);
-    ctx.lineTo(-hw * 0.80, hh * 0.1);
-    ctx.closePath();
-  }
+  _figurePath(ctx, hw, hh, pose) { figurePath(ctx, hw, hh, pose); }
 
   /**
    * @param {CanvasRenderingContext2D} ctx

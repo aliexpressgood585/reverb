@@ -16,7 +16,8 @@ the title heavily and penalises stuffing.
 ```
 Miss a jump and you freeze where you fell. Climb the tower of your own failures.
 ```
-79 characters.
+80 characters — exactly at the cap, so nothing can be added to this line
+without cutting something else. It was annotated as 79 and was not.
 
 Deliberately not "a minimalist one-tap arcade climber", which is what every
 listing in this category says and what no player searches for. It states the
@@ -51,6 +52,16 @@ Nothing resets. The bodies you leave stay where you left them, forever, and the 
 
 Pull back with two fingers to see all of it at once, from the base to your highest point, and share the image.
 
+■ SOMETHING TO CLIMB TOWARD
+
+The tower is not an endless corridor of ledges. Structures stand in it — a stair that collapsed, a lattice mast still lit at the top, a chain descending out of the dark — one to a region, and the first is above you in the opening view. You climb through them.
+
+There are things in this tower nobody will tell you about. That is deliberate.
+
+■ YOUR BEST RUN CLIMBS BESIDE YOU
+
+The run that set your record replays as you go, and it moves when YOU move: at your seventh jump it stands exactly where your best self stood at its seventh. Not a stopwatch — a comparison of climbing, which is the only kind this game could honestly make. It runs out at your record height and leaves you at the frontier.
+
 ■ A DAILY CLIMB
 
 One tower per day, derived from the date itself, identical for everyone on earth at the same moment. Send someone the date and they play your exact climb.
@@ -63,13 +74,15 @@ One tower per day, derived from the date itself, identical for everyone on earth
 · Lifetime statistics: stones laid, distance climbed, times you stood on yourself
 · A streak that counts consecutive days
 · A share image of your whole tower
+· Structures standing in the tower, one per region, and secrets in them
+· Your record run, replaying beside you, jump for jump
 · English and Hebrew, with full right-to-left layout
 
 ■ HOW IT WAS BUILT
 
-Nothing in CAIRN was downloaded. Every sound is synthesised in the browser, every image is drawn in code, and the whole game is under 30 kilobytes. There are no loading screens because there is nothing to load.
+Nothing in CAIRN was downloaded. Every sound is synthesised on the fly, every image is drawn in code, and the whole game is 37 kilobytes compressed. There are no loading screens because there is nothing to load.
 
-No ads before your fourth session. No ad that isn't optional. No interstitials, ever. No currency, no shop, no timers, no energy. One purchase removes ads and unlocks every cosmetic, and it buys you nothing that affects a climb.
+No ads. No purchases. No currency, no shop, no timers, no energy, nothing to unlock with money. You are not the product here.
 
 Plays offline, entirely.
 
@@ -80,7 +93,9 @@ Nobody is going to tell you how to play this. There is no tutorial and no text p
 That is the whole design.
 ```
 
-2,832 characters.
+3,911 characters, against a 4,000 cap — 89 to spare. Verified by counting the
+fenced block, not by eye; the previous note said 2,832 and was written before
+the structures, the ghost and the monetisation correction went in.
 
 ## ASO notes, and what could not be researched
 
