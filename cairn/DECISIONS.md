@@ -1029,13 +1029,47 @@ in — and that is measured, not asserted:
 
 | | |
 |---|---|
-| hearts reachable by a real launch that dies there | **4 of 4** tested, from 29–57 u below |
-| accidental claims over 114 untargeted deaths | **1 (0.88%)** |
+| hearts reachable by a real launch that dies there | **4 of 4** tested, from 20–57 u below |
+| accidental claims, real climber | **1.92 per 100 deaths**, 58% of towers inside 40 attempts |
 
-Both numbers matter and the second is the one that would kill the feature if it
-were high. A secret the bot trips over while playing normally is not a secret,
-it is an unexplained mechanic. The reachability sweep uses the same `predict()`
-the aim preview draws with, because that is literally the tool the player uses.
+The reachability sweep uses the same `predict()` the aim preview draws with,
+because that is literally the tool the player uses.
+
+### The second number was wrong, and wrong in the way this repository keeps being wrong
+
+It first read **0.88 per 100 deaths**, and the check that produced it said "a
+secret has to be aimed at, not stumbled into". Every word was false. The bot it
+used fired random launches from the base and **never climbed**, so almost none
+of its deaths happened anywhere near a heart and the rate was computed over a
+population that could not have claimed anything.
+
+What found it was not a test. It was looking at a played session: the
+playthrough capture reported `landmarks held [0]` after 26 deaths of ordinary
+play, against a check claiming one in 114. Asked of the real climber at the
+radius that check had blessed, the true answer was **4.9 per 100 deaths and 93%
+of towers giving one up inside forty attempts** — five times the reported rate,
+and not a secret at all. Eighth instance in this project of a measurement blind
+to the state it claims to cover, and the first one that is mine.
+
+### So the radius is tuned to a BAND, not minimised
+
+| radius | claims / 100 deaths | towers with ≥1 in 40 attempts |
+|---|---|---|
+| 6 | 1.13 | 38% |
+| **8** | **2.13** | **60%** |
+| 10 | 3.19 | 73% |
+| 16 (as shipped, briefly) | 4.88 | 93% |
+
+Minimising is the wrong instinct. A secret nobody ever meets is dead content,
+and at radius 6 nearly two thirds of players would never learn the mechanic
+exists. At 8 the FIRST one finds most people by accident — that is the tutorial
+— and the other five have to be hunted, which is the game. Exactly the shape of
+the monument nudge: show it once, then let them look.
+
+`cairn-hook-check.mjs` now gates the rate inside 0.8–4.0 per 100 deaths and
+25–85% of towers, driving the balance harness's real bot. The landmark suite's
+version is deleted rather than repaired, with a note in its place saying what it
+claimed and why it was false.
 
 ### It is history, so it is saved
 

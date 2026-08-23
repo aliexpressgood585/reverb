@@ -560,7 +560,28 @@ export const FEEL = {
     // player who has noticed that has everything they need and a player who has
     // not will never stumble into it. That is the whole design — a secret whose
     // key is a thing the game already shows you and never mentions.
-    heartU: 16,
+    // MEASURED, and the first number here was measured wrong. The landmark
+    // suite's accidental-claim check fired random launches from the base, which
+    // never climb — so it reported 0.88 claims per 100 deaths among deaths that
+    // were never candidates for one. Asked of the REAL climber, at radius 16, a
+    // player claims 4.9 per 100 deaths and 93% of towers give one up inside 40
+    // attempts. That is not a secret, it is a mechanic nobody explained.
+    //
+    // The curve, average model, 1,600 deaths per row:
+    //
+    //   radius   claims/100 deaths   towers with >=1 in 40 attempts
+    //      6           1.13                     38%
+    //      8           2.13                     60%
+    //     10           3.19                     73%
+    //     12           3.88                     83%
+    //     16           4.88                     93%
+    //
+    // 8, and the reasoning is not "as rare as possible". A secret nobody ever
+    // meets is dead content, and 6 leaves 62% of players never learning the
+    // mechanic exists. At 8 the FIRST one finds most people by accident — which
+    // is the tutorial — and the other five have to be hunted, which is the game.
+    // Same shape as the monument nudge: show it once, then let them look.
+    heartU: 8,
     claimAlpha: 0.62,     // a held landmark is drawn in the living accent
     claimLightU: 26,      // and carries a light at its heart
     // AND A HELD ONE STAYS IN THE MONUMENT.

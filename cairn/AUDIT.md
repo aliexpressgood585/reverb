@@ -320,10 +320,31 @@ These are open, not done, and not claimed:
 - **The band-hazard softening above is measured, not fixed.** An expert's
   mid-tower bands get 2-3x safer over a session. Whether that reads as healthy
   progression or as the difficulty going soft is a question about a player.
-- **Aim tolerance is unmeasured for wall launches.** The precision survey's
-  4,186 sampled jumps all leave from the ground, because that is what the bot
-  does. The arc is proven honest from a cling; how much slop a cling launch
-  forgives is not known.
+- **Aim tolerance off a wall — MEASURED, 2026-08-22, and it is tighter.**
+  Section E of `cairn-precision.mjs` puts the body into a real cling (1,199 of
+  1,200 placements reached a wall; the sim itself has to report
+  `onWall !== 0 && canLaunch()` before anything is measured, so a near-wall AIR
+  launch cannot be counted as a cling and read like good news) and reuses
+  `tolerance()` unchanged, so the wall kick is in every number by construction.
+
+  Over **1,055 cling launches**:
+
+  | | ground | cling |
+  |---|---|---|
+  | angle before you stop climbing, median | 21.88° | **17.90°** |
+  | ... p5 | 13.14° | **1.72°** |
+
+  So a cling launch forgives **82%** of a ground launch at the median — mild —
+  and the TAIL is 7.6× worse: the hardest 5% of cling launches leave a 1.72°
+  window, which is about 5.6 pixels of thumb at full pull.
+
+  **Not treated as a defect, and the reason matters.** Every route in this tower
+  is proven crossable from GROUND footing on the ledge below — that is what
+  `hardStep` cuts and what `WALL = 0.00%` is a statement about. A cling is extra
+  mobility the player chooses to use, never a footing the tower requires. So the
+  tight tail is a choice available to a player who wants it, not a trap the
+  generator sets. It is worth knowing, and it would be worth revisiting if a
+  route were ever proven from a wall.
 - **Much of Phase 2 is still not built.** Chunked streaming generation, the
   reachability solver, momentum, close calls, the
   first-60-seconds choreography, Daily Climb, ghosts, milestones and the

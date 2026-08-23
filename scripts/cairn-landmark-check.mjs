@@ -376,37 +376,20 @@ await delay(300);
     `${r.heart}u radius, found with the same predict() the ghost draws`);
 }
 
-// ── 7. ... and nobody trips over it ───────────────────────────────────────
-{
-  const r = await page.evaluate(() => {
-    const { sim } = window.CAIRN;
-    const F = window.CAIRN.FEEL;
-    // Every death the acceptance bot's style of play produces, over many
-    // attempts, and how many of them land in a heart without trying.
-    sim.reset(true); sim.phase = 1;
-    let deaths = 0, claims = 0;
-    let seed = 99;
-    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return (seed % 10000) / 10000; };
-    for (let a = 0; a < 400; a++) {
-      const b = sim.body;
-      if (sim.phase !== 1) sim.respawn();
-      sim.launch(-60 + rnd() * 120, 40 + rnd() * 90);
-      for (let f = 0; f < 500; f++) {
-        const d0 = sim.deaths;
-        sim.tick(0);
-        if (sim.deaths > d0) { deaths++; break; }
-        if (b.grounded) break;
-      }
-      sim.events.length = 0;
-      claims = sim.claimed.size;
-    }
-    return { deaths, claims, heart: F.landmark.heartU };
-  });
-  const rate = r.deaths ? (100 * r.claims / r.deaths).toFixed(2) : '0';
-  check(r.deaths > 100 && r.claims <= 1,
-    `${r.deaths} untargeted deaths produced ${r.claims} accidental claim(s) ` +
-    `(${rate}%) — a secret has to be aimed at, not stumbled into`);
-}
+// ── 7. NOT MEASURED HERE — see `npm run hook` ────────────────────────────
+//
+// This slot held a check that fired random launches from the base and reported
+// "114 untargeted deaths produced 1 accidental claim (0.88%) — a secret has to
+// be aimed at, not stumbled into". Every word of that was false, and it was
+// false because the bot NEVER CLIMBED: almost none of its deaths happened
+// anywhere near a heart, so the rate was computed over a population that could
+// not have claimed anything.
+//
+// Asked of the real climber instead, the answer at the radius that check
+// blessed was 4.9 claims per 100 deaths and 93% of towers giving one up inside
+// forty attempts. The measurement now lives in `cairn-hook-check.mjs`, which
+// already drives the balance harness's actual bot, because reimplementing a
+// climber inside this browser page would be a second copy of one.
 
 // ── 7b. the structure answers the aim before the death ────────────────────
 //

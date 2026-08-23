@@ -175,5 +175,51 @@ console.log('CAIRN hook — when does a new player meet the premise?\n');
   console.log('        not that a person understands it. That needs a person.');
 }
 
+// ── 4. how often is a landmark claimed BY ACCIDENT? ───────────────────────
+//
+// Six landmarks answer if you leave a body in the heart of one, and nothing
+// explains it (DECISIONS §31). The whole feature lives or dies on this number
+// and it has to be in a BAND, not minimised:
+//
+//   too high and it is not a secret, it is an unexplained mechanic everybody
+//   trips over and nobody understands;
+//   too low and it is dead content — a player who never meets one never learns
+//   the mechanic exists, and no amount of elegance fixes that.
+//
+// The design target is that the FIRST one finds most players by accident, which
+// is the tutorial, and the other five have to be hunted, which is the game.
+//
+// It is measured here rather than in the landmark suite because the honest
+// version needs a bot that actually CLIMBS. The landmark suite's version fired
+// random launches from the base, reported 0.88 per 100 deaths, and was wrong by
+// a factor of five — its deaths were never near a heart to begin with.
+{
+  const S = SKILLS.average;
+  const scratch = [], cands = [];
+  let deaths = 0, claims = 0, withAny = 0;
+
+  for (let s = 0; s < SEEDS; s++) {
+    const worldSeed = (0x1a2b3c + s * 0x9e3779b1) | 0;
+    const sim = new Sim(worldSeed);
+    const rnd = rng32((worldSeed ^ 0x5bf03635) >>> 0);
+    sim.phase = PHASE.PLAY;
+    const before = sim.deaths;
+    for (let a = 0; a < 40; a++) {
+      if (climb(sim, S, rnd, scratch, cands, 0) === null) break;
+      sim.respawn();
+    }
+    deaths += sim.deaths - before;
+    claims += sim.claimed.size;
+    if (sim.claimed.size) withAny++;
+  }
+
+  const per100 = (100 * claims / Math.max(1, deaths));
+  const pctTowers = (100 * withAny / SEEDS);
+  check(per100 >= 0.8 && per100 <= 4.0 && pctTowers >= 25 && pctTowers <= 85,
+    `${claims} accidental claims over ${deaths} deaths = ${per100.toFixed(2)} per ` +
+    `100 (band 0.8-4.0); ${pctTowers.toFixed(0)}% of towers gave one up inside 40 ` +
+    `attempts (band 25-85%) at heartU ${FEEL.landmark.heartU}`);
+}
+
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nthe premise arrives on the on-ramp');
 process.exit(fails.length ? 1 : 0);

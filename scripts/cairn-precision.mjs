@@ -311,6 +311,87 @@ function slopSurvey() {
 }
 
 // ---------------------------------------------------------------------------
+// E. and how much slop does a jump off a WALL tolerate?
+// ---------------------------------------------------------------------------
+
+/**
+ * THE ONE PLACE SECTION B HAS NEVER LOOKED.
+ *
+ * B samples the expert bot's own line, and the bot leaves from the ground on
+ * every jump it takes — so 4,000-odd measured jumps say nothing whatsoever
+ * about a launch off a cling, which is a thing every player does. Section A
+ * proves the ARC is honest from a wall (it was not, once: `launchVelocity`
+ * existed because the kick was added in `_fire` and `predict` did not know, and
+ * a cling launch flew 16 u/s further sideways than the line the player aimed
+ * with). Honest and forgiving are different properties.
+ *
+ * The cling is entered for real rather than faked: the body is put in the air
+ * beside a wall moving into it, and ticked until the sim itself reports
+ * `onWall !== 0 && canLaunch()`. Anything that does not get there in time is
+ * discarded rather than measured, and the discard count is reported — a survey
+ * that quietly measured near-wall AIR launches would read almost exactly like a
+ * ground launch and look like good news.
+ *
+ * `tolerance()` is reused unchanged. It reads `sim.body` wherever it is, and
+ * `predict` routes through `launchVelocity`, so the kick is in every number
+ * below by construction.
+ */
+function clingSlop() {
+  const scratch = [];
+  const out = [];
+  let tried = 0, clung = 0, aimless = 0;
+  const halfW = FEEL.body.w * 0.5;
+
+  for (let s = 0; s < SEEDS; s++) {
+    const seed = (0x1a2b3c + s * 0x9e3779b1) | 0;
+    const sim = new Sim(seed);
+    sim.phase = PHASE.PLAY;
+    sim.world.generate(900);
+
+    for (let h = 90; h <= 780; h += 30) {
+      for (const side of [-1, 1]) {
+        tried++;
+        const b = sim.body;
+        b.x = b.px = side < 0 ? halfW + 1.5 : COLUMN - halfW - 1.5;
+        b.y = b.py = h;
+        b.vx = side * 30; b.vy = -6;
+        b.grounded = false; b.standing = null;
+        b.onWall = 0; b.wallTimer = 0; b.coyote = 0;
+        // Well below the placement, or `_flight` calls this a death on tick one.
+        b.takeoff = h - 200;
+        b.peakX = b.x; b.peakY = b.y; b.hangTimer = 0; b.airTime = 0;
+        b.t = sim.verbTime;
+
+        let ok = false;
+        for (let f = 0; f < 40; f++) {
+          sim.tick(0);
+          if (sim.phase !== PHASE.PLAY || sim.body.grounded) break;
+          if (sim.body.onWall !== 0 && sim.canLaunch()) { ok = true; break; }
+        }
+        if (sim.phase !== PHASE.PLAY) { sim.phase = PHASE.PLAY; continue; }
+        if (!ok) continue;
+        clung++;
+
+        // A launch from here that lands on something. Swept rather than
+        // planned, because `plan` is written for a bot standing on a ledge.
+        let best = null;
+        for (let a = 25; a <= 155 && !best; a += 2) {
+          for (let sp = FEEL.launch.maxSpeed; sp >= FEEL.launch.minSpeed; sp -= 4) {
+            const vx = Math.cos(a * DEG) * sp, vy = Math.sin(a * DEG) * sp;
+            const land = predict(sim, vx, vy, scratch);
+            if (land && land.y + land.hh > sim.body.y + 0.5) { best = { vx, vy }; break; }
+          }
+        }
+        if (!best) { aimless++; continue; }
+        const t = tolerance(sim, best, scratch);
+        if (t) out.push(t);
+      }
+    }
+  }
+  return { out, tried, clung, aimless };
+}
+
+// ---------------------------------------------------------------------------
 // C. what can a thumb express?
 // ---------------------------------------------------------------------------
 
@@ -367,6 +448,28 @@ show('angle before you die', live, ' deg');
 show('angle before you stop climbing', gain, ' deg');
 show('angle before you miss the ledge', hit, ' deg');
 show('power before you die', spd, '%');
+
+console.log('\nE. and off a WALL?  (the one footing B never samples)');
+const cl = clingSlop();
+if (!cl.out.length) {
+  console.log(`   no cling samples — ${cl.tried} attempts, ${cl.clung} reached a ` +
+    `wall, ${cl.aimless} had no landing launch`);
+} else {
+  const cLive = cl.out.map((t) => t.angLive);
+  const cGain = cl.out.map((t) => t.angGain);
+  console.log(`   ${cl.out.length} launches measured from a real cling ` +
+    `(${cl.clung} of ${cl.tried} placements reached a wall, ` +
+    `${cl.aimless} of those had nothing to aim at)`);
+  const cmp = (label, ground, cling, unit) => console.log(
+    `   ${label.padEnd(28)} ground median ${q(ground, 0.5).toFixed(2)}${unit}   ` +
+    `cling median ${q(cling, 0.5).toFixed(2)}${unit}   ` +
+    `cling p5 ${q(cling, 0.05).toFixed(2)}${unit}`);
+  cmp('angle before you die', live, cLive, ' deg');
+  cmp('angle before you stop climbing', gain, cGain, ' deg');
+  const ratio = q(cGain, 0.5) / Math.max(1e-6, q(gain, 0.5));
+  console.log(`   a cling launch forgives ${(ratio * 100).toFixed(0)}% of what a ` +
+    `ground launch forgives, by median climb window`);
+}
 
 console.log('\nC. what can a thumb express?  (390x844 phone)');
 console.log(`   power saturates at ${maxPull.toFixed(0)} px of pull ` +

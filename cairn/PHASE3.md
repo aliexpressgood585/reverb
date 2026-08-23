@@ -401,9 +401,16 @@ Also measured and worth keeping visible: the whole game is **37.5 KB gzipped**
   heights and death counts. Not built.
 - **Two-body routes are unmeasured.** "33 of 76 hard gaps are bridged by one
   body" is a floor on how often the shortcut exists, not the number.
-- **Wall-launch aim tolerance is unmeasured.** The precision survey's sampled
-  jumps all leave from the ground, because that is what the bot does. The arc is
-  proven honest from a cling; how much slop a cling launch forgives is not known.
+- **A played session is now captured** (`npm run play`) — seven frames of the
+  real loop, driven by a hand with the average model's slop rather than a
+  solver. It is not a person and cannot be bored, confused or delighted, but it
+  put `landmarks held [0]` on screen after 26 ordinary deaths and that is what
+  exposed the accidental-claim rate being five times what the suite claimed.
+- ~~Wall-launch aim tolerance is unmeasured.~~ **Measured.** 1,055 cling
+  launches: 82% of the ground median climb window, but a p5 of 1.72° against the
+  ground's 13.14° — a 7.6× worse tail, about 5.6 px of thumb. Not a defect,
+  because every route is proven from ground footing and a cling is extra
+  mobility the player elects to use. `AUDIT.md` has the table.
 - **No human has played the retuned tower.** Three bots with gaussian error are
   not three people. Specifically outside reach here: whether anyone finds the
   two-finger gesture, whether the six secrets are found and are fun to hunt, and
