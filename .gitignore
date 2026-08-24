@@ -14,3 +14,7 @@ android/local.properties
 android/app/src/main/assets/public/
 android/app/src/main/assets/capacitor.config.json
 dist-android/
+
+# Throwaway probes written at the repo root so playwright resolves from
+# node_modules. One of these was committed by accident (_arm.mjs, 53e2a5b).
+_*.mjs
