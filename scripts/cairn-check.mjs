@@ -689,6 +689,82 @@ const page = await newPage();
     : fail(14, `the climb was interrupted: ${r.blocked} blocking overlays, ${r.cards} cards, over ${r.climbs} landings`);
 }
 
+// ── 15. erasing the tower takes two taps, and it forgets ───────────────────
+//
+// `AUDIT.md` calls losing a player's tower the worst possible bug this game can
+// have, and `Store.wipe` clears the backup slot as well — there is no recovery
+// of any kind. The control for it therefore gets a gate.
+//
+// Three properties, and the third is the one that was missing. One real tap
+// must NOT erase. The armed state must be unmistakable rather than a slightly
+// dimmer version of the same button — it used to be ember like `.primary`, so
+// on a screen where it is the only ember thing it read as the screen's primary
+// action. And it must DISARM ITSELF, because a player who arms it, reads the
+// warning, decides against it and taps that row again a minute later has
+// destroyed their tower with a stray touch.
+//
+// Driven through `page.touchscreen` on a hit-tested element, never a synthetic
+// dispatch, for the reason test 10 exists.
+{
+  const r = await page.evaluate(() => {
+    const { panel, Store } = window.CAIRN;
+    try {
+      localStorage.setItem('cairn.save', JSON.stringify({ v: 2, seed: 1, best: 123,
+        deaths: 4, n: 0, corpses: [] }));
+    } catch { /* private mode */ }
+    panel.show('settings');
+    return true;
+  });
+  void r;
+  await delay(350);
+
+  const at = await page.evaluate(() => {
+    const el = document.querySelector('button.btn.danger');
+    if (!el) return null;
+    const b = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2, colour: cs.color };
+  });
+
+  if (!at) {
+    fail(15, 'no ERASE control found on the settings screen');
+  } else {
+    await page.touchscreen.tap(at.x, at.y);
+    await delay(250);
+    const armed = await page.evaluate(() => {
+      const el = document.querySelector('button.btn.danger');
+      const cs = getComputedStyle(el);
+      return {
+        armed: el.classList.contains('armed'),
+        colour: cs.color,
+        bg: cs.backgroundColor,
+        saveStillThere: !!localStorage.getItem('cairn.save'),
+      };
+    });
+    // It must have changed appearance, and it must NOT have erased anything.
+    const looksDifferent = armed.colour !== at.colour;
+    // Wait past the disarm window and confirm it forgot.
+    await delay(4800);
+    const later = await page.evaluate(() => {
+      const el = document.querySelector('button.btn.danger');
+      return {
+        armed: el.classList.contains('armed'),
+        flag: window.CAIRN.panel.wipeArmed,
+        saveStillThere: !!localStorage.getItem('cairn.save'),
+      };
+    });
+    const ok = armed.saveStillThere && armed.armed && looksDifferent
+      && !later.armed && !later.flag && later.saveStillThere;
+    ok
+      ? pass(15, `one tap arms and does not erase (${at.colour} → ${armed.colour}), ` +
+          'and it disarms itself before a stray second tap can land')
+      : fail(15, `erase guard: armed=${armed.armed} recoloured=${looksDifferent} ` +
+          `saveAfterOneTap=${armed.saveStillThere} stillArmedLater=${later.armed} ` +
+          `flagLater=${later.flag}`);
+  }
+  await page.evaluate(() => window.CAIRN.panel.hide());
+}
+
 await browser.close();
 
 console.log('');

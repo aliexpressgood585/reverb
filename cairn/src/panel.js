@@ -1,6 +1,9 @@
 import { t, num, height as fmtHeight, days, lang, setLang, LANGS } from './i18n.js';
 import * as Progress from './progress.js';
 import { MARKS } from './progress.js';
+
+/** How long an armed ERASE stays armed before it forgets. */
+const WIPE_ARM_MS = 4000;
 import { track, EVENTS } from './analytics.js';
 
 /**
@@ -42,6 +45,8 @@ export class Panel {
     this.open = false;
     /** Two taps to erase a tower. The first arms it, the second does it. */
     this.wipeArmed = false;
+    /** @type {ReturnType<typeof setTimeout>|undefined} */
+    this._wipeTimer = undefined;
   }
 
   /** @param {Screen} [screen] */
@@ -49,6 +54,9 @@ export class Panel {
     this.screen = screen;
     this.open = true;
     this.wipeArmed = false;
+    // ... and the pending disarm goes with it, or a timer from a previous visit
+    // fires against a button that no longer exists.
+    clearTimeout(this._wipeTimer);
     this.root.className = 'on';
     this.render();
     track(EVENTS.SETTINGS, { key: 'panel', value: screen });
@@ -141,10 +149,15 @@ export class Panel {
       for (const m of MARKS) {
         const got = Progress.hasMark(m.id);
         const row = this._el('div', got ? 'mark got' : 'mark');
-        row.append(
+        // Name and state on the top line, what it asks for underneath. A list
+        // of thirty names against thirty "Not yet"s is thirty mysteries, and
+        // this game hides how the TOWER works, never what a goal is.
+        const head = this._el('div', 'mkhead');
+        head.append(
           this._el('span', 'nm', Progress.markName(m)),
           this._el('span', 'st', got ? '◆' : t('marks.locked')),
         );
+        row.append(head, this._el('span', 'hint', Progress.markHint(m)));
         body.append(row);
       }
       foot.append(this._btn(t('menu.back'), '', () => this.show('menu')));
@@ -192,12 +205,28 @@ export class Panel {
       });
       body.append(langRow);
 
+      // TWO TAPS, AND THE SECOND ONE DISARMS ITSELF.
+      //
+      // The first tap arms; the second erases every body, the record and the
+      // streak, with no recovery — `Store.wipe` clears the backup slot too. So
+      // an armed button must not sit there waiting: a player who arms it,
+      // reads the warning, decides against it and then taps anywhere on that
+      // row later has destroyed their tower with a stray touch. It disarms
+      // itself after `WIPE_ARM_MS` and on leaving the screen.
       const wipe = this._btn(t('set.wipe'), 'danger', () => {
         if (!this.wipeArmed) {
           this.wipeArmed = true;
           wipe.textContent = t('set.wipe.sure');
+          wipe.classList.add('armed');
+          clearTimeout(this._wipeTimer);
+          this._wipeTimer = setTimeout(() => {
+            this.wipeArmed = false;
+            wipe.textContent = t('set.wipe');
+            wipe.classList.remove('armed');
+          }, WIPE_ARM_MS);
           return;
         }
+        clearTimeout(this._wipeTimer);
         this.hooks.onWipe();
         this.hide();
       });

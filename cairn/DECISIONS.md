@@ -1239,3 +1239,54 @@ there are things in the tower nobody will tell you about.
 Character counts are now verified by counting the fenced blocks rather than by
 eye — the short description was annotated "79 characters" and is 80, which is
 exactly at Play's cap.
+
+---
+
+## 35. Two things nobody had looked at, and both were wrong
+
+The pattern is now four for four: the last four real defects in this project
+were found by opening a screenshot, not by a gate going red. `npm run ui`
+renders every screen at three sizes in both languages and reports "no layout
+problems at any size, in either direction" — and it had been reporting that,
+truthfully, over two screens that were broken in ways layout cannot see.
+
+### The marks screen was thirty mysteries
+
+Thirty names, thirty "Not yet"s, and **not one word about what any of them
+asks for**. A player looking at "Staircase", "Ladder" or "Built Of You" had no
+way to know what any of them wanted.
+
+This game's no-text rule is about the TOWER teaching itself. It was never a
+licence to hide what a goal is, and an achievement list nobody can read gives no
+direction at all — which is the only reason to have one.
+
+Every mark now carries a hint, in both languages, and **each one is written from
+the mark's `test` rather than from its name**, because several are subtler than
+they sound. "Ten Clean Jumps" also demands 150 m and zero bodies stood on; a
+hint reading "ten clean jumps" would have been a wrong hint, which is worse than
+none.
+
+### The most destructive control in the game was styled as the primary action
+
+`style.css` says, one line above the button rules: *"One is primary per screen
+and it is the only --ember thing on it."* `.danger` was ember text, differing
+from `.primary` only in border alpha and opacity — and on the settings screen
+the erase button is the **only** ember thing. So the control that deletes every
+body, the record and the streak, with `Store.wipe` clearing the backup slot too
+and no recovery of any kind, read as the screen's primary action.
+
+Half of my first reading was wrong and is worth recording: there **was** already
+a two-tap confirm. What was missing was everything around it.
+
+- **Quiet until armed.** Slate, not ember. It is not an invitation.
+- **Unmistakable once armed.** Full ember, ember border, tinted ground — because
+  the second tap is a different act from the first and has to look like one.
+- **It disarms itself** after four seconds, and on leaving the screen. An armed
+  button that sits waiting means a player who armed it, read the warning,
+  decided against it, and touched that row again later has destroyed their tower
+  with a stray tap.
+
+`AUDIT.md` calls losing a player's tower the worst possible bug this game can
+have, so it is now **acceptance test 15** rather than a screenshot: one real
+hit-tested tap must arm without erasing, the appearance must actually change,
+and the armed state must be gone before a stray second tap can land.

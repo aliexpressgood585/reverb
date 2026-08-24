@@ -370,20 +370,33 @@ html, body {
 }
 
 /* A mark. Earned ones take --memory; the rest are a rule and a hint. */
+/* A mark is two lines now: what it is called, and what it asks for. The name
+   and the state share the top line; the hint sits under them, quieter, and
+   wraps. A list of names with nothing else told a player nothing. */
 .mark {
+  padding: 10px 2px;
+  border-bottom: 1px solid rgba(74, 91, 107, 0.2);
+  opacity: 0.42;
+}
+.mark.got { opacity: 1; }
+.mkhead {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--gap);
-  padding: 11px 2px;
-  border-bottom: 1px solid rgba(74, 91, 107, 0.2);
-  opacity: 0.35;
 }
-.mark.got { opacity: 1; }
 .mark .nm { font-size: 12px; color: var(--rime); }
 .mark.got .nm { color: var(--memory); }
-.mark .st { font-size: 9px; letter-spacing: var(--track-ui); color: var(--fault); }
+.mark .st { font-size: 9px; letter-spacing: var(--track-ui); color: var(--fault); flex: none; }
 .mark.got .st { color: var(--memory); opacity: 0.7; }
+.mark .hint {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--slate, #6b7c8c);
+  opacity: 0.85;
+}
 
 /* Buttons. One is primary per screen and it is the only --ember thing on it. */
 button.btn {
@@ -402,7 +415,24 @@ button.btn {
 }
 button.btn:active { border-color: var(--quartz); }
 button.btn.primary { border-color: rgba(255, 107, 53, 0.55); color: var(--ember); }
-button.btn.danger { border-color: rgba(255, 107, 53, 0.3); color: var(--ember); opacity: 0.75; }
+/* THE DESTRUCTIVE ONE IS NOT THE PRIMARY ONE.
+   `.danger` used to be ember text like `.primary`, differing only in border
+   alpha — and on the settings screen it is the ONLY ember thing, so the rule
+   one line above ("the only --ember thing on it") made erasing your entire
+   tower read as the screen's primary action. It is quiet until it is armed.
+   Once armed it is the loudest thing on the screen, because the second tap is
+   a different act from the first and has to look like one. */
+button.btn.danger {
+  border-color: rgba(74, 91, 107, 0.45);
+  color: var(--slate, #6b7c8c);
+  opacity: 0.7;
+}
+button.btn.danger.armed {
+  border-color: var(--ember);
+  color: var(--ember);
+  opacity: 1;
+  background: rgba(255, 107, 53, 0.10);
+}
 
 /* ------------------------------------------------------------- monument */
 
