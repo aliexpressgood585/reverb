@@ -323,6 +323,20 @@ export const FEEL = {
     // platform than a ledge and an enormously better one than nothing.
     corpseW: 5.2,
     corpseH: 6.0,
+    // THE BLOOM ON A BODY'S SHELF, as a multiplier on the additive pass a ledge
+    // crest has always had. A generated ledge glowed and the thing this game is
+    // named after did not: measured side by side at the same height and the same
+    // distance from the player's light, the world's hold read 1.13x the peak of
+    // the one you made, and 1.00x with this at 1.
+    //
+    // A tunable rather than a constant buried in the renderer for two reasons.
+    // feel.js is the only file allowed to hold tuning numbers — and a frame-cost
+    // measurement has to be able to turn the pass OFF and interleave, which is
+    // the only honest way to price a draw call on a software rasteriser where
+    // two runs of identical code differ by more than the thing being measured.
+    corpseBloom: 1.0,
+    corpseBloomBase: 0.05,   // floor, so a body away from the light still catches
+    corpseBloomLit: 0.30,    // how much of it is the player's own light
   },
 
   // ------------------------------------------------------------------ verbs

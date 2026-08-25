@@ -78,6 +78,10 @@ const lerp = (a, b, t) => a + (b - a) * t;
 /** @type {(c: number[], a: number|string) => string} */
 const rgb = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 
+/** Rec. 709 relative luminance, the axis "brighter than" is decided on. */
+/** @type {(c: number[]) => number} */
+const lumOf = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+
 /**
  * THE SILHOUETTE LANGUAGE OF EACH BIOME, in the order BIOMES declares them.
  *
@@ -384,6 +388,7 @@ export class Renderer {
     this._bgKey = -1;
     this._bg = null;
     this._lit = [0, 0, 0];   // scratch: rock tinted by the light on it
+    this._markRgb = [0, 0, 0]; // scratch: rock held below the accent, for scenery
 
     // MOMENTUM, eased, 0-1. The counter itself lives in the sim; this is the
     // only thing the frame is allowed to know about it, and it is deliberately
@@ -773,6 +778,31 @@ export class Renderer {
     landmarksIn(lo, hi, sim.world.seed, this._marks);
     if (!this._marks.length) return;
 
+    // THE SCENERY IS NEVER BRIGHTER THAN THE HOLDS.
+    //
+    // Landmarks stroke in `B.rock` and ledges crest in `B.accent`, and the
+    // comment above promises "the ledges have to win". In four biomes they do.
+    // In ASH they do not: rock is warm bone at luminance 196.6 against an ember
+    // accent at 144.8, so the scenery is drawn in the BRIGHTEST colour in the
+    // palette and the things you can stand on in a dimmer one. GLACIER sits on
+    // the line at 0.99. ASH is the opening biome — 0 to 150 m, the first thing
+    // every new player ever sees — so the one frame where the rule matters most
+    // is the one frame where it was inverted, and a pale diagonal beam across
+    // the play area is exactly the shape of something you would try to land on.
+    //
+    // Clamped here rather than by editing the palette, because `B` is blended
+    // per frame between two biomes and the rule has to hold on the blend too.
+    // Four of six biomes are untouched by it.
+    const rockLum = lumOf(B.rock), accLum = lumOf(B.accent);
+    let mark = B.rock;
+    if (rockLum > accLum && rockLum > 1) {
+      const k = accLum / rockLum;
+      this._markRgb[0] = B.rock[0] * k;
+      this._markRgb[1] = B.rock[1] * k;
+      this._markRgb[2] = B.rock[2] * k;
+      mark = this._markRgb;
+    }
+
     const sc = this.scale;
     ctx.save();
     ctx.lineCap = 'round';
@@ -802,7 +832,7 @@ export class Renderer {
       const mon = held ? Math.max(depth, L.monHeld) : depth;
       if (mon <= 0.01) continue;
       ctx.globalAlpha = (held ? L.claimAlpha : L.alpha) * near * mon;
-      ctx.strokeStyle = rgb(held ? B.accent : B.rock, 1);
+      ctx.strokeStyle = rgb(held ? B.accent : mark, 1);
       ctx.lineWidth = Math.max(1, L.lineU * sc * (held ? 1.25 : 1));
       ctx.save();
       ctx.translate(this.X(m.x), this.Y(m.y));
@@ -1256,6 +1286,31 @@ export class Renderer {
         ctx.fillStyle = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.16 + solidity * 0.80).toFixed(3)})`;
         ctx.fillRect(-hwPx, -hhPx, hwPx * 2,
                      Math.max(1, (st === EROSION.FRESH ? 2.1 : 1.2) * this.dpr));
+
+        // AND IT CATCHES LIGHT THE WAY A LEDGE CREST DOES.
+        //
+        // A generated ledge draws its crest and then an additive bar over it, so
+        // it blooms. The shelf of a body you left did not, and measured side by
+        // side at the same height and the same distance from the player's light
+        // the world's hold came out 1.13x the peak of the one you made. Modest —
+        // most of what makes a corpse read as debris in a screenshot is its
+        // shape and its width, not this — but the direction was backwards in a
+        // game whose title card says every death leaves a stone. The rule now is
+        // that a FRESH body is not a dimmer hold than the rock beside it.
+        //
+        // Scaled by `solidity`, which DEEPENS the erosion ladder rather than
+        // flattening it: full on FRESH, half on THIN, almost nothing on TOP.
+        // And exactly `hwPx * 2` wide, which is the narrowed hitbox — the one
+        // lie this art direction is not allowed to tell is a hold drawn wider
+        // than it catches.
+        const bloom = FEEL.tower.corpseBloom * solidity
+          * (FEEL.tower.corpseBloomBase + rimlight * FEEL.tower.corpseBloomLit);
+        if (bloom > 0.002) {
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.fillStyle = `rgba(${cr | 0},${cg | 0},${cb | 0},${bloom.toFixed(3)})`;
+          ctx.fillRect(-hwPx, -hhPx - 1.5 * this.dpr, hwPx * 2, 3 * this.dpr);
+          ctx.globalCompositeOperation = 'source-over';
+        }
 
         if (st === EROSION.THIN) {
           // Cracks. Three hairlines through the body, seeded off the pose so a

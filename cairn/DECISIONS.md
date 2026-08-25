@@ -1338,3 +1338,95 @@ midline update on `ui.monument` alone would have let those pulls lean the camera
 toward a midline left over from the last monument — a sideways lurch mid-climb.
 It is keyed on `monTarget > 0` instead, which is the thing that actually decides
 whether the blend runs.
+
+## 37. The world's holds glowed and yours did not, and the opening biome had it backwards
+
+Two changes to what the game looks like, both of which started as an opinion and
+only survived because a measurement agreed.
+
+### The body you leave is not a dimmer hold than the rock beside it
+
+A generated ledge draws its lit crest and then an ADDITIVE bar over it, so it
+blooms. The shelf of a corpse — the load-bearing surface, the thing the whole
+game is named after — had no such pass. Measured properly, with a ledge and a
+fresh body at the SAME height and the SAME distance from the player's light
+(both `lit` and `rimlight` are functions of that distance, so an asymmetric
+fixture would have measured the fixture):
+
+```
+before   ledge crest peak 173.8   corpse shelf peak 153.7   1.13x
+after    ledge crest peak 173.8   corpse shelf peak 173.8   1.00x
+```
+
+**The honest part: 1.13x is smaller than the screenshots suggested.** What makes
+a corpse read as debris in a still is mostly its shape and its width — a small
+rotated figure against a long clean horizontal line — not this. The bloom was
+worth adding because the DIRECTION was wrong, not because it was the whole
+effect, and saying otherwise would have been selling the change.
+
+Scaled by `solidity`, so it deepens the erosion ladder instead of flattening it:
+full on FRESH, half on THIN, almost nothing on TOP, and MEMORY is a separate
+branch that never had a fill. Drawn exactly `hwPx * 2` wide, which is the
+narrowed hitbox — §16's rule that a hold is never drawn wider than it catches
+applies to the glow as much as to the bar.
+
+### ASH drew its scenery in the brightest colour it had
+
+`_landmarks` promises in its own comment that "the ledges have to win". Landmarks
+stroke in `B.rock`; ledge crests light in `B.accent`. Across the six palettes:
+
+```
+ASH       rock 196.6  accent 144.8   1.36   <-- scenery brighter than the holds
+SIGNAL    rock 124.2  accent 247.2   0.50
+BLOOM     rock 100.0  accent 124.9   0.80
+VOID      rock  54.1  accent 198.2   0.27
+CINDER    rock  87.3  accent 210.6   0.41
+GLACIER   rock 210.6  accent 213.2   0.99
+```
+
+Four biomes keep the promise. ASH inverts it — and **ASH is the opening biome**,
+0 to 150 m, the first thing every new player ever sees. So the one frame where
+the rule matters most was the one frame where it was backwards, and a pale
+diagonal beam across the play area is exactly the shape of a thing you would try
+to land on. GLACIER sits on the line at 0.99.
+
+The stroke colour is now clamped to at most the accent's luminance. Clamped at
+draw time rather than by editing the palette, because `B` is blended per frame
+between two biomes and the rule has to hold on the blend too — check 9 samples
+the blend across 1200 m for exactly that reason, and checks every declared
+palette rather than whichever one the running session happens to be standing in.
+A check that read the current biome would pass on five of six by luck.
+
+### What the clamp did NOT fix, said plainly
+
+The measurement moved and the picture barely did. ASH's rock is now stroked at
+exactly 1.00 of the accent rather than 1.36 — a 26% cut — so the INVERSION is
+gone, but "not brighter than" landed on parity, not below it, and in the opening
+frame the pale diagonals still cross the play area as the second-brightest thing
+on screen. Against a LIT ledge crest (alpha up to 0.86 plus its additive bar)
+they now clearly lose, which is the case that matters: a hold near the player is
+unmistakably the brightest line. Against an UNLIT distant crest (alpha 0.16) a
+landmark stroke at 0.30 is still the brighter mark.
+
+That last one is left alone on purpose, because it is the design: `_light`'s own
+comment says the lit radius is generous precisely so "the NEXT ledge is unknown".
+A ledge that is deliberately hidden being dimmer than scenery is not an
+inversion, it is the fog working. Cutting the scenery further to beat a hold the
+game is intentionally concealing would be tuning against the design to satisfy a
+number.
+
+So: one measurable defect found and fixed, and the residual is taste. Going
+further needs a person's eye, not another clamp.
+
+### What was left alone
+
+`Store.poster` draws every body identically, coloured only by age, with no
+erosion stage at all — and that stays. Erosion is a live property about whether
+a hold will still take your weight; in a still image of a finished session there
+is no weight to take. That difference is deliberate, unlike §36's framing rule,
+which was an accident of two code paths nobody had compared.
+
+And the single-hue direction stays until a person has looked at it. Everything
+is amber-on-amber with only the player's diamond off the hue, and cooling the
+rock away from the accent would separate the layers — but that is the whole art
+direction, it is taste rather than a defect, and it is very easy to make worse.

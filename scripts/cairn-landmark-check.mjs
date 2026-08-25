@@ -513,6 +513,60 @@ for (const [i, name] of ['ash', 'signal', 'bloom', 'void', 'cinder', 'glacier'].
 }
 console.log(`\n        shots/cairn-landmark-{ash,signal,bloom,void,cinder,glacier}.png`);
 
+// ── 9. the scenery is never brighter than the holds ───────────────────────
+//
+// `_landmarks` promises in its own comment that "the ledges have to win", and
+// in ASH they did not. Landmarks stroke in `B.rock` and ledge crests light in
+// `B.accent`, and ASH's rock is warm bone at luminance 196.6 against an ember
+// accent at 144.8 — so the opening biome, which is the first thing every new
+// player ever sees, drew its scenery in the brightest colour in the palette and
+// the things you can stand on in a dimmer one. A pale diagonal beam across the
+// play area is the shape of something you would try to land on.
+//
+// EVERY BIOME, not the one that happened to be on screen: a check that reads
+// whatever biome the current session is in would pass on five of six by luck.
+// And the BLEND between two biomes as well, because `B` is interpolated per
+// frame and a rule that holds at both ends can still fail in the middle.
+{
+  const r = await page.evaluate(() => {
+    const { BIOMES, newBiomeSlot, biomeAt, renderer } = window.CAIRN;
+    const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    // The colour the renderer actually strokes a landmark with, for a slot.
+    const strokeOf = (B) => {
+      const rl = lum(B.rock), al = lum(B.accent);
+      if (!(rl > al && rl > 1)) return B.rock;
+      const k = al / rl;
+      return [B.rock[0] * k, B.rock[1] * k, B.rock[2] * k];
+    };
+    const rows = [];
+    // The six palettes as declared...
+    for (const b of BIOMES) {
+      rows.push({ name: b.name, raw: +(lum(b.rock) / lum(b.accent)).toFixed(3),
+        now: +(lum(strokeOf(b)) / lum(b.accent)).toFixed(3) });
+    }
+    // ...and the blends the camera actually produces, sampled across altitude.
+    let worstBlend = 0, worstAt = 0;
+    const slot = newBiomeSlot();
+    for (let y = 0; y < 1200; y += 7) {
+      biomeAt(y, slot);
+      const v = lum(strokeOf(slot)) / Math.max(1, lum(slot.accent));
+      if (v > worstBlend) { worstBlend = v; worstAt = y; }
+    }
+    return { rows, worstBlend: +worstBlend.toFixed(3), worstAt,
+      hasScratch: Array.isArray(renderer._markRgb) };
+  });
+  for (const row of r.rows) {
+    console.log(`        ${row.name.padEnd(8)} rock/accent ${String(row.raw).padStart(6)} ` +
+      `-> stroked at ${String(row.now).padStart(6)}` +
+      (row.raw > 1 ? '   (was brighter than the holds)' : ''));
+  }
+  const worstDeclared = Math.max(...r.rows.map((x) => x.now));
+  check(worstDeclared <= 1.001 && r.worstBlend <= 1.001 && r.hasScratch,
+    `no biome strokes its scenery brighter than its holds — worst declared ` +
+    `${worstDeclared}, worst blend ${r.worstBlend} at ${r.worstAt}m ` +
+    `(ASH was ${r.rows.find((x) => x.name === 'ASH').raw} before the clamp)`);
+}
+
 if (errors.length) { console.log('\n  page errors: ' + errors.join(' | ')); fails.push('page errors'); }
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nthe tower has nouns in it');
 
