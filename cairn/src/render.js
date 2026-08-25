@@ -189,6 +189,8 @@ export class Camera {
     this.mon = 0;
     this.monTarget = 0;
     this.monTop = 0;        // the summit to frame, world units
+    this.monX = COLUMN * 0.5;   // the tower's own midline, world units
+    this.aspect = 9 / 19.5;     // width / height, refreshed by the renderer
   }
 
   /** @param {number} force 0..1 */
@@ -250,7 +252,25 @@ export class Camera {
     const t = this.mon * this.mon * (3 - 2 * this.mon);       // smoothstep
     const span = Math.max(this.monTop * M.pad, M.minSpan);
     this.viewH = lerp(this.viewH, span, t);
-    this.x = lerp(this.x, COLUMN * 0.5, t);
+    // FRAME THE TOWER, NOT THE COLUMN.
+    //
+    // This used to centre on `COLUMN * 0.5`, which is where the world is, not
+    // where the player's tower is. A session that happened to climb up the
+    // right-hand side got framed with its own monument off to one side and an
+    // empty half-screen beside it — and this is the one image that leaves the
+    // phone. `Store.poster` already composes on the bodies' span; the LIVE view,
+    // which is what the player actually looks at, did not. Same subject, one
+    // rule for framing it.
+    //
+    // NOT clamped to keep the column inside the frame, which was the first
+    // rule written here and was a no-op: `minSpan` 260 against a 9:19.5 screen
+    // is a 120 m view of a 100 m column, so the column always fits with room
+    // over and the clamp never fired once. The frame already shows ten metres
+    // of open background either side and there is no seam out there — the
+    // bands and landmarks are drawn across the view, not across the column —
+    // so the only rail needed is that the target stays a place in the world.
+    const monX = clamp(this.monX, 0, COLUMN);
+    this.x = lerp(this.x, monX, t);
     this.y = lerp(this.y, span * M.centre, t);
     this.rot *= 1 - t;
     this.shakeX *= 1 - t;
@@ -399,6 +419,7 @@ export class Renderer {
     const ctx = this.ctx;
     const scale = (this.h / cam.viewH);
     this.scale = scale;
+    cam.aspect = this.w / this.h;
     this.originX = this.w * 0.5 - cam.x * scale + cam.shakeX * scale;
     this.originY = this.h * (0.5 - FEEL.camera.playerOffsetY) + cam.y * scale + cam.shakeY * scale;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);

@@ -790,9 +790,40 @@ function step(now, real) {
     lastShown = h;
     el.small.textContent = ui.started ? t('hud.metres', { n: h }) : '';
   }
-  if (ui.monument) camera.monTop = Math.max(sim.best, sim.runBest, sim.body.y, 60);
+  // Whenever the camera is pulling back AT ALL, not only when the monument is
+  // open: `teachPull` and the landmark `claimPull` drive the same blend to a
+  // third or so, and a third of the way toward a midline left over from the
+  // last monument is a visible sideways lurch during play. Keyed on the target,
+  // which is the thing that actually decides whether the blend runs.
+  if (ui.monument || camera.monTarget > 0) {
+    camera.monTop = Math.max(sim.best, sim.runBest, sim.body.y, 60);
+    camera.monX = towerMidline();
+  }
 
   if (debugOn) drawDebug(real);
+}
+
+/**
+ * The horizontal midline of what this session actually built — the midpoint of
+ * the bodies' extent, which is the same rule `Store.poster` composes on.
+ *
+ * The midpoint of the EXTENT rather than the mean of the positions: the shot is
+ * of a silhouette, and a silhouette is centred by its edges. A mean pulls toward
+ * wherever the deaths piled up, which on a tower with one long reach out to the
+ * side leaves that reach hanging off the frame.
+ *
+ * @returns {number} world units; the column midline when there is nothing yet.
+ */
+function towerMidline() {
+  let lo = Infinity, hi = -Infinity;
+  const solids = sim.world.solids;
+  for (let i = 0; i < solids.length; i++) {
+    const s = solids[i];
+    if (!s.corpse || !s.live) continue;
+    if (s.x - s.hw < lo) lo = s.x - s.hw;
+    if (s.x + s.hw > hi) hi = s.x + s.hw;
+  }
+  return hi < lo ? COLUMN * 0.5 : (lo + hi) * 0.5;
 }
 
 let lastShown = -1;

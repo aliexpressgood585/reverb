@@ -1290,3 +1290,51 @@ a two-tap confirm. What was missing was everything around it.
 have, so it is now **acceptance test 15** rather than a screenshot: one real
 hit-tested tap must arm without erasing, the appearance must actually change,
 and the armed state must be gone before a stray second tap can land.
+
+## 36. The monument framed the column, not the tower
+
+Asked what I would change about how the game LOOKS, the first thing I did was
+open the frames again rather than answer from memory — and the share image was
+composed wrong. Not subtly: the pull-back centred the camera on `COLUMN * 0.5`,
+which is where the world is, not where this player's tower is. A session that
+happened to climb up one side got published with its monument shoved toward the
+edge and a third of a screen of nothing beside it.
+
+Measured across six deliberately lopsided sessions, the tower's own centre sat
+**90 to 123 px off the middle of a 390 px screen** — a quarter of the width.
+After the change, all six are within 0.1 px. `Store.poster` had already been
+fixed to compose on the bodies' span (§34); the LIVE view, which is the one the
+player actually looks at before deciding whether to share, had not. One subject,
+one rule for framing it.
+
+Three things this cost, all of which are the interesting part:
+
+**The first rule I wrote was a no-op.** I clamped the shift so the frame could
+never show outside the column — and `minSpan` 260 on a 9:19.5 screen is a 120 m
+view of a 100 m column, so the column always fits with room over and the clamp
+pinned the camera to the centre in every case that exists. It built, it ran,
+nothing failed. The only reason it did not ship is that the number came back
+unchanged. **A guard whose condition is never true is indistinguishable from a
+guard that works, from the inside.**
+
+**The probe I wrote to check it measured nothing.** It drove `update()` by hand,
+but `monTop` and `monX` are set in `frame()`, which only runs on rAF — so it
+reported `monX 0`, `viewH` pinned at `minSpan`, and an identical ink centroid for
+all three lean values it was supposed to be distinguishing. Three different
+inputs, three identical answers: the tell, every time, is that the independent
+variable did not move the output at all.
+
+**And the gate had to displace the tower itself.** Check 2b asserts the frame
+follows the bodies — but a tower that grew up the middle passes under either
+rule, so asserting it on whatever session the suite happens to produce would be
+another blind test. It now shoves the bodies bodily to x=82, waits for the
+camera to settle, and reports the offset the old rule would have left (14.3 px
+on that session) beside the offset it actually measures (0.0). A gate that
+cannot say what it caught is not evidence of anything.
+
+One consequence worth naming: `teachPull` and the landmark `claimPull` drive the
+same blend to about a third, during play, with the monument closed. Keying the
+midline update on `ui.monument` alone would have let those pulls lean the camera
+toward a midline left over from the last monument — a sideways lurch mid-climb.
+It is keyed on `monTarget > 0` instead, which is the thing that actually decides
+whether the blend runs.

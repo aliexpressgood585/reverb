@@ -106,6 +106,51 @@ const framesTower = frame.mon > 0.97
 check(framesTower, `base at ${frame.baseY}px and summit at ${frame.topY}px of ${frame.h} ` +
   `(view span ${frame.viewH}u for a ${frame.best}m tower, pull-back ${frame.mon})`);
 
+// ── 2b. and frames it SIDEWAYS ────────────────────────────────────────────
+//
+// Check 2 has always measured the vertical framing and nothing measured the
+// horizontal one, so the camera sat on `COLUMN * 0.5` — where the world is,
+// not where this player's tower is — and a session that climbed up one side
+// was published with its monument shoved to the edge and half a screen of
+// nothing beside it. That is the one image that leaves the phone.
+//
+// THIS CHECK HAS TO DISPLACE THE TOWER ITSELF. Asserting "the tower is near
+// the middle" on whatever session the suite happens to produce is a blind
+// test: a tower that grew up the middle passes under either rule. So the
+// bodies are shoved bodily to one side, the camera is given time to settle,
+// and the frame has to have followed them. The offset the OLD rule would have
+// left is reported next to it, because a gate that cannot say what it caught
+// is not evidence of anything.
+const sideways = await page.evaluate(async (shiftTo) => {
+  const { sim, renderer, camera } = window.CAIRN;
+  const bodies = sim.world.solids.filter((s) => s.corpse && s.live);
+  if (bodies.length < 4) return { skipped: bodies.length };
+  let lo = Infinity, hi = -Infinity;
+  for (const s of bodies) { lo = Math.min(lo, s.x); hi = Math.max(hi, s.x); }
+  const shift = shiftTo - (lo + hi) * 0.5;
+  for (const s of bodies) s.x += shift;
+  await new Promise((r) => setTimeout(r, 2200));
+  lo = Infinity; hi = -Infinity;
+  for (const s of bodies) { lo = Math.min(lo, s.x - s.hw); hi = Math.max(hi, s.x + s.hw); }
+  // Measured through renderer.X, which is the mapping that actually draws.
+  const mid = renderer.X((lo + hi) * 0.5) / renderer.dpr;
+  const wCss = renderer.w / renderer.dpr;
+  return {
+    n: bodies.length,
+    off: +(mid - wCss * 0.5).toFixed(1),
+    wasOff: +((renderer.X((lo + hi) * 0.5) - renderer.X(50)) / renderer.dpr).toFixed(1),
+    camX: +camera.x.toFixed(1), monX: +camera.monX.toFixed(1), wCss,
+  };
+}, 82);
+if (sideways.skipped !== undefined) {
+  check(false, `2b could not run — only ${sideways.skipped} bodies to displace`);
+} else {
+  check(Math.abs(sideways.off) < 24,
+    `a tower shoved to x=82 is still framed centre: off by ${sideways.off}px of ` +
+    `${sideways.wCss} (camera followed to ${sideways.camX}; centring on the column ` +
+    `would have left it ${sideways.wasOff}px off)`);
+}
+
 // ── 3. no HUD ─────────────────────────────────────────────────────────────
 const hud = await page.evaluate(() => {
   const vis = (id) => {
