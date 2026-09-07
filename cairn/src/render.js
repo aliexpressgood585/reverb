@@ -1,4 +1,5 @@
-import { FEEL, COLUMN, BIOME_SPAN, BIOMES, biomeAt, newBiomeSlot, MEMORY_GOLD } from './feel.js';
+import { FEEL, COLUMN, BIOME_SPAN, BIOMES, biomeAt, newBiomeSlot, MEMORY_GOLD,
+  FLOORS, CHARACTERS } from './feel.js';
 import { landmarksIn } from './sim.js';
 import { makeRng, erosionOf, EROSION } from './sim.js';
 
@@ -35,16 +36,464 @@ import { makeRng, erosionOf, EROSION } from './sim.js';
  * @param {number} pose 0-3, the four ways a body comes to rest
  */
 export function figurePath(ctx, hw, hh, pose) {
-  const w = hw * 2;
+  bodyOutline(ctx, hw, hh, [0, 0.22, -0.18, 0.34][pose & 3], 0, 0, 0);
+}
+
+/**
+ * HEAD, SHOULDERS, BODY — the one outline, and the reason there is a head.
+ *
+ * The silhouette this replaced was a six-point blob. As a CORPSE, forty metres
+ * up in a tower of two hundred, that was enough: all it has to say is "this was
+ * a person and this shelf holds". As the thing a player looks at for the entire
+ * session it said nothing at all, and "the game looks generic" is a note this
+ * project has had twice. A head is the cheapest mark that turns a shape into a
+ * creature, and it is the only one that can also carry a GAZE.
+ *
+ * THE CROWN SITS EXACTLY ON -hh AND NEVER ABOVE IT. In a corpse's local frame
+ * `-hh` is the load-bearing shelf — the bright bar in `_solids` is drawn on that
+ * exact line because DECISIONS §16 forbids drawing a hold anywhere but where the
+ * collision is. A head modelled as mass ADDED above the box would draw a skull
+ * poking through the surface you are standing on, and would quietly tell the
+ * player they can land on it. So head, shoulders and body are carved out of the
+ * same bounding box the physics already uses; nothing about the hitbox moves.
+ *
+ * @param {CanvasRenderingContext2D} ctx centred on the body
+ * @param {number} hw
+ * @param {number} hh
+ * @param {number} tilt lean of the upper body, in fractions of full width
+ * @param {number} look -1..1 where the head is turned; 0 for a corpse
+ * @param {number} crouch 0..1 gather
+ * @param {number} stretch 0..1 extension
+ */
+function bodyOutline(ctx, hw, hh, tilt, look, crouch, stretch) {
+  // Gather takes height out and puts it into width, the way a person loading a
+  // jump does; extension is the reverse. Roughly volume-preserving, so the
+  // figure changes shape without ever reading as growing or shrinking.
+  const H = hh * (1 - crouch * 0.30 + stretch * 0.26);
+  const W = hw * (1 + crouch * 0.22 - stretch * 0.14);
+  const w = W * 2;
+  // HEAD RADIUS IS BOUNDED BY THE WIDTH TOO, NOT ONLY THE HEIGHT.
+  //
+  // Erosion narrows a corpse by scaling `hw` to 0.45 and leaves `hh` alone, so a
+  // head sized off height alone is the one part of the figure that does NOT
+  // decay — and it cost real legibility. Acceptance 13's separation fell from
+  // 37.0 to 29.3, and on the SHELF axis, the tell DECISIONS §16 calls the
+  // fastest read, THIN and TOP closed from 9.6 points apart to 3.3. The gate
+  // still said PASS at a threshold of 3, which is exactly why the number has to
+  // be read and not the word.
+  const rh = Math.min(H * 0.26, W * 0.46);
+  const hy = -H + rh;               // centre, so the crown lands on -H
+  const hx = tilt * w * 0.55 + look * W * 0.30;
+  const sy = hy + rh * 0.95;        // the shoulder line
   ctx.beginPath();
-  const tilt = [0, 0.22, -0.18, 0.34][pose & 3];
-  ctx.moveTo(-hw * 0.55, hh);
-  ctx.lineTo(hw * 0.55 + tilt * w, hh * 0.55);
-  ctx.lineTo(hw * 0.75, -hh * 0.1);
-  ctx.lineTo(hw * 0.30 - tilt * w, -hh);
-  ctx.lineTo(-hw * 0.35, -hh * 0.86);
-  ctx.lineTo(-hw * 0.80, hh * 0.1);
+  // Torso: shoulders out, waist in, feet gathered.
+  ctx.moveTo(-W * 0.46, H);
+  ctx.lineTo(W * 0.42, H);
+  ctx.lineTo(W * 0.78, H * 0.10);
+  ctx.lineTo(W * 0.62 + tilt * w * 0.5, sy);
+  ctx.lineTo(-W * 0.62 + tilt * w * 0.5, sy);
+  ctx.lineTo(-W * 0.80, H * 0.10);
   ctx.closePath();
+  // Head, as a second subpath of the same path so one fill and one stroke still
+  // do the whole figure and every existing call site keeps working unchanged.
+  ctx.moveTo(hx + rh, hy);
+  ctx.ellipse(hx, hy, rh, rh * 1.06, 0, 0, Math.PI * 2);
+}
+
+/**
+ * A LIMB, in two segments. Root, elbow or knee, end.
+ *
+ * Drawn as a round-capped stroke rather than a filled outline, because at the
+ * size a phone actually renders this — a body is about twenty pixels tall — a
+ * filled limb with a boundary is mush, and a thick round stroke still reads as
+ * an arm. Two segments, because one is a stick and three is a budget nobody can
+ * see at this scale.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x root
+ * @param {number} y root
+ * @param {number} a1 upper segment angle, radians, 0 = down
+ * @param {number} a2 lower segment angle
+ * @param {number} l1 upper length
+ * @param {number} l2 lower length
+ */
+function limb(ctx, x, y, a1, a2, l1, l2) {
+  const jx = x + Math.sin(a1) * l1, jy = y + Math.cos(a1) * l1;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(jx, jy);
+  ctx.lineTo(jx + Math.sin(a2) * l2, jy + Math.cos(a2) * l2);
+  ctx.stroke();
+}
+
+/**
+ * THE LIVING CLIMBER, ON A RIG.
+ *
+ * The figure was a filled blob, then a blob with a head, and neither read as a
+ * person — which is the note this project kept getting and kept half-answering.
+ * A person is legible because of ARMS AND LEGS THAT MOVE: knees that fold under
+ * a crouch, arms that swing back before a jump and reach on the way up. This is
+ * a five-part rig — head, torso, two arms, two legs — posed from the same three
+ * stance values the outline already used, so nothing new has to be tracked.
+ *
+ * WHY THE PLAYER GETS THIS AND A CORPSE DOES NOT.
+ *
+ * A corpse keeps the compact outline. That is not a shortcut, it is the truth of
+ * the thing: a body that has fallen is collapsed, not standing with its limbs
+ * out — and it is also what protects the read the tower depends on. Acceptance
+ * 13 measures whether the four erosion stages separate, largely on how much
+ * load-bearing shelf each still has; sprawling limbs off a corpse would add lit
+ * area that has nothing to do with whether it holds weight, and adding a head
+ * alone already cost that margin 37.0 to 31.6. The living figure is the one you
+ * watch, so it gets the articulation; the tower stays readable.
+ *
+ * They still read as one creature: same head, same proportions, same costume,
+ * same silhouette width. Alive it stands up. Dead it is a heap.
+ *
+ * @param {CanvasRenderingContext2D} ctx centred on the body
+ * @param {number} hw
+ * @param {number} hh
+ * @param {number} lean -1..1
+ * @param {number} crouch 0..1
+ * @param {number} stretch 0..1
+ * @param {number} look -1..1
+ * @param {number} phase idle cycle, radians — the weight shift while standing
+ * @param {number} idle 0..1 how settled the body is
+ */
+export function figureRig(ctx, hw, hh, lean, crouch, stretch, look, phase, idle, aim, ch) {
+  const H = hh, W = hw;
+  const C = ch || CHARACTERS[0];
+  // ANGLES ARE MEASURED FROM STRAIGHT DOWN, because `limb` steps by
+  // (sin a, cos a) and screen y grows downward: 0 is a limb hanging, +/-pi is a
+  // limb raised. The first version of this used ~2.75 rad as the resting arm
+  // angle, which is 157 degrees — almost straight UP — so the climber stood
+  // permanently cheering, threw its arms overhead to wind up a jump, and
+  // signalled a touchdown on every landing. All four stances "passed" the probe
+  // because they differed from each other; they were just all wrong.
+  const rh = Math.min(H * C.head, W * 0.62);
+  const headY = -H + rh;                       // crown lands exactly on -H
+  const shoY = -H + rh * 2.05;
+  const hipY = H * (0.12 + crouch * 0.26 - stretch * 0.08);
+  const legL = (H - hipY) * C.leg;
+  const armL = (hipY - shoY) * 0.62;
+  const hipX = -lean * W * 0.12;
+  const t = phase;
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // ---- LEGS. A gather folds them outward into a squat, which is the one knee
+  // bend that reads from the front; flight sweeps them together and back.
+  const kb = crouch * 1.05;
+  const trail = stretch * 0.55;
+  const shift = Math.sin(t) * 0.05 * idle;
+  const out = 0.16;
+  ctx.lineWidth = Math.max(1.1, W * C.limb * 1.28);
+  limb(ctx, hipX - W * 0.20, hipY,
+       -(out + kb * 0.60) + trail + shift, -(out - kb * 0.42) + trail * 1.5 + shift,
+       legL, legL);
+  limb(ctx, hipX + W * 0.20, hipY,
+       (out + kb * 0.60) + trail - shift, (out - kb * 0.42) + trail * 1.5 - shift,
+       legL, legL);
+
+  // ---- ARMS. Hanging at rest; swept BACK and low to load a jump; reaching up
+  // and out in flight; thrown wide to catch a landing.
+  const swing = Math.sin(t * 1.1 + 1.0) * 0.09 * idle;
+  const reach = stretch * 2.15;                 // toward overhead
+  const wide = Math.max(0, crouch - aim) * 1.5; // landing only, not the wind-up
+  const back = aim * 0.85;                      // the wind-up, arms behind
+  ctx.lineWidth = Math.max(1, W * C.limb);
+  const aBase = 0.22 + reach + wide;
+  limb(ctx, hipX - W * 0.34, shoY,
+       -(aBase) - back * lean + swing, -(aBase + 0.16 + reach * 0.3) - back * 1.4 * lean + swing,
+       armL, armL * 0.95);
+  limb(ctx, hipX + W * 0.34, shoY,
+       (aBase) - back * lean - swing, (aBase + 0.16 + reach * 0.3) - back * 1.4 * lean - swing,
+       armL, armL * 0.95);
+
+  // ---- TORSO, tapered, so the costume marks have something to sit on.
+  ctx.beginPath();
+  ctx.moveTo(hipX - W * C.torso * 0.74, hipY);
+  ctx.lineTo(hipX - W * C.torso - lean * W * 0.10, shoY);
+  ctx.lineTo(hipX + W * C.torso - lean * W * 0.10, shoY);
+  ctx.lineTo(hipX + W * C.torso * 0.74, hipY);
+  ctx.closePath();
+  ctx.fill();
+
+  // ---- HEAD, clear of the shoulders and turned where the climber is looking.
+  const hcx = hipX - lean * W * 0.22 + look * W * 0.18;
+  ctx.beginPath();
+  ctx.ellipse(hcx, headY, rh, rh * 1.04, lean * 0.10, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ---- AND WHICH CLIMBER THIS IS.
+  characterMark(ctx, hcx, headY, rh, W, H, C.mark, C.ink, look);
+}
+
+/**
+ * THE ONE THING THAT SAYS WHICH CLIMBER THIS IS.
+ *
+ * Proportion does most of the work — head size alone separates a cat from an
+ * astronaut before a single detail resolves — so each character gets exactly one
+ * mark on top of it, drawn around the head where the eye already is. One, not
+ * three: at twenty pixels tall a second detail is noise that makes the first
+ * harder to read, which is the same lesson the costume marks had to learn.
+ *
+ * @param {CanvasRenderingContext2D} ctx centred on the body
+ * @param {number} hx head centre x
+ * @param {number} hy head centre y
+ * @param {number} rh head radius
+ * @param {number} W half-width
+ * @param {number} H half-height
+ * @param {string} kind CHARACTERS[].mark
+ * @param {number[]} ink the character's detail colour
+ * @param {number} look -1..1
+ */
+function characterMark(ctx, hx, hy, rh, W, H, kind, ink, look) {
+  const col = (t) => `rgba(${ink[0] | 0},${ink[1] | 0},${ink[2] | 0},${t})`;
+  ctx.save();
+  if (kind === 'helmet') {
+    ctx.fillStyle = col(0.85);
+    ctx.beginPath();
+    ctx.ellipse(hx, hy - rh * 0.26, rh * 1.06, rh * 0.80, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+  } else if (kind === 'pack') {
+    ctx.fillStyle = col(0.80);
+    ctx.fillRect(hx - rh * 1.5 - look * rh * 0.3, hy + rh * 1.1, rh * 1.0, rh * 1.9);
+    ctx.fillStyle = col(0.85);
+    ctx.beginPath();
+    ctx.ellipse(hx, hy - rh * 0.34, rh * 1.02, rh * 0.62, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+  } else if (kind === 'visor') {
+    // A whole helmet, with the visor as the lit part.
+    ctx.strokeStyle = col(0.9); ctx.lineWidth = Math.max(1, rh * 0.20);
+    ctx.beginPath(); ctx.arc(hx, hy, rh * 1.10, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = col(0.72);
+    ctx.beginPath();
+    ctx.ellipse(hx + look * rh * 0.22, hy - rh * 0.06, rh * 0.66, rh * 0.44, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (kind === 'ears') {
+    ctx.fillStyle = col(0.88);
+    for (const sgn of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(hx + sgn * rh * 0.34, hy - rh * 0.80);
+      ctx.lineTo(hx + sgn * rh * 0.86, hy - rh * 1.62);
+      ctx.lineTo(hx + sgn * rh * 0.95, hy - rh * 0.52);
+      ctx.closePath(); ctx.fill();
+    }
+    // Tail, which is the other half of reading as a cat.
+    ctx.strokeStyle = col(0.80); ctx.lineWidth = Math.max(1, rh * 0.26);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-W * 0.30, H * 0.62);
+    ctx.quadraticCurveTo(-W * 1.30, H * 0.50, -W * 1.10, H * 0.02);
+    ctx.stroke();
+  } else if (kind === 'round-ears') {
+    ctx.fillStyle = col(0.88);
+    for (const sgn of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(hx + sgn * rh * 0.80, hy - rh * 0.74, rh * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = col(0.55);
+    ctx.beginPath();
+    ctx.ellipse(hx + look * rh * 0.20, hy + rh * 0.36, rh * 0.42, rh * 0.30, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (kind === 'mask') {
+    ctx.fillStyle = col(0.80);
+    ctx.beginPath();
+    ctx.ellipse(hx + look * rh * 0.18, hy - rh * 0.08, rh * 0.86, rh * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = col(0.7); ctx.lineWidth = Math.max(1, rh * 0.16);
+    ctx.beginPath(); ctx.moveTo(hx - rh, hy - rh * 0.1); ctx.lineTo(hx + rh, hy - rh * 0.1);
+    ctx.stroke();
+  } else if (kind === 'antenna') {
+    ctx.strokeStyle = col(0.9); ctx.lineWidth = Math.max(1, rh * 0.16);
+    ctx.beginPath();
+    ctx.moveTo(hx, hy - rh * 0.9); ctx.lineTo(hx + rh * 0.3, hy - rh * 1.9);
+    ctx.stroke();
+    ctx.fillStyle = col(1);
+    ctx.beginPath(); ctx.arc(hx + rh * 0.3, hy - rh * 2.0, rh * 0.28, 0, Math.PI * 2); ctx.fill();
+    // One lit eye, the classic read for a machine.
+    ctx.fillStyle = col(1);
+    ctx.fillRect(hx - rh * 0.5 + look * rh * 0.25, hy - rh * 0.12, rh * 1.0, rh * 0.24);
+  } else if (kind === 'hood') {
+    ctx.fillStyle = col(0.82);
+    ctx.beginPath();
+    ctx.moveTo(hx - rh * 1.25, hy + rh * 0.9);
+    ctx.quadraticCurveTo(hx, hy - rh * 2.0, hx + rh * 1.25, hy + rh * 0.9);
+    ctx.closePath(); ctx.fill();
+    // The face stays in shadow, which is the whole point of a hood.
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath();
+    ctx.ellipse(hx + look * rh * 0.2, hy + rh * 0.05, rh * 0.62, rh * 0.52, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (kind === 'ribbon') {
+    ctx.strokeStyle = col(0.75); ctx.lineWidth = Math.max(1, rh * 0.30);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(W * 0.2, -H * 0.1);
+    ctx.bezierCurveTo(W * 1.7, -H * 0.5, W * 1.2, H * 0.6, W * 2.1, H * 0.35);
+    ctx.stroke();
+  } else if (kind === 'flame') {
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(hx, hy, 0, hx, hy, rh * 2.6);
+    g.addColorStop(0, `rgba(255,240,190,0.55)`);
+    g.addColorStop(1, 'rgba(255,220,140,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(hx - rh * 2.6, hy - rh * 2.6, rh * 5.2, rh * 5.2);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = col(0.55);
+    ctx.beginPath();
+    ctx.moveTo(hx, hy - rh * 2.0);
+    ctx.quadraticCurveTo(hx + rh * 0.6, hy - rh * 0.6, hx, hy + rh * 0.2);
+    ctx.quadraticCurveTo(hx - rh * 0.6, hy - rh * 0.6, hx, hy - rh * 2.0);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/**
+ * WHAT THE CLIMBER IS WEARING, which is a function of WHICH FLOOR THIS IS.
+ *
+ * Six marks-sets, one per floor, drawn onto the shared silhouette: a bow tie in
+ * the lobby, a lapel and tie on the office floors, goggles and trunks at the
+ * pool, a sash in the residences, a hi-vis band and a hard hat in the plant,
+ * crossed straps on the roof. Two to four vector primitives each — no sprite, no
+ * atlas, no asset, and the bundle does not grow by a kilobyte of content.
+ *
+ * TWO RULES MAKE THIS SAFE TO PUT ON A CORPSE.
+ *
+ * It is keyed to ALTITUDE, never to the individual body. Every corpse on a floor
+ * wears that floor's uniform, so the costume can never be the reason two bodies
+ * look different — which means the only thing shape still varies with is
+ * erosion, and erosion is the one read the tower cannot lose.
+ *
+ * And it FADES WITH SOLIDITY. A body that no longer holds your weight loses its
+ * uniform as it goes, until a MEMORY corpse is a bare outline again. That is the
+ * right image, and it is also what stops acceptance 13 from quietly measuring
+ * clothing instead of decay.
+ *
+ * Everything is drawn inside a clip of the body outline, so a costume can never
+ * change the silhouette by a single pixel.
+ *
+ * @param {CanvasRenderingContext2D} ctx centred on the body
+ * @param {number} W half-width actually drawn
+ * @param {number} H half-height actually drawn
+ * @param {string} kind FLOORS[].costume
+ * @param {number} a 0..1 overall strength
+ * @param {number} look -1..1, so a turned head takes its goggles with it
+ * @param {number[]} accent the floor's accent, for the one lit mark each has
+ */
+export function costumeMarks(ctx, W, H, kind, a, look, accent) {
+  if (a <= 0.02) return;
+  const ink = (t) => `rgba(14,11,16,${(t * a).toFixed(3)})`;
+  const lit = (t) => `rgba(${accent[0] | 0},${accent[1] | 0},${accent[2] | 0},${(t * a).toFixed(3)})`;
+  const rh = Math.min(H * 0.26, W * 0.46);
+  const hy = -H + rh;                 // head centre
+  const sy = hy + rh * 0.95;          // shoulders
+  const hx = look * W * 0.30;
+  const waist = H * 0.30;
+
+  if (kind === 'waiter') {
+    // Bow tie at the throat, and an apron below the waist.
+    ctx.fillStyle = ink(0.85);
+    ctx.beginPath();
+    ctx.moveTo(hx - rh * 0.62, sy); ctx.lineTo(hx, sy + rh * 0.20);
+    ctx.lineTo(hx + rh * 0.62, sy); ctx.lineTo(hx + rh * 0.42, sy + rh * 0.52);
+    ctx.lineTo(hx - rh * 0.42, sy + rh * 0.52); ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = ink(0.30);
+    ctx.fillRect(-W, waist, W * 2, H - waist);
+  } else if (kind === 'suit') {
+    // Lapels as a V, a tie down the centre, dark jacket either side.
+    ctx.fillStyle = ink(0.62);
+    ctx.fillRect(-W, sy, W * 2, H - sy);
+    ctx.fillStyle = `rgba(250,250,252,${(0.55 * a).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.moveTo(hx - W * 0.30, sy); ctx.lineTo(hx, H * 0.10);
+    ctx.lineTo(hx + W * 0.30, sy); ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = lit(0.75);
+    ctx.fillRect(hx - W * 0.07, sy + rh * 0.2, W * 0.14, H * 0.42);
+  } else if (kind === 'swim') {
+    // Trunks, and goggles pushed up onto the forehead.
+    ctx.fillStyle = lit(0.70);
+    ctx.fillRect(-W, waist, W * 2, H * 0.34);
+    ctx.strokeStyle = ink(0.72);
+    ctx.lineWidth = Math.max(1, rh * 0.20);
+    ctx.beginPath();
+    ctx.moveTo(hx - rh * 0.92, hy - rh * 0.34);
+    ctx.lineTo(hx + rh * 0.92, hy - rh * 0.34);
+    ctx.stroke();
+  } else if (kind === 'robe') {
+    // A soft collar and a sash at the waist.
+    ctx.strokeStyle = ink(0.42);
+    ctx.lineWidth = Math.max(1, rh * 0.22);
+    ctx.beginPath();
+    ctx.moveTo(hx - W * 0.34, sy); ctx.lineTo(hx, H * 0.04);
+    ctx.lineTo(hx + W * 0.34, sy);
+    ctx.stroke();
+    ctx.fillStyle = lit(0.62);
+    ctx.fillRect(-W, waist, W * 2, H * 0.16);
+  } else if (kind === 'hivis') {
+    // Two reflective bands and a hard hat brim.
+    ctx.fillStyle = lit(0.80);
+    ctx.fillRect(-W, sy + rh * 0.55, W * 2, H * 0.16);
+    ctx.fillRect(-W, waist, W * 2, H * 0.14);
+    ctx.fillStyle = ink(0.80);
+    ctx.beginPath();
+    ctx.ellipse(hx, hy - rh * 0.30, rh * 1.12, rh * 0.46, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (kind === 'harness') {
+    // Straps crossing the chest, and a belt.
+    ctx.strokeStyle = ink(0.70);
+    ctx.lineWidth = Math.max(1, rh * 0.26);
+    ctx.beginPath();
+    ctx.moveTo(-W * 0.55, sy); ctx.lineTo(W * 0.45, waist);
+    ctx.moveTo(W * 0.55, sy); ctx.lineTo(-W * 0.45, waist);
+    ctx.stroke();
+    ctx.fillStyle = lit(0.72);
+    ctx.fillRect(-W, waist, W * 2, H * 0.13);
+  }
+}
+
+/**
+ * THE SAME BODY, ALIVE.
+ *
+ * The living player was a four-point diamond while every corpse in the tower was
+ * the silhouette above — so you were an abstract shape while alive and a person
+ * once dead, which is backwards in a game whose premise is that the thing that
+ * lands is the thing that becomes the stone. It also made the most-looked-at
+ * object on screen the most generic one it could possibly be, and "the game
+ * looks generic" is a note this project has now had twice.
+ *
+ * The same outline as a corpse, driven continuously instead of by a discrete
+ * pose, so the body in the air and the body it leaves behind are visibly one
+ * creature. That recognition is the point and is why this is not simply a nicer
+ * sprite.
+ *
+ *   lean    -1..1  which way the weight is going. Follows the aim while you are
+ *                  aiming and horizontal speed while you are not, so the figure
+ *                  is always addressing the direction it is about to travel.
+ *   crouch   0..1  gathering. Rises while aiming — a wind-up you can see — and
+ *                  on the frame of a landing.
+ *   stretch  0..1  the opposite: extended along flight.
+ *   look    -1..1  where the HEAD is turned. A corpse always passes 0: a dead
+ *                  body does not look anywhere, and that difference is the
+ *                  clearest thing separating the living figure from the tower
+ *                  of them underneath it.
+ *
+ * @param {CanvasRenderingContext2D} ctx centred on the body
+ * @param {number} hw
+ * @param {number} hh
+ * @param {number} lean -1..1
+ * @param {number} crouch 0..1
+ * @param {number} stretch 0..1
+ * @param {number} look -1..1
+ */
+export function figureLive(ctx, hw, hh, lean, crouch, stretch, look) {
+  bodyOutline(ctx, hw, hh, lean * 0.34, look, crouch, stretch);
 }
 
 /**
@@ -390,6 +839,22 @@ export class Renderer {
     this._lit = [0, 0, 0];   // scratch: rock tinted by the light on it
     this._markRgb = [0, 0, 0]; // scratch: rock held below the accent, for scenery
 
+    // THE LIVING FIGURE'S STANCE, eased here and nowhere else. Deliberately on
+    // the renderer and not on the sim: an animation clock inside the simulation
+    // would make two identical drags land differently, which acceptance test 1
+    // exists to forbid.
+    this.figLean = 0;
+    this.figCrouch = 0;
+    this.figStretch = 0;
+    this.figIdle = 0;
+    this.figLook = 0;
+    this.figAim = 0;
+    // WHICH CLIMBER. One per run, never per jump: a body that changed species
+    // between attempts would make silhouette vary for a reason unrelated to
+    // whether a corpse still holds weight, which is the read the tower needs.
+    this.character = 0;
+    this.figT = 0;
+
     // MOMENTUM, eased, 0-1. The counter itself lives in the sim; this is the
     // only thing the frame is allowed to know about it, and it is deliberately
     // not a number anyone can read off the screen — it widens the light you
@@ -582,7 +1047,7 @@ export class Renderer {
     this._parts(ctx, B);
     this._trail(ctx, B);
     this._ghostRun(ctx, B, sim, ui, dt);
-    this._player(ctx, B, sim, ui);
+    this._player(ctx, B, sim, ui, input, dt);
     if (input && input.aiming) this._aim(ctx, B, input, sim);
     this._bestLine(ctx, B, sim);
 
@@ -1312,6 +1777,22 @@ export class Renderer {
           ctx.globalCompositeOperation = 'source-over';
         }
 
+        // THE UNIFORM OF THE FLOOR THIS BODY DIED ON, fading as it decays.
+        //
+        // Keyed to the corpse's OWN altitude, not the player's, so a tower reads
+        // as strata — waiters at the bottom, suits through the middle, harnesses
+        // near the top — which is the single best image this game can put on a
+        // share card. Faded by `solidity` so a body that no longer holds weight
+        // loses its uniform with the rest of it, and a MEMORY corpse (a separate
+        // branch above, outline only) never gets one at all.
+        const cf = FLOORS[Math.floor(Math.max(0, s.y) / BIOME_SPAN) % FLOORS.length];
+        ctx.save();
+        this._figurePath(ctx, hwPx, hhPx, s.pose);
+        ctx.clip();
+        costumeMarks(ctx, hwPx, hhPx, cf.costume,
+                     cf.detail * solidity * FEEL.figure.corpseCostume, 0, B.accent);
+        ctx.restore();
+
         if (st === EROSION.THIN) {
           // Cracks. Three hairlines through the body, seeded off the pose so a
           // given corpse always cracks the same way.
@@ -1586,7 +2067,7 @@ export class Renderer {
    * @param {Sim} sim
    * @param {UiState} ui
    */
-  _player(ctx, B, sim, ui) {
+  _player(ctx, B, sim, ui, input, dt) {
     const b = sim.body;
     const x = this.X(b.rx ?? b.x), y = this.Y((b.ry ?? b.y) + FEEL.body.h * 0.5);
     const hw = FEEL.body.w * 0.5 * this.scale;
@@ -1608,31 +2089,93 @@ export class Renderer {
     ctx.fillRect(x - R, y - R, R * 2, R * 2);
     ctx.globalCompositeOperation = 'source-over';
 
+    // ---- STANCE. What the body is doing, eased, never snapped.
+    //
+    // Read off state the sim already owns rather than stored in it: the renderer
+    // is allowed an opinion about how a thing looks, and putting an animation
+    // clock in the simulation would make two identical drags produce two
+    // different landings, which acceptance test 1 exists to forbid.
+    const P = FEEL.figure;
+    const air = !b.grounded;
+    const aiming = !!(input && input.aiming);
+    // WHICH WAY THE WEIGHT IS GOING. While aiming that is the shot you are about
+    // to take, which is why the wind-up reads as intent and not as a wobble; in
+    // flight it is the velocity; standing still it decays to square.
+    let wantLean = 0;
+    if (aiming && input.arc && input.arc.length >= 4) {
+      wantLean = clamp((input.arc[2] - input.arc[0]) * P.aimLean, -1, 1);
+    } else if (air) {
+      wantLean = clamp(b.vx * P.flightLean, -1, 1);
+    }
+    const wantCrouch = aiming ? 1 : (air ? 0 : ui.squash * P.landCrouch);
+    const wantStretch = air ? clamp(Math.abs(b.vy) * P.flightStretch, 0, 1) : 0;
+    const k = Math.min(1, (dt || 1 / 60) * P.ease);
+    this.figLean += (wantLean - this.figLean) * k;
+    this.figCrouch += (wantCrouch - this.figCrouch) * k;
+    this.figStretch += (wantStretch - this.figStretch) * k;
+    // THE GAZE. A head that turns is the difference between a shape that moves
+    // and a creature that intends something. While aiming it goes where the shot
+    // goes, so the figure is looking at the ledge you are about to try for; in
+    // flight it looks where it is travelling; standing, it drifts and settles
+    // ahead. Faster than the body's ease, because a head turns before the weight
+    // does — that lag is most of what makes it read as alive rather than rigid.
+    const wantLook = aiming || air ? clamp(wantLean * P.lookGain, -1, 1) : 0;
+    this.figLook += (wantLook - this.figLook) * Math.min(1, (dt || 1 / 60) * P.lookEase);
+
+    // IDLE. A body standing on a ledge with nothing happening used to be a
+    // perfectly still shape, which is the single clearest tell that a thing is
+    // a sprite and not a character. It breathes, and it shifts its weight —
+    // slow, tiny, and only when grounded and not aiming, so it never competes
+    // with the wind-up or reads as input lag.
+    this.figT += (dt || 1 / 60);
+    const settled = !air && !aiming ? 1 : 0;
+    this.figIdle += (settled - this.figIdle) * Math.min(1, (dt || 1 / 60) * P.idleEase);
+    // Aiming and landing both raise `crouch`, and they are opposite shapes: a
+    // wind-up puts the arms BEHIND, a landing throws them WIDE. Tracked apart so
+    // the rig can tell which gather it is looking at.
+    this.figAim += ((aiming ? 1 : 0) - this.figAim) * k;
+    const breathe = Math.sin(this.figT * P.breatheRate) * P.breatheAmp * this.figIdle;
+    const sway = Math.sin(this.figT * P.swayRate + 1.3) * P.swayAmp * this.figIdle;
+
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(clamp(-b.vx * 0.0016, -0.45, 0.45));
-    const sx = 1 - ui.squash, sy = 1 + ui.squash;
+    const sx = (1 - ui.squash) * (1 - breathe * 0.5);
+    const sy = (1 + ui.squash) * (1 + breathe);
     ctx.scale(sx, sy);
 
-    ctx.fillStyle = rgb([255, 255, 255], 0.96);
-    ctx.beginPath();
-    ctx.moveTo(0, -hh);
-    ctx.lineTo(hw, 0);
-    ctx.lineTo(0, hh);
-    ctx.lineTo(-hw, 0);
-    ctx.closePath();
-    ctx.fill();
+    // The climber, on the rig: head, torso, two arms, two legs.
+    const L = this.figLean + sway, C = this.figCrouch, S = this.figStretch;
+    const LK = this.figLook + sway * 0.5;
+    const CH = CHARACTERS[this.character % CHARACTERS.length];
+    ctx.fillStyle = rgb(CH.skin, 0.97);
+    ctx.strokeStyle = rgb(CH.skin, 0.95);
+    figureRig(ctx, hw, hh, L, C, S, LK, this.figT * FEEL.figure.swayRate, this.figIdle,
+              this.figAim, CH);
 
+    // The living core: the one part of the figure that is the biome's accent
+    // rather than white, so a body reads as lit from inside while it is yours
+    // and merely lit from outside once it is not.
+    // The living core: the one part that is the biome's accent rather than white,
+    // so a body reads as lit from inside while it is still yours.
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = rgb(B.accent, 0.5);
-    ctx.beginPath();
-    ctx.moveTo(0, -hh * 0.55);
-    ctx.lineTo(hw * 0.5, 0);
-    ctx.lineTo(0, hh * 0.55);
-    ctx.lineTo(-hw * 0.5, 0);
-    ctx.closePath();
-    ctx.fill();
+    ctx.fillStyle = rgb(B.accent, 0.42);
+    ctx.strokeStyle = rgb(B.accent, 0.30);
+    figureRig(ctx, hw * 0.62, hh * 0.72, L, C, S, LK,
+              this.figT * FEEL.figure.swayRate, this.figIdle, this.figAim, CH);
     ctx.globalCompositeOperation = 'source-over';
+
+    // WHAT THIS FLOOR PUTS YOU IN. Clipped to the outline, so the costume can
+    // never change the silhouette — the shape stays the one thing that only
+    // ever means "this is a body".
+    ctx.save();
+    figureLive(ctx, hw, hh, L, C, S, LK);
+    ctx.clip();
+    const fl = FLOORS[((B.index % FLOORS.length) + FLOORS.length) % FLOORS.length];
+    const gy = 1 - C * 0.30 + S * 0.26;
+    const gx = 1 + C * 0.22 - S * 0.14;
+    costumeMarks(ctx, hw * gx, hh * gy, fl.costume, fl.detail, LK, B.accent);
+    ctx.restore();
     ctx.restore();
   }
 

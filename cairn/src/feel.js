@@ -48,6 +48,43 @@ export const FEEL = {
     sweepFraction: 0.5,
   },
 
+  // ------------------------------------------------------------- the figure
+  //
+  // How the LIVING body carries itself. Pure presentation — nothing here can
+  // reach the simulation, and it is checked that way: the same drag has to land
+  // in the same place whatever the figure happens to be doing at the time.
+  //
+  // The player used to be a four-point diamond while every corpse was a human
+  // silhouette, so you were an abstract shape alive and a person once dead. The
+  // premise is that the thing that lands becomes the stone; it should be
+  // possible to SEE that it is the same body.
+  figure: {
+    ease: 11.0,           // how fast a stance is taken, per second
+    aimLean: 0.055,       // aim direction -> lean, per world unit of arc
+    flightLean: 0.011,    // horizontal speed -> lean
+    flightStretch: 0.006, // fall speed -> extension along flight
+    landCrouch: 2.2,      // impact squash -> gather, so a landing is absorbed
+    // IDLE. A perfectly still body is the clearest tell that a thing is a
+    // sprite rather than a character. Small enough to read as breathing and
+    // never as drift; faded out entirely the moment you aim or leave the ground.
+    idleEase: 3.0,
+    breatheRate: 2.1,     // radians/second
+    breatheAmp: 0.030,
+    swayRate: 0.83,       // slower than the breath, so the two never beat
+    swayAmp: 0.10,
+    // THE GAZE. Eased faster than the body, because a head turns before the
+    // weight follows, and that lag is most of what separates a creature from a
+    // rigid shape. A corpse is always given 0: the dead do not look anywhere,
+    // and that is the clearest tell between you and the tower beneath you.
+    lookEase: 16.0,
+    lookGain: 1.5,
+    // How strongly a CORPSE still shows its floor's uniform, on top of the fade
+    // its own solidity already applies. Held below 1 deliberately: the tower is
+    // read for whether a body holds weight first and for what it was wearing
+    // second, and acceptance 13 measures exactly that order.
+    corpseCostume: 0.70,
+  },
+
   // --------------------------------------------------------------- gravity
   // Rise light, fall heavy. The asymmetry is the single cheapest way to make a
   // jump feel authored instead of simulated: you float up into the decision
@@ -634,6 +671,85 @@ export const FEEL = {
  */
 export const BIOME_SPAN = 150;
 export const BIOME_FADE = 20;
+
+/**
+ * THE FLOORS OF THE TOWER, in the order `BIOMES` declares them.
+ *
+ * The world was six abstract "biomes" and read as an abstract cave, which is
+ * the note this project kept getting: it looks generic. It is the same six
+ * altitude bands, given a subject — a BUILDING, climbed from the lobby to the
+ * roof — and the palettes already fit it almost exactly. ASH's warm brass is a
+ * lobby, SIGNAL's cold screen-blue is an office floor, CINDER's red heat is
+ * plant machinery, GLACIER's ice is the sky at the top. Nothing about the
+ * validated colour work moves; it is named rather than repainted.
+ *
+ * COSTUME. The climber dresses for the floor. This is the "different character"
+ * idea in the one place it does not break anything: keyed to ALTITUDE rather
+ * than to each jump, so every body left on a given floor wears the same thing
+ * and the silhouette still says only one thing about whether a corpse holds
+ * weight. Per-jump characters would have made shape vary for a reason unrelated
+ * to erosion, which is the one read the tower cannot lose.
+ *
+ * Each costume is a handful of vector marks on the shared silhouette — no
+ * sprite, no atlas, no asset. `detail` scales them; the marks are also faded by
+ * a corpse's remaining solidity, so a body that no longer holds weight loses its
+ * uniform as it goes. That is both the right image and what keeps acceptance 13
+ * measuring erosion instead of measuring clothes.
+ */
+/**
+ * TEN CLIMBERS, as numbers.
+ *
+ * A character here is not a drawing — it is proportion plus one identifying
+ * mark on the shared rig. That is a deliberate choice and not a compromise:
+ * proportion is what the eye actually reads at the size a phone renders a body
+ * (roughly twenty pixels tall), where a painted face is mud. Head size alone
+ * separates "cute animal" from "heroic adult" before any detail is visible.
+ *
+ *   head   head radius as a fraction of half-height. 0.26 reads adult,
+ *          0.42 reads cartoon, 0.5+ reads toy.
+ *   limb   limb stroke width against half-width. Thin is nimble, thick is heavy.
+ *   torso  shoulder width. Narrow is agile, wide is powerful.
+ *   leg    leg length against the space below the hip; long legs read athletic.
+ *   skin   the body colour. Everything else on screen comes from the biome, so
+ *          this is the ONE colour a player owns and recognises as theirs.
+ *   ink    the detail colour for the mark.
+ *   mark   the single identifying feature drawn on top — see `characterMark`.
+ *
+ * All ten keep the same bounding box, because the box is the physics. A tall
+ * character is not a character with a longer jump; nothing here reaches the
+ * simulation, and acceptance test 1 exists to keep it that way.
+ */
+export const CHARACTERS = [
+  { id: 'climber',  name: 'CLIMBER',   head: 0.27, limb: 0.20, torso: 0.46, leg: 0.54,
+    skin: [0xf2, 0xf4, 0xf7], ink: [0x1a, 0x18, 0x22], mark: 'helmet' },
+  { id: 'courier',  name: 'COURIER',   head: 0.29, limb: 0.17, torso: 0.42, leg: 0.58,
+    skin: [0xff, 0xd8, 0x6b], ink: [0x24, 0x1c, 0x18], mark: 'pack' },
+  { id: 'astro',    name: 'ASTRONAUT', head: 0.38, limb: 0.30, torso: 0.56, leg: 0.46,
+    skin: [0xe9, 0xee, 0xf6], ink: [0x2c, 0x6b, 0xd8], mark: 'visor' },
+  { id: 'cat',      name: 'CAT',       head: 0.44, limb: 0.16, torso: 0.38, leg: 0.48,
+    skin: [0xff, 0xa8, 0x5c], ink: [0x2a, 0x18, 0x14], mark: 'ears' },
+  { id: 'bear',     name: 'BEAR',      head: 0.42, limb: 0.30, torso: 0.60, leg: 0.42,
+    skin: [0xb5, 0x7a, 0x4a], ink: [0x2a, 0x1a, 0x12], mark: 'round-ears' },
+  { id: 'diver',    name: 'DIVER',     head: 0.30, limb: 0.19, torso: 0.44, leg: 0.60,
+    skin: [0x36, 0xc7, 0xc0], ink: [0x08, 0x2c, 0x38], mark: 'mask' },
+  { id: 'robot',    name: 'ROBOT',     head: 0.32, limb: 0.26, torso: 0.52, leg: 0.48,
+    skin: [0xc8, 0xcf, 0xd8], ink: [0xff, 0x5e, 0x3a], mark: 'antenna' },
+  { id: 'monk',     name: 'MONK',      head: 0.26, limb: 0.22, torso: 0.50, leg: 0.50,
+    skin: [0xd8, 0x64, 0x3c], ink: [0x1e, 0x12, 0x10], mark: 'hood' },
+  { id: 'acrobat',  name: 'ACROBAT',   head: 0.22, limb: 0.13, torso: 0.34, leg: 0.66,
+    skin: [0xff, 0x74, 0xb8], ink: [0x2a, 0x10, 0x26], mark: 'ribbon' },
+  { id: 'lantern',  name: 'LANTERN',   head: 0.40, limb: 0.14, torso: 0.36, leg: 0.50,
+    skin: [0xff, 0xe9, 0x9a], ink: [0x3a, 0x2a, 0x08], mark: 'flame' },
+];
+
+export const FLOORS = [
+  { name: 'LOBBY',      costume: 'waiter',   detail: 1.00 },
+  { name: 'OFFICES',    costume: 'suit',     detail: 1.00 },
+  { name: 'POOL',       costume: 'swim',     detail: 0.92 },
+  { name: 'RESIDENCES', costume: 'robe',     detail: 0.95 },
+  { name: 'PLANT',      costume: 'hivis',    detail: 1.00 },
+  { name: 'ROOF',       costume: 'harness',  detail: 1.00 },
+];
 
 export const BIOMES = [
   {

@@ -1,4 +1,4 @@
-import { FEEL, COLUMN, BIOME_SPAN, BIOMES, biomeAt, newBiomeSlot } from './src/feel.js';
+import { FEEL, COLUMN, BIOME_SPAN, BIOMES, biomeAt, newBiomeSlot, FLOORS, CHARACTERS } from './src/feel.js';
 import { Sim, PHASE, EV, CLOSE, predict, solidHalfWidth, erosionOf,
   landmarkOf, landmarksIn } from './src/sim.js';
 import { Input } from './src/input.js';
@@ -1015,7 +1015,7 @@ const api = {
   EV, CLOSE, erosionOf, solidHalfWidth, landmarkOf, landmarksIn,
   // The palettes, so a suite can hold every biome to a colour rule instead
   // of whichever one the session it happened to run is standing in.
-  BIOMES, biomeAt, newBiomeSlot,
+  BIOMES, biomeAt, newBiomeSlot, FLOORS, BIOME_SPAN, CHARACTERS,
   /** @param {number} n */
   step(n) { for (let i = 0; i < n; i++) sim.tick(0); },
   /**
