@@ -839,6 +839,24 @@ export class Renderer {
     this._lit = [0, 0, 0];   // scratch: rock tinted by the light on it
     this._markRgb = [0, 0, 0]; // scratch: rock held below the accent, for scenery
 
+    // Unit-space gradients, built on first use and kept. See `_unitDark` for why
+    // this is possible at all — a gradient resolves against the transform at fill
+    // time, so one object can serve every position and size it is ever drawn at.
+    /** @type {CanvasGradient|null} */ this._gDark = null;
+    /** @type {CanvasGradient|null} */ this._gPool = null;
+    /** @type {CanvasGradient|null} */ this._gHalo = null;
+    /** @type {CanvasGradient|null} */ this._gCore = null;
+    this._gPoolKey = ''; this._gHaloKey = ''; this._gCoreKey = '';
+    /** @type {Map<number, CanvasGradient>} */ this._gFace = new Map();
+
+    // WHICH LEDGE IS THE ACTIVE ONE, and the short answer it gives on a landing.
+    // Presentation only: `_perch` is a mirror of what the sim already decided,
+    // never an input to it.
+    this._perch = null;
+    this._flashS = null;
+    this._flashAt = 0;
+    this._flashT = 0;
+
     // THE LIVING FIGURE'S STANCE, eased here and nowhere else. Deliberately on
     // the renderer and not on the sim: an animation clock inside the simulation
     // would make two identical drags land differently, which acceptance test 1
@@ -915,6 +933,126 @@ export class Renderer {
   /** @param {number} wy */
   Y(wy) { return this.originY - wy * this.scale; }
 
+  // ----------------------------------------------------------- unit gradients
+  //
+  // Gradient coordinates are resolved against the transform in force when the
+  // gradient is USED, not when it is made. So a ramp authored once at the origin
+  // with radius 1 can be moved, scaled and squashed by the transform, and its
+  // strength ridden on `globalAlpha` — which turns a per-ledge, per-frame
+  // allocation into a lookup. The scene draws one of these per visible ledge, so
+  // this is the difference between a handful of objects a frame and a hundred.
+  //
+  // Cached on the CONTEXT, not on the renderer, because a gradient belongs to
+  // the context that made it; `_bgKey` already resets on resize and these do not
+  // need to — a unit ramp is resolution-independent by construction.
+
+  /** Black, opaque at the centre, gone at r=1. @param {CanvasRenderingContext2D} ctx */
+  _unitDark(ctx) {
+    let g = this._gDark;
+    if (!g) {
+      g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0, 'rgba(0,0,0,1)');
+      g.addColorStop(0.55, 'rgba(0,0,0,0.45)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      this._gDark = g;
+    }
+    return g;
+  }
+
+  /**
+   * A soft pool in one colour, opaque at the centre, gone at r=1. Rebuilt only
+   * when the colour changes — which is once per biome blend step, not per ledge.
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {number[]} c
+   * @param {number} mid alpha at 45% of the radius, relative to the centre
+   */
+  _unitPool(ctx, c, mid) {
+    const key = `${c[0] | 0},${c[1] | 0},${c[2] | 0},${mid}`;
+    let g = this._gPool;
+    if (!g || this._gPoolKey !== key) {
+      g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0, rgb(c, 1));
+      g.addColorStop(0.45, rgb(c, mid));
+      g.addColorStop(1, rgb(c, 0));
+      this._gPool = g;
+      this._gPoolKey = key;
+    }
+    return g;
+  }
+
+  /**
+   * The front of a slab: opaque at the crest, a third of that a third of the way
+   * down, gone at the bottom. Vertical, in unit space.
+   *
+   * The middle stop is a FIXED ratio of the head rather than its own value. The
+   * two it replaces ran 0.22/0.07 and 0.58/0.18 across the lighting range — the
+   * ratio moves by eight thousandths of an alpha over the whole span, which is
+   * three orders of magnitude below anything visible, and holding it constant is
+   * what lets the head ride on `globalAlpha` and the object be reused at all.
+   *
+   * Keyed on a quantised colour, because the slab hue slides continuously with
+   * the light and an exact key would miss on every ledge — which would be worse
+   * than allocating, not better. Five bits per channel is far finer than a
+   * near-black slab at a fifth of an alpha can show.
+   *
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {number[]} c
+   */
+  _unitFace(ctx, c) {
+    const q = ((c[0] >> 3) << 10) | ((c[1] >> 3) << 5) | (c[2] >> 3);
+    let g = this._gFace.get(q);
+    if (!g) {
+      g = ctx.createLinearGradient(0, 0, 0, 1);
+      g.addColorStop(0, rgb(c, 1));
+      g.addColorStop(0.35, rgb(c, 0.315));
+      g.addColorStop(1, rgb(c, 0));
+      this._gFace.set(q, g);
+    }
+    return g;
+  }
+
+  /**
+   * The light the player throws on the world. Steeper than a pool: it has to
+   * fall away fast enough that the body stays the brightest thing inside it.
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {number[]} c
+   */
+  _unitHalo(ctx, c) {
+    const key = `${c[0] | 0},${c[1] | 0},${c[2] | 0}`;
+    let g = this._gHalo;
+    if (!g || this._gHaloKey !== key) {
+      g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0, rgb(c, 1));
+      g.addColorStop(0.14, rgb(c, 0.44));
+      g.addColorStop(0.42, rgb(c, 0.13));
+      g.addColorStop(1, rgb(c, 0));
+      this._gHalo = g;
+      this._gHaloKey = key;
+    }
+    return g;
+  }
+
+  /**
+   * The player's own light: white at the very centre, the accent through the
+   * middle, gone at r=1. One object for the whole session unless the accent
+   * moves.
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {number[]} c
+   */
+  _unitCore(ctx, c) {
+    const key = `${c[0] | 0},${c[1] | 0},${c[2] | 0}`;
+    let g = this._gCore;
+    if (!g || this._gCoreKey !== key) {
+      g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.30, rgb(c, 0.58));
+      g.addColorStop(1, rgb(c, 0));
+      this._gCore = g;
+      this._gCoreKey = key;
+    }
+    return g;
+  }
+
   // -------------------------------------------------------------- emitters
 
   /**
@@ -949,15 +1087,30 @@ export class Renderer {
    * and the motion reverses at 0.45.
    */
   /**
+   * The hold you just landed on answers, briefly. A flicker, not an effect: it
+   * is the same crest and the same bar, turned up and let go, so nothing new is
+   * drawn and nothing survives the decay.
+   *
+   * @param {Solid|null} s the ledge, or null for a landing on nothing drawable
+   */
+  landFlash(s) {
+    if (!s) return;
+    this._flashS = s;
+    this._flashAt = Date.now();
+    this._flashT = FEEL.visual.landingFlashMs;
+  }
+
+  /**
    * @param {number} x
    * @param {number} y
    * @param {number} n
+   * @param {number} [speed] 1 = a death's shards. Lower is dust.
    */
-  burst(x, y, n) {
+  burst(x, y, n, speed = 1) {
     for (let k = 0; k < n && this.partN < 160; k++) {
       const o = this.partN++ * 7;
       const a = (k / n) * TAU + Math.random() * 0.4;
-      const sp = 18 + Math.random() * 34;
+      const sp = (18 + Math.random() * 34) * speed;
       this.parts[o] = x; this.parts[o + 1] = y;
       this.parts[o + 2] = Math.cos(a) * sp;
       this.parts[o + 3] = Math.sin(a) * sp;
@@ -1591,11 +1744,70 @@ export class Renderer {
       // Unheld: gone by full pull-back. Held: never below `monHeld`.
       const mon = held ? Math.max(depth, L.monHeld) : depth;
       if (mon <= 0.01) continue;
+      const V = FEEL.visual;
+      // THE STRUCTURE READS BY BEING DARKER, NOT BY BEING BRIGHTER.
+      //
+      // The note this answers was "there is no one landmark the eye remembers",
+      // and the reason was arithmetic: scenery drew at alpha 0.15 and gave up 78%
+      // of that once you were inside it, so at the exact moment a structure filled
+      // the frame it was drawn at 0.03 — three hundredths of an alpha over a wall
+      // that is itself near-black. It was not subtle, it was absent.
+      //
+      // Raising it was the wrong fix and the fix that `insideFade` exists to
+      // prevent: scenery brighter than the holds is scenery you try to land on,
+      // and acceptance 13's erosion margin collapsed from 49.2 to 4.8 the last
+      // time this layer got louder. So the mass goes the OTHER way. A quiet zone
+      // pushes the lit facade down to black across the structure's footprint, and
+      // the shape is then a heavy dark body sitting in that hole with a few lit
+      // edges. It gains presence by taking light away, which costs the ledges
+      // nothing — it gives them a darker field to be bright against.
+      //
+      // The darkening is faded by ARRIVAL but not by `insideFade`: being inside an
+      // enormous structure should be darker, not lighter, and that is also the
+      // distance where the corpses most need a quiet background.
+      const dk = fade * mon;
+      if (dk > 0.02) {
+        const qr = L.widthU * sc * 0.62;
+        ctx.save();
+        ctx.globalAlpha = V.landmarkQuiet * dk;
+        ctx.translate(this.X(m.x), this.Y(m.y));
+        ctx.scale(qr, L.spanU * sc * 0.62);
+        ctx.fillStyle = this._unitDark(ctx);
+        ctx.fillRect(-1, -1, 2, 2);
+        ctx.restore();
+      }
+
       ctx.globalAlpha = (held ? L.claimAlpha : L.alpha) * near * mon;
       ctx.strokeStyle = rgb(held ? B.accent : mark, 1);
       ctx.lineWidth = Math.max(1, L.lineU * sc * (held ? 1.25 : 1));
       ctx.save();
       ctx.translate(this.X(m.x), this.Y(m.y));
+
+      // NO MASS STROKE AND NO ACCENT EDGE PASS. BOTH WERE BUILT AND BOTH WERE
+      // DELETED, WITH THE PICTURES THAT KILLED THEM.
+      //
+      // The brief asked for a structure with a heavy dark body and two or three
+      // lit edges. Both were written: the path walked once at four times the
+      // weight in black, then again thin in the accent. In a pulled-back frame
+      // they looked exactly as intended. In the frame that matters — the camera
+      // inside the ASH stair, where a player spends the time — they turned the
+      // landmark into a lit beam running diagonally across the play area,
+      // brighter than half the ledges and the same shape as something you would
+      // try to stand on.
+      //
+      // Two rounds were then spent weakening them, first onto `near`, then the
+      // mass onto `near` as well, and the frames barely moved. The probe that
+      // settled it drew the same scene with `landmark.alpha` forced to zero: the
+      // beam was still there, which meant it was never the existing layer at all
+      // and every adjustment had been aimed at the wrong number.
+      //
+      // A black outline under a thin bright line does not dim that line, it
+      // SEPARATES it — contrast is a different lever from brightness, and this
+      // layer is only allowed the second one. So the edges are gone and what
+      // stays is the soft wash above, which darkens and has no edge to sharpen
+      // anything against. The instruction in the brief covers this exactly: if
+      // an effect hurts readability, remove it rather than dimming the scene
+      // around it.
       if (held) {
         const r = L.claimLightU * sc;
         const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
@@ -1609,6 +1821,7 @@ export class Renderer {
         ctx.restore();
       }
       this._landmarkPath(ctx, m, L.widthU * sc, L.spanU * sc, B);
+
       ctx.restore();
     }
     ctx.restore();
@@ -1875,6 +2088,31 @@ export class Renderer {
     const by = sim.body.ry ?? sim.body.y;
     const total = Math.max(1, sim.world.corpseCount);
     const reach = 78;
+    const V = FEEL.visual;
+
+    // THREE MATERIALS, NOT ONE SHAPE AT SIX DISTANCES.
+    //
+    // Every hold used to be the same slab, separated only by how near the player
+    // happened to be — a continuous dimmer, which is why a screenshot of six of
+    // them read as six copies. What a player actually needs to tell apart is
+    // three CLASSES: the one under their feet, the ones that are merely there,
+    // and the ones that used to be them. Distance still does its lighting job on
+    // top; it is no longer the only thing saying anything.
+    //
+    // The separation is brightness, implied thickness and a cast shadow. NOT
+    // more saturation: this palette has one warm and one dark, and a third hue
+    // to mean "active" would be a new colour for a distinction that reads
+    // perfectly well without one.
+    //
+    // `standing` survives the flight deliberately. The ledge you launched from is
+    // still the active one while you are in the air — it is the perch the shot is
+    // being taken from, and blanking it at launch made the whole hierarchy
+    // flicker off at the exact moment the player was looking hardest.
+    if (sim.body.standing) this._perch = sim.body.standing;
+    const perch = this._perch;
+    const flashAge = (this._flashT || 0) - (Date.now() - (this._flashAt || 0));
+    const flashK = this._flashS && flashAge > 0
+      ? (flashAge / this._flashT) * V.landingFlash : 0;
 
     for (let i = 0; i < solids.length; i++) {
       const s = solids[i];
@@ -1914,29 +2152,58 @@ export class Renderer {
       }
 
       if (!s.corpse) {
+        // WHICH OF THE THREE MATERIALS THIS IS.
+        //
+        // `tier` is a single multiplier on everything the hold emits, so the
+        // active ledge is not a differently-drawn object — it is the same object
+        // turned up. That matters: a special-cased "active platform" style would
+        // drift out of step with the ordinary one the first time either changed.
+        const active = s === perch;
+        const tier = active ? V.activePlatformGlow : V.inactivePlatformGlow;
+        const flash = active && this._flashS === s ? flashK : 0;
         // Rock, pulled toward the accent by how lit it is. Geometry in this
         // game is never its own colour in isolation — it is always somewhere
         // between the rock hue and the light falling on it, which is what keeps
-        // it off neutral.
-        const rr = lerp(B.rock[0], B.accent[0], lit * 0.30);
-        const rg = lerp(B.rock[1], B.accent[1], lit * 0.30);
-        const rb = lerp(B.rock[2], B.accent[2], lit * 0.30);
+        // it off neutral. An ordinary hold is pulled LESS: it should sit closer
+        // to graphite so the one you are on has somewhere warmer to go.
+        const pull = lit * (active ? 0.34 : 0.16);
+        const rr = lerp(B.rock[0], B.accent[0], pull);
+        const rg = lerp(B.rock[1], B.accent[1], pull);
+        const rb = lerp(B.rock[2], B.accent[2], pull);
         this._lit[0] = rr; this._lit[1] = rg; this._lit[2] = rb;
         const w = s.hw * 2 * this.scale;
         const h = s.hh * 2 * this.scale;
         const top = sy - s.hh * this.scale;
         // Body: a dark slab that never reaches flat — a vertical gradient from
-        // the lit crest down into the background colour.
+        // the lit crest down into the background colour. Authored once in unit
+        // space and placed by the transform; see `_unitFace`.
         const skirt = h * 1.35;
-        const g = ctx.createLinearGradient(0, top, 0, top + skirt);
-        g.addColorStop(0, rgb(this._lit, 0.22 + lit * 0.36));
-        g.addColorStop(0.35, rgb(this._lit, 0.07 + lit * 0.11));
-        g.addColorStop(1, rgb(this._lit, 0));
-        ctx.fillStyle = g;
-        ctx.fillRect(sx - w * 0.5, top, w, skirt);
-        // Crest: the lit edge, and the only thing you actually aim at.
-        ctx.fillStyle = rgb(B.accent, 0.16 + lit * 0.70);
-        ctx.fillRect(sx - w * 0.5, top, w, Math.max(1, 1.5 * this.dpr));
+        ctx.save();
+        ctx.translate(sx - w * 0.5, top);
+        ctx.scale(w, skirt);
+        ctx.globalAlpha = 0.22 + lit * 0.36;
+        ctx.fillStyle = this._unitFace(ctx, this._lit);
+        ctx.fillRect(0, 0, 1, 1);
+        ctx.restore();
+        // THE SHADOW UNDER THE LIP, which is the whole of "implied thickness".
+        //
+        // A slab lit only from its own top edge is a line with a smudge under
+        // it. Real ones have a front face that the crest overhangs, and the
+        // cheapest possible statement of that is a dark band immediately below
+        // the crest — the crest then reads as the TOP of something rather than
+        // as a stripe. Strongest on the active hold, because that is the one the
+        // eye is trying to judge the surface of.
+        const lip = Math.max(1, h * 0.30);
+        ctx.fillStyle = `rgba(0,0,0,${(V.platformShadow * (0.35 + lit * 0.5)
+          * (active ? 1 : 0.7)).toFixed(3)})`;
+        ctx.fillRect(sx - w * 0.5, top + Math.max(1, 1.5 * this.dpr), w, lip);
+        // Crest: the lit edge, and the only thing you actually aim at. The
+        // active one is drawn THICKER as well as brighter — thickness is the
+        // half of the tell that survives a small screenshot.
+        ctx.fillStyle = rgb(B.accent,
+          clamp((0.16 + lit * 0.70) * (0.55 + tier * 0.62) + flash, 0, 1));
+        ctx.fillRect(sx - w * 0.5, top, w,
+          Math.max(1, (active ? 2.4 : 1.4) * this.dpr));
         // THE POOL OF LIGHT A LEDGE THROWS ON THE WALL BEHIND IT.
         //
         // A platform drawn as a bright line is a stripe painted on a wall. In
@@ -1947,21 +2214,21 @@ export class Renderer {
         if (lit > 0.05) {
           const G = FEEL.ledgeGlow;
           const gr = G.radiusU * this.scale;
-          const gx = sx, gy = top;
-          const pg = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
-          pg.addColorStop(0, rgb(B.accent, G.alpha * lit));
-          pg.addColorStop(0.45, rgb(B.accent, G.alpha * lit * 0.28));
-          pg.addColorStop(1, rgb(B.accent, 0));
+          ctx.save();
           ctx.globalCompositeOperation = 'lighter';
-          ctx.fillStyle = pg;
-          ctx.fillRect(gx - gr, gy - gr, gr * 2, gr * 2);
-          ctx.globalCompositeOperation = 'source-over';
+          ctx.translate(sx, top);
+          ctx.scale(gr, gr);
+          ctx.globalAlpha = clamp(G.alpha * lit * (0.5 + tier), 0, 1);
+          ctx.fillStyle = this._unitPool(ctx, B.accent, 0.28);
+          ctx.fillRect(-1, -1, 2, 2);
+          ctx.restore();
         }
 
         // A short bloom-catching bar on the crest, so the landing line reads
         // even when the player's light is nowhere near it.
         ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = rgb(B.accent, 0.05 + lit * 0.22 + urgent * 0.55);
+        ctx.fillStyle = rgb(B.accent, clamp((0.05 + lit * 0.22) * (0.55 + tier * 0.62)
+          + urgent * 0.55 + flash * 0.8, 0, 1));
         ctx.fillRect(sx - w * 0.5, top - 1.5 * this.dpr, w, 3 * this.dpr);
         ctx.globalCompositeOperation = 'source-over';
 
@@ -2100,6 +2367,23 @@ export class Renderer {
         //
         // A stage that opts out of the rule is a stage that will invert. It gets
         // `memOf`, below `topOf`, on the same base colour as everything else.
+        // AND IT STAYS HOLLOW. TRIED AND REVERTED, ONCE, WITH A PICTURE.
+        //
+        // The other three stages punch an opaque `bgBot` hole before they draw,
+        // and giving this one the same backing is tempting for a good reason:
+        // with the bodies removed the background under acceptance 13's four
+        // sample positions runs 8.9 to 54.4 in BLOOM, so an outline-only stage
+        // measures whatever wall it stands in front of and nothing else.
+        //
+        // It was filled, shipped to a screenshot, and reverted in one look. A
+        // filled MEMORY body reads as a SOLID OBJECT — and a memory body is the
+        // one thing in this game you fall straight through. That is the exact
+        // lie this art direction refuses everywhere else: colour and brightness
+        // say what state a surface is in, and a hold may never be drawn as more
+        // than it catches. The measurement problem was real and is fixed where
+        // it belonged, in the instrument: acceptance 13 now scores each body
+        // against a control frame of the same wall with the bodies removed, so
+        // the background cancels instead of having to be equal.
         const mr = cr * FEEL.tower.memOf, mg = cg * FEEL.tower.memOf, mb = cb * FEEL.tower.memOf;
         ctx.strokeStyle = `rgba(${mr | 0},${mg | 0},${mb | 0},${(0.20 + lit * 0.16).toFixed(3)})`;
         ctx.lineWidth = Math.max(0.7, this.dpr * 0.7);
@@ -2394,27 +2678,27 @@ export class Renderer {
     // Gap drives everything: a shadow directly under the feet is tight and
     // dark, one under a body at the top of its arc is wide and faint.
     const gap = clamp((feet - bestTop) / S.rangeU, 0, 1);
-    const a = S.alpha * (1 - gap) * (1 - gap);
+    const a = FEEL.visual.playerContactShadow * (1 - gap) * (1 - gap);
     if (a < 0.008) return;
     const w = FEEL.body.w * (S.wideAt + (1 - S.wideAt) * (1 - gap)) * this.scale;
     const h = w * S.flatten;
     const x = this.X(bx);
     const y = this.Y(bestTop) + h * 0.25;
 
-    // Soft, because a hard ellipse under a body reads as a sticker. The
-    // gradient is built per frame and that is deliberate: it is one object for
-    // one shadow, against a per-pane loop that was the real cost in this scene.
-    const g = ctx.createRadialGradient(x, y, 0, x, y, w);
-    g.addColorStop(0, `rgba(0,0,0,${a.toFixed(3)})`);
-    g.addColorStop(0.55, `rgba(0,0,0,${(a * 0.45).toFixed(3)})`);
-    g.addColorStop(1, 'rgba(0,0,0,0)');
+    // Soft, because a hard ellipse under a body reads as a sticker.
+    //
+    // Built ONCE, in unit space, and reused. A CanvasGradient's coordinates are
+    // resolved in the transform in force at FILL time, not at creation time —
+    // so a ramp authored at (0,0,r=1) can be positioned and sized by the
+    // transform, and its per-frame strength ridden on `globalAlpha`. That is the
+    // pattern every gradient in this renderer now uses; nothing here allocates.
     ctx.save();
     ctx.translate(x, y);
-    ctx.scale(1, h / w);
-    ctx.translate(-x, -y);
-    ctx.fillStyle = g;
+    ctx.scale(w, h);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = this._unitDark(ctx);
     ctx.beginPath();
-    ctx.arc(x, y, w, 0, Math.PI * 2);
+    ctx.arc(0, 0, 1, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -2562,9 +2846,24 @@ export class Renderer {
    */
   _player(ctx, B, sim, ui, input, dt) {
     const b = sim.body;
+    const V = FEEL.visual;
     const x = this.X(b.rx ?? b.x), y = this.Y((b.ry ?? b.y) + FEEL.body.h * 0.5);
-    const hw = FEEL.body.w * 0.5 * this.scale;
-    const hh = FEEL.body.h * 0.5 * this.scale;
+    // THE FIGURE IS DRAWN LARGER THAN THE BOX THAT CATCHES IT, ON PURPOSE.
+    //
+    // At a 150-unit view a 4.2 x 6.0 body is a mark a few dozen pixels tall, and
+    // a screenshot of it reads as a lit dot rather than as a climber. The fix is
+    // presentation, not physics: `visual.playerScale` grows the drawing and the
+    // collision box is untouched.
+    //
+    // Anchored at the FEET, which is the whole reason this is allowed. Scaling
+    // about the centre would push the contact point below the surface and the
+    // figure would sink into every ledge it stood on — the drawn feet have to
+    // stay exactly where the simulation puts them. Growth goes upward, into
+    // empty air the collision does not use.
+    const gS = V.playerScale;
+    const hw = FEEL.body.w * 0.5 * this.scale * gS;
+    const hh = FEEL.body.h * 0.5 * this.scale * gS;
+    const foot = FEEL.body.h * 0.5 * this.scale * (gS - 1);   // the anchor shift
 
     // The light it casts. A clean streak widens it and lifts the core — the
     // only place momentum is ever visible, and it reads as the tower getting
@@ -2572,15 +2871,14 @@ export class Renderer {
     const M = this.momentum;
     const R = 66 * this.scale * (1 + FEEL.momentum.lightGain * M);
     const lift = 1 + FEEL.momentum.lightAlpha * M;
-    const g = ctx.createRadialGradient(x, y, 0, x, y, R);
-    g.addColorStop(0, rgb(B.accent, 0.34 * lift));
-    g.addColorStop(0.14, rgb(B.accent, 0.15 * lift));
-    g.addColorStop(0.42, rgb(B.accent, 0.045 * lift));
-    g.addColorStop(1, rgb(B.accent, 0));
+    ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = g;
-    ctx.fillRect(x - R, y - R, R * 2, R * 2);
-    ctx.globalCompositeOperation = 'source-over';
+    ctx.translate(x, y);
+    ctx.scale(R, R);
+    ctx.globalAlpha = Math.min(1, 0.34 * lift);
+    ctx.fillStyle = this._unitHalo(ctx, B.accent);
+    ctx.fillRect(-1, -1, 2, 2);
+    ctx.restore();
 
     // ---- STANCE. What the body is doing, eased, never snapped.
     //
@@ -2631,7 +2929,10 @@ export class Renderer {
     const sway = Math.sin(this.figT * P.swayRate + 1.3) * P.swayAmp * this.figIdle;
 
     ctx.save();
-    ctx.translate(x, y);
+    // `foot` is what keeps the enlargement honest: the rig grows about its own
+    // origin, so lifting that origin by exactly the growth puts the drawn feet
+    // back on the surface the collision is standing on.
+    ctx.translate(x, y - foot);
     ctx.rotate(clamp(-b.vx * 0.0016, -0.45, 0.45));
     const sx = (1 - ui.squash) * (1 - breathe * 0.5);
     const sy = (1 + ui.squash) * (1 + breathe);
@@ -2672,15 +2973,25 @@ export class Renderer {
     // truthful version of this game's one rule: the player is not a bright
     // object, the player is the light source, and a source is a point.
     const coreY = -hh * (0.10 + C * 0.16 - S * 0.06);
-    const coreR = hw * FEEL.figure.coreR;
+    const coreR = hw * FEEL.figure.coreR * 3.2;
+    // AND IT BREATHES, BUT ONLY IT.
+    //
+    // A standing figure needs a sign of life that cannot be mistaken for input
+    // lag, which rules out moving the body: any drift in the silhouette while
+    // the thumb is down reads as the game not listening. A light does not have
+    // that problem — a heartbeat in the core is unmistakably the character being
+    // alive and unmistakably not a response to anything you did. Faded out by
+    // `figIdle` the instant you aim or leave the ground.
+    const pulse = 1 - V.idlePulseAmp * this.figIdle
+      * (0.5 - 0.5 * Math.cos(this.figT * V.idlePulseSpeed));
+    ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const cg2 = ctx.createRadialGradient(0, coreY, 0, 0, coreY, coreR * 3.2);
-    cg2.addColorStop(0, 'rgba(255,255,255,0.95)');
-    cg2.addColorStop(0.30, rgb(B.accent, 0.55));
-    cg2.addColorStop(1, rgb(B.accent, 0));
-    ctx.fillStyle = cg2;
-    ctx.fillRect(-coreR * 3.2, coreY - coreR * 3.2, coreR * 6.4, coreR * 6.4);
-    ctx.globalCompositeOperation = 'source-over';
+    ctx.translate(0, coreY);
+    ctx.scale(coreR, coreR);
+    ctx.globalAlpha = clamp(V.playerCoreIntensity * pulse, 0, 1);
+    ctx.fillStyle = this._unitCore(ctx, B.accent);
+    ctx.fillRect(-1, -1, 2, 2);
+    ctx.restore();
 
     // RIM LIGHT. A thin bright edge where the body catches its own core, which
     // is what stops a dark silhouette reading as a hole cut in the scene. Drawn
@@ -2691,7 +3002,7 @@ export class Renderer {
               this.figIdle, this.figAim, CH);
     ctx.clip();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = rgb(B.accent, P2.rimAlpha);
+    ctx.strokeStyle = rgb(B.accent, V.playerRimIntensity);
     ctx.lineWidth = Math.max(1, hw * P2.rimW);
     ctx.translate(-hw * P2.rimOff * (LK >= 0 ? 1 : -1), -hh * P2.rimOff);
     figureRig(ctx, hw, hh, L, C, S, LK, this.figT * FEEL.figure.swayRate,

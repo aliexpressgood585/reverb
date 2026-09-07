@@ -657,8 +657,18 @@ const page = await newPage();
     // automatically rather than by suspicion: if the sample box is mostly
     // background, then no amount of changing the body will shift it. A control
     // per position says which of the two is being measured, every run.
+    // AND IT HAS TO ACTUALLY REMOVE THE BODIES.
+    //
+    // This used to set `live = false` on each corpse, and `_solids` has no such
+    // check — `live` gates the COLLISION, not the drawing. So the control frame
+    // came out byte-identical to the measured one and reported a body-above-
+    // ground of exactly 0.0, for all four stages, in all six palettes, on every
+    // run. A control that cannot fail is not a control, and this one spent a
+    // session being read as evidence that the sample boxes held no corpse.
+    //
+    // They do. Taking them out of `solids` is what leaves the ground behind.
     const rows = xs.map(sample);
-    for (const c of sim.world.solids) if (c.corpse) c.live = false;
+    sim.world.solids = sim.world.solids.filter((c) => !c.corpse);
     renderer.draw(sim, camera, null, { started: true, squash: 0, stretch: 0 }, 1 / 60, false);
     const floor = xs.map(sample);
     const out = { rows, floor, biome: renderer.biome.name };
@@ -681,11 +691,27 @@ const page = await newPage();
     const atY = bi * 150 + 75;                      // the middle of each floor
     const out = await measureAt(atY);
     const r = out.rows;
-    const lums = r.map((v) => v.lum);
+    // WHAT THE BODY ADDS, NOT WHAT THE BOX CONTAINS.
+    //
+    // For five rounds this scored the raw box mean, and the control finally
+    // built above says why that never converged: with the corpses removed, the
+    // background under the four positions ran 8.9, 17.4, 39.1, 54.4 in BLOOM —
+    // it climbs by a factor of six across a row of four bodies, because a
+    // generated ledge and its light pool happen to fall behind the right-hand
+    // end of it. Against a 45-point swing in the ground, a TOP body contributing
+    // 1.7 and a MEMORY body contributing 0.0 cannot be told apart, and the
+    // "inversion" the gate kept reporting was a gradient in the WALL.
+    //
+    // Subtracting the control isolates the one thing under test. It is the same
+    // pair of frames, differing only by the bodies. Everything the fixture
+    // already does — silencing the lit panes, parking the light equidistant,
+    // creating oldest-first — was aimed at making the background equal; this
+    // stops requiring it to be.
+    const lums = r.map((v, i) => +(v.lum - out.floor[i].lum).toFixed(1));
     let minGap = Infinity;
     for (let i = 0; i < 3; i++) {
       minGap = Math.min(minGap,
-        Math.abs(r[i].lum - r[i + 1].lum)
+        Math.abs(lums[i] - lums[i + 1])
         + Math.abs(r[i].chroma - r[i + 1].chroma)
         + Math.abs(r[i].shelf - r[i + 1].shelf));
     }
@@ -696,11 +722,11 @@ const page = await newPage();
     // body measured darker than a decayed one.
     let inverted = -1;
     for (let i = 0; i < 3; i++) if (lums[i] < lums[i + 1] - 1) { inverted = i; break; }
-    console.log(`      ${out.biome.padEnd(8)} lum ${lums.join(' > ')}` +
+    console.log(`      ${out.biome.padEnd(8)} body over ground ${lums.join(' > ')}` +
       `   closest pair ${minGap.toFixed(1)}` +
       (inverted >= 0 ? `   BACKWARDS at ${names[inverted]}` : ''));
-    console.log(`               ground ${out.floor.map((f) => f.lum).join(' | ')}` +
-      `   body above ground ${lums.map((l, i) => (l - out.floor[i].lum).toFixed(1)).join(' | ')}`);
+    console.log(`               box ${out.rows.map((f) => f.lum).join(' | ')}` +
+      `   ground ${out.floor.map((f) => f.lum).join(' | ')}`);
     if (inverted >= 0) bad.push(`${out.biome}: ${names[inverted]} is dimmer than ${names[inverted + 1]}`);
     else if (minGap <= 3) bad.push(`${out.biome}: two stages look the same (${minGap.toFixed(1)})`);
     if (minGap < worstGap) { worstGap = minGap; worstName = out.biome; }

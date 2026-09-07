@@ -576,7 +576,16 @@ function drainEvents() {
       renderer.ring(e[i + 2], e[i + 3], force);
       audio.land(force);
       camera.kick(force);
-      ui.squashVel -= force * 9;
+      ui.squashVel -= force * FEEL.visual.landingSquashKick;
+      // AND THE SURFACE ANSWERS. Three things, all small, all over inside a
+      // quarter of a second: the ledge flickers, the body squashes, and a
+      // couple of grains come off the contact point. `landingDust` is a hard
+      // ceiling and not a rate — a landing is a punctuation mark, and a puff of
+      // twenty particles would make it a sentence.
+      renderer.landFlash(sim.body.standing);
+      const V = FEEL.visual;
+      const dust = Math.min(V.landingDust, Math.round(1 + force * V.landingDust));
+      if (force > 0.12) renderer.burst(e[i + 2], e[i + 3], dust, V.landingDustSpeed);
       if (force > 0.45) buzz(26);
     } else if (kind === EV.DEATH) {
       beat('firstDeath');

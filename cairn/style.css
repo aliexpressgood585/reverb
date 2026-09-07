@@ -41,6 +41,19 @@
   --t-slow: 420ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
 
+  /* ---- the title screen's readability dials ----
+     The two members of the readability set that are not canvas values. Their
+     siblings live in `src/feel.js` under `visual`; these are here because the
+     title is DOM, and copying them into the bundle would mean two numbers for
+     one thing. Turn `--title-op` up if the wordmark still reads as faint, and
+     `--cta-pulse` up if the invitation to start is still easy to miss. */
+  --title-op: 0.94;
+  /* The FLOOR of the pulse, raised from the 0.34 this started at after a title
+     screenshot caught the animation at its trough and the way in was the
+     faintest thing on the page. A call to action is allowed to breathe; it is
+     not allowed to have a moment where it cannot be read. */
+  --cta-pulse: 0.46;
+
   /* ---- space ---- */
   --gap: 14px;
   --edge: 16px;
@@ -127,7 +140,12 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 0 24px calc(var(--safe-b) + 24px);
+  /* THE TITLE SITS ABOVE THE CLIMB, NOT ACROSS IT.
+     The stack is still centred; the extra bottom padding is what lifts it out
+     of the band where the first ledges are drawn, so the wordmark reads against
+     the empty upper shaft and the player can already see the route they are
+     about to be dropped into. */
+  padding: 0 24px calc(var(--safe-b) + 24px + 20vh);
   text-align: center;
   z-index: 4;
   background: radial-gradient(120% 70% at 50% 45%,
@@ -138,23 +156,39 @@ html, body {
 
 #card h1 {
   font-family: var(--font-display);
-  font-size: clamp(30px, 12vw, 62px);
+  /* A QUARTER LARGER, AND STILL THIN.
+     The note was that the entrance is not clear within a second. The answer is
+     size and separation, NOT weight: a heavier face would read as a logo and
+     lose the thing this wordmark is doing. The shadow is the void colour, so it
+     darkens the scene immediately behind the letters without introducing a
+     panel, a plate or a colour that is not already in the palette. */
+  font-size: clamp(38px, 15vw, 78px);
   font-weight: 200;
   letter-spacing: var(--track-display);
   text-indent: var(--track-display);
   max-width: 100%;
   color: var(--quartz);
+  opacity: var(--title-op);
+  text-shadow: 0 0 28px rgba(5, 7, 12, 0.92), 0 2px 10px rgba(5, 7, 12, 0.8);
 }
 
 /* The load sequence: the wordmark's tracking settles, then the rest arrives.
    900 ms total, once. */
 #card.intro h1 { animation: settle 900ms var(--ease) both; }
 #card.intro .tag { animation: rise var(--t-slow) var(--ease) 500ms both; }
-#card.intro .go { animation: rise var(--t-slow) var(--ease) 760ms both; }
+/* The invitation arrives AND THEN KEEPS BREATHING. `animation` is a shorthand,
+   so the intro rule used to replace the pulse rather than precede it — on the
+   first run of a fresh install, the one run where the player has never seen this
+   screen, the call to action was the only thing on it that did not move. */
+#card.intro .go {
+  animation: rise var(--t-slow) var(--ease) 760ms both,
+             breathe 2.8s ease-in-out 760ms infinite;
+}
 
 @keyframes settle {
   from { letter-spacing: 0.66em; text-indent: 0.66em; opacity: 0; }
-  to   { letter-spacing: var(--track-display); text-indent: var(--track-display); opacity: 1; }
+  to   { letter-spacing: var(--track-display); text-indent: var(--track-display);
+         opacity: var(--title-op); }
 }
 @keyframes rise {
   from { opacity: 0; transform: translateY(6px); }
@@ -162,21 +196,51 @@ html, body {
 }
 
 #card .tag {
-  font-size: 11px;
+  /* Secondary, and it stays secondary — it is a promise about the game, not the
+     way in. Lifted just far enough to be read on a phone at arm's length. */
+  font-size: 12.5px;
   letter-spacing: var(--track-ui);
   color: var(--rime);
-  opacity: 0.72;
+  opacity: 0.86;
+  text-shadow: 0 0 16px rgba(5, 7, 12, 0.85);
 }
 
+/* THE WAY IN.
+   A line of small grey type that fades to a quarter opacity is a caption, and
+   the screen has no other way in — so it has to read as an action. Three things
+   do that without a button: it never goes as dark as it used to, it sits on a
+   thin light rule, and the rule sweeps. No panel, no rectangle, no new colour. */
 #card .go {
-  margin-top: 30px;
-  font-size: 11px;
+  position: relative;
+  margin-top: 34px;
+  padding-bottom: 9px;
+  font-size: 12px;
   letter-spacing: 0.34em;
-  color: var(--rime);
+  color: var(--quartz);
   animation: breathe 2.8s ease-in-out infinite;
 }
 
-@keyframes breathe { 0%, 100% { opacity: 0.26; } 50% { opacity: 0.86; } }
+#card .go::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    rgba(143, 163, 176, 0) 0%, var(--rime) 50%, rgba(143, 163, 176, 0) 100%);
+  transform-origin: 50% 50%;
+  animation: sweep 2.8s ease-in-out infinite;
+}
+
+/* The floor is `--cta-pulse`, not zero: the invitation may dim, never vanish. */
+@keyframes breathe {
+  0%, 100% { opacity: var(--cta-pulse); }
+  50%      { opacity: 0.95; }
+}
+@keyframes sweep {
+  0%, 100% { transform: scaleX(0.35); opacity: 0.35; }
+  50%      { transform: scaleX(1);    opacity: 0.9; }
+}
 
 /* ---------------------------------------------------------------- fragments */
 
@@ -502,7 +566,10 @@ body.monument #toast { opacity: 0; pointer-events: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #card .go { animation: none; opacity: 0.6; }
+  /* Still the brightest thing under the title, just not moving. A reduced-motion
+     player loses the pulse and the sweep; they must not also lose the CTA. */
+  #card .go { animation: none; opacity: 0.92; }
+  #card .go::after { animation: none; transform: scaleX(1); opacity: 0.7; }
   #card.intro h1,
   #card.intro .tag,
   #card.intro .go { animation: none; }

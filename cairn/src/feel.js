@@ -48,6 +48,58 @@ export const FEEL = {
     sweepFraction: 0.5,
   },
 
+  // ------------------------------------------------------- READABILITY DIALS
+  //
+  // The knobs that answer "I still cannot read X" — gathered here so they can be
+  // turned without reading the renderer. Everything in this block is PRESENTATION
+  // ONLY: no value here can reach the simulation, and the acceptance suite proves
+  // it (the same drag lands in the same place whatever these say).
+  //
+  // Note on the names: this mirrors a requested `VISUAL_TUNING` block, adapted to
+  // the scales this engine actually uses rather than copied. Where a dial already
+  // existed it was MOVED here rather than duplicated, so there is still exactly
+  // one source of truth per number. Two of the requested dials are not here
+  // because they are not canvas values at all — the title's opacity and the CTA's
+  // pulse live in `style.css` as `--title-op` and `--cta-pulse`.
+  visual: {
+    // THE PLAYER.
+    //
+    // Draw-only, and anchored at the FEET. The collision box is `body` above and
+    // is not touched — so the figure grows upward out of the surface it stands
+    // on and its contact point stays exactly where the physics puts it. Corpses
+    // are deliberately NOT scaled: a corpse is a platform, and drawing a platform
+    // wider than it catches is the one lie this renderer refuses (see the
+    // crest-width note in `_solids`).
+    playerScale: 1.18,
+    playerCoreIntensity: 0.95,  // the white point at the chest
+    playerRimIntensity: 0.42,   // the single lit edge. One side only.
+    playerContactShadow: 0.55,  // the shadow directly underfoot
+    // The core breathes while you stand. ONLY the core — the body stays still
+    // enough that this can never read as input lag.
+    idlePulseSpeed: 1.15,       // radians/second
+    idlePulseAmp: 0.20,         // share of the core's brightness it gives up
+    // THE LANDING, which is three small things and deliberately not a system.
+    landingSquashKick: 9,       // impact -> squash spring, main.js
+    landingDust: 3,             // particles, hard ceiling
+    landingDustSpeed: 0.42,     // slower than a death burst: dust, not shrapnel
+    landingFlash: 0.55,         // how hard the landed ledge answers
+    landingFlashMs: 260,
+
+    // THE PLATFORMS, as three materials rather than one shape at six distances.
+    // Brightness, implied thickness and a shadow — never more saturation.
+    activePlatformGlow: 0.72,   // the ledge under your feet
+    inactivePlatformGlow: 0.30, // every other ledge
+    platformShadow: 0.55,       // the dark band under a crest, which is what
+                                // makes a slab read as having a front face
+
+    // THE LANDMARK. It is scenery and it is a secret you can claim, so it can
+    // never out-shout a hold. It reads by being DARKER than everything near it.
+    // Only the wash survived. A mass stroke and an accent edge pass were both
+    // built here and both deleted after a screenshot — see `_landmarks` for the
+    // frame that killed them and why a dark outline makes a thin line LOUDER.
+    landmarkQuiet: 0.30,        // how far the wall behind it is pushed down
+  },
+
   // -------------------------------------------------------------- the tower
   //
   // The face of the building you climb. Everything is in WORLD units so the grid
@@ -160,7 +212,9 @@ export const FEEL = {
   // a landing the collision will refuse.
   shadow: {
     rangeU: 34,     // how far down it still reads, world units
-    alpha: 0.42,    // directly underfoot; falls off with the square of the gap
+                    // Strength directly underfoot lives in `visual`
+                    // (playerContactShadow); it falls off with the square of
+                    // the gap from there.
     wideAt: 1.9,    // width multiple at the far end of the range
     flatten: 0.30,  // ellipse squash, so it lies ON the surface
   },
@@ -211,7 +265,7 @@ export const FEEL = {
     bodyAlpha: 0.95,
     // And a thin lit edge where the body catches its own core, so a dark
     // silhouette reads as a solid object and not as a hole cut in the scene.
-    rimAlpha: 0.55,
+    // Its strength is `visual.playerRimIntensity`; these two are its shape.
     rimW: 0.16,
     rimOff: 0.07,
   },
