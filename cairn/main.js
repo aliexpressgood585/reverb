@@ -775,7 +775,9 @@ function step(now, real) {
       bloom: 0.52 + ui.bestFlash * 0.55,
       grain: reduced ? 0 : 0.03,
       barrel: reduced ? 0 : 0.035,
-      vignette: 0.52,
+      // Heavier: the reference frames go to black at the edges, and a facade
+      // still visible in the corners is a frame with no darkness to fall into.
+      vignette: 0.74,
       flash: ui.flash * 0.85,
       lift: grade.lift,
       gain: grade.gain,

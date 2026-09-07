@@ -849,6 +849,16 @@ export class Renderer {
     this.figIdle = 0;
     this.figLook = 0;
     this.figAim = 0;
+
+    // The painted background plate. Loaded once, never blocking: if it is not
+    // there the vector facade draws instead and the game is merely less pretty.
+    this._plateImg = null;
+    try {
+      const im = new Image();
+      im.decoding = 'async';
+      im.src = new URL('./bg/facade.webp', import.meta.url).href;
+      this._plateImg = im;
+    } catch { /* no window, or blocked: the facade covers it */ }
     // WHICH CLIMBER. One per run, never per jump: a body that changed species
     // between attempts would make silhouette vary for a reason unrelated to
     // whether a corpse still holds weight, which is the read the tower needs.
@@ -1022,7 +1032,13 @@ export class Renderer {
       // silhouettes that made the world a cave, which is both the most-made
       // background in the genre and the opposite of the reference this was
       // pointed at — an enormous building against an empty sky.
-      this._facade(ctx, B, cam, sim);
+      // The plate if it arrived, the drawn building if it did not. Never both:
+      // two buildings in one frame is the "two structures competing" mistake
+      // the landmarks already had to be dimmed out of.
+      if (!this._plate(ctx, B, cam)) {
+        this._deepTower(ctx, B, cam);
+        this._facade(ctx, B, cam, sim);
+      }
       // THE GIANT ALTITUDE NUMERAL IS GONE.
       //
       // It was the largest graphic element on screen, it duplicated the small
@@ -1149,6 +1165,139 @@ export class Renderer {
    * @param {Camera} cam
    * @param {Sim} sim
    */
+  /**
+   * THE PAINTED PLATE.
+   *
+   * This is the change that broke "zero external assets", and it was taken with
+   * eyes open. Vector drawing had reached its ceiling on looking like the
+   * reference art: five rounds of tuning light, range, window size and depth got
+   * closer in MOOD and could not get closer in MEDIUM, because the gap was
+   * painted texture and hand-composed architecture, not numbers. The honest
+   * options were to stop chasing it or to ship the art itself.
+   *
+   * The plates are the owner's own images, re-encoded at draw size — 800 px
+   * wide, WebP, ten to seventeen kilobytes each because the source is dark and
+   * smooth. Forty kilobytes total against a 38 KB bundle: it roughly doubles the
+   * download and still lands well inside a second on a phone, which is the only
+   * reason this trade is worth making at all.
+   *
+   * THE VECTOR FACADE STAYS AS THE FALLBACK. A missing or slow image must never
+   * be an unplayable frame, so `ready` gates the whole thing and the drawn
+   * building is what appears until — or instead of — the plate.
+   *
+   * The plate scrolls at a fraction of the climb and repeats seamlessly. It is
+   * BACKGROUND: everything that matters to play — ledges, bodies, the climber —
+   * is still drawn in vector on top, at full contrast, so the art can never eat
+   * the read of where you can stand.
+   *
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Camera} cam
+   */
+  _plate(ctx, B, cam) {
+    const P = FEEL.plate;
+    const img = this._plateImg;
+    if (!img || !img.complete || !img.naturalWidth) return false;
+    // Cover the frame width, repeat vertically, and scroll slower than the climb.
+    const w = this.w, scale = w / img.naturalWidth;
+    const h = img.naturalHeight * scale;
+    let off = (-cam.y * this.scale * P.parallax) % h;
+    if (off > 0) off -= h;
+    // MIRRORED ON ALTERNATE COPIES, so the repeat has no seam.
+    //
+    // A plate tiled the same way up every time leaves a hard horizontal line
+    // where one copy ends and the next begins, and the eye finds it instantly on
+    // a slow scroll — a fade at the bottom edge was not enough. Flipping every
+    // other copy makes each join a mirror of itself, which has no edge to see.
+    ctx.globalAlpha = P.alpha;
+    let idx = Math.floor((off - this.h) / h);
+    for (let y = off; y < this.h; y += h, idx++) {
+      if (((idx % 2) + 2) % 2 === 1) {
+        ctx.save();
+        ctx.translate(0, y + h);
+        ctx.scale(1, -1);
+        ctx.drawImage(img, 0, 0, w, h);
+        ctx.restore();
+      } else {
+        ctx.drawImage(img, 0, y, w, h);
+      }
+    }
+    ctx.globalAlpha = 1;
+    // And pushed back down into the dark. A background plate that lifts the
+    // blacks costs exactly what the darkening pass bought: the frame stops
+    // having anywhere for a light to matter against.
+    ctx.fillStyle = rgb(B.bgBot, P.sink);
+    ctx.fillRect(0, 0, this.w, this.h);
+    // Grade it toward the biome, so six floors do not all look like one photo.
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = rgb(B.accent, P.tint);
+    ctx.fillRect(0, 0, this.w, this.h);
+    ctx.globalCompositeOperation = 'source-over';
+    return true;
+  }
+
+  /**
+   * A SECOND TOWER, FURTHER AWAY, AND THE AIR BETWEEN THEM.
+   *
+   * The facade was a single plane, so the world had a surface but no DEPTH — and
+   * depth is most of what the reference art is doing. Two cheap things fix it,
+   * and they only work together:
+   *
+   * A distant facade at a smaller world scale and a slower parallax, so it slides
+   * behind the near one as you climb. Same code, different numbers: the grid it
+   * draws is finer because it is further off, which is the one cue that reads as
+   * distance without a perspective camera.
+   *
+   * And HAZE between the two. A far building drawn merely dimmer still reads as
+   * a dim near building; a far building drawn dim AND veiled reads as far. The
+   * veil is a single vertical gradient, which is also why fog is the cheapest
+   * depth in any 2D renderer — one rect for an effect a third axis would cost a
+   * rewrite to get.
+   *
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Camera} cam
+   */
+  _deepTower(ctx, B, cam) {
+    const F = FEEL.facade, D = F.deep;
+    const sc = this.scale * D.scale;
+    const fh = D.floorU * sc, cw = D.colU * sc;
+    if (fh < 2.5) return;
+    // Parallax: the far tower moves a fraction of the near one.
+    const py = cam.y * D.parallax;
+    const y0 = this.h - ((py * sc) % fh);
+    const left = 0, right = this.w;
+    ctx.strokeStyle = rgb(B.rock, D.gridAlpha);
+    ctx.lineWidth = Math.max(1, F.lineU * sc);
+    ctx.beginPath();
+    for (let y = y0; y > -fh; y -= fh) { ctx.moveTo(left, y); ctx.lineTo(right, y); }
+    for (let x = left; x <= right + cw; x += cw) { ctx.moveTo(x, 0); ctx.lineTo(x, this.h); }
+    ctx.stroke();
+
+    ctx.globalCompositeOperation = 'lighter';
+    let r = 0;
+    const row0 = Math.floor(py / D.floorU);
+    for (let y = y0, ry = row0; y > -fh; y -= fh, ry++) {
+      if (hash1(ry * 912931) < D.darkFloorFrac) continue;
+      for (let x = left, cxi = 0; x <= right; x += cw, cxi++) {
+        const h1 = hash1((ry * 40503) ^ (cxi * 15485863));
+        if (h1 > D.litFrac) continue;
+        ctx.fillStyle = rgb(B.accent, D.litA);
+        ctx.fillRect(x + cw * 0.18, y + fh * 0.22, cw * 0.64, fh * 0.56);
+        if (++r > D.maxPanes) { y = -fh; break; }
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    // THE AIR. Dim alone reads as a dim near wall; dim AND veiled reads as far.
+    const g = ctx.createLinearGradient(0, 0, 0, this.h);
+    g.addColorStop(0, rgb(B.bgTop, D.hazeTop));
+    g.addColorStop(0.55, rgb(B.bgBot, D.hazeMid));
+    g.addColorStop(1, rgb(B.bgBot, D.hazeBot));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, this.w, this.h);
+  }
+
   _facade(ctx, B, cam, sim) {
     const F = FEEL.facade;
     const sc = this.scale;
@@ -1788,6 +1937,27 @@ export class Renderer {
         // Crest: the lit edge, and the only thing you actually aim at.
         ctx.fillStyle = rgb(B.accent, 0.16 + lit * 0.70);
         ctx.fillRect(sx - w * 0.5, top, w, Math.max(1, 1.5 * this.dpr));
+        // THE POOL OF LIGHT A LEDGE THROWS ON THE WALL BEHIND IT.
+        //
+        // A platform drawn as a bright line is a stripe painted on a wall. In
+        // the reference art it is a light SOURCE with a glow around it, and that
+        // glow is most of what makes it sit in FRONT of the building instead of
+        // on it. Cheap: one radial gradient per visible ledge, and only when the
+        // crest is lit enough to be worth it.
+        if (lit > 0.05) {
+          const G = FEEL.ledgeGlow;
+          const gr = G.radiusU * this.scale;
+          const gx = sx, gy = top;
+          const pg = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+          pg.addColorStop(0, rgb(B.accent, G.alpha * lit));
+          pg.addColorStop(0.45, rgb(B.accent, G.alpha * lit * 0.28));
+          pg.addColorStop(1, rgb(B.accent, 0));
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.fillStyle = pg;
+          ctx.fillRect(gx - gr, gy - gr, gr * 2, gr * 2);
+          ctx.globalCompositeOperation = 'source-over';
+        }
+
         // A short bloom-catching bar on the crest, so the landing line reads
         // even when the player's light is nowhere near it.
         ctx.globalCompositeOperation = 'lighter';

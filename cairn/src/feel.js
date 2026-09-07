@@ -58,9 +58,16 @@ export const FEEL = {
     halfW: 46,          // half the facade width, world units. Wider than COLUMN
                         // (100) is deliberate: it must run past both edges so it
                         // reads as a building and not an object in space.
-    floorU: 7.0,        // a storey, world units
-    colU: 6.5,          // a window bay
-    lineU: 0.28,        // mullion width
+    // BIG WINDOWS, FEW OF THEM.
+    //
+    // At 7.0 by 6.5 the facade carried around a hundred small squares in a tight
+    // grid and read as a waffle. The reference this is aimed at shows perhaps a
+    // dozen LARGE openings with darkness between them: the count is the thing
+    // that reads, not the detail. Doubling the cell quarters the number of panes
+    // and doubles their size, which also halves the loop this pass runs.
+    floorU: 14.0,       // a storey, world units
+    colU: 13.0,         // a window bay
+    lineU: 0.34,        // mullion width
     // CRUSHED, DELIBERATELY AND HARD.
     //
     // Reference art for this game is near-black across ninety percent of the
@@ -71,8 +78,8 @@ export const FEEL = {
     // everywhere has no darkness for a light to matter against.
     faceAlpha: 0.045,
     gridAlpha: 0.030,
-    litFrac: 0.13,      // fraction of panes with a light on behind them
-    litA: 0.055,
+    litFrac: 0.22,      // a few of the large panes are lit, and the rest of
+    litA: 0.045,        // the wall stays dark enough to fall into
     // A tower with an even scatter of lit windows is a texture. Real ones have
     // whole dark storeys and bands of narrow service slits, and it is that
     // vertical irregularity — not the windows themselves — that reads as
@@ -96,6 +103,48 @@ export const FEEL = {
     reflectU: 26,
     reflectA: 0.30,
     maxPanes: 900,      // a hard ceiling, so a pulled-back frame cannot spiral
+    // A SECOND TOWER FURTHER OFF, AND THE AIR BETWEEN. One plane gave the world
+    // a surface but no depth, and depth is most of what the reference art is
+    // doing. Finer grid, slower parallax, dimmer lights — and haze, without
+    // which a far building just reads as a dim near one.
+    deep: {
+      scale: 0.42,        // world scale of the distant tower
+      parallax: 0.35,     // how much of the camera's motion it takes
+      floorU: 16.0,
+      colU: 15.0,
+      gridAlpha: 0.045,
+      litFrac: 0.16,
+      litA: 0.030,
+      darkFloorFrac: 0.5,
+      maxPanes: 420,
+      hazeTop: 0.55,      // the veil, densest at the top of the frame
+      hazeMid: 0.34,
+      hazeBot: 0.20,
+    },
+  },
+
+  // A warm pool of light bleeding off a ledge onto the wall behind it. In the
+  // reference art a platform is not a bright line, it is a light SOURCE with a
+  // glow around it, and that glow is most of what makes it read as a solid
+  // thing sitting in front of a wall rather than a stripe painted on it.
+  ledgeGlow: {
+    // TIGHT AND FAINT. At radius 26 and 0.30 the pools from four or five ledges
+    // overlapped and flooded the frame in orange — brighter than before the
+    // darkening pass that was supposed to make room for them. A glow that
+    // reaches the next platform is not a platform's glow, it is ambient light,
+    // and ambient light is exactly what this art direction does not have.
+    radiusU: 13,
+    alpha: 0.16,
+  },
+
+  // The painted background plate. See `_plate`: this is the one place the game
+  // ships an external file, and it exists because vector drawing could match the
+  // reference art's mood but not its medium.
+  plate: {
+    parallax: 0.22,   // fraction of the climb the background travels
+    alpha: 0.62,
+    sink: 0.46,       // pushed back into the dark, or it eats the range
+    tint: 0.10,       // graded toward the biome so six floors are not one photo
   },
 
   // ------------------------------------------------------------ the shadow
