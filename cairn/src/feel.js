@@ -61,27 +61,59 @@ export const FEEL = {
     floorU: 7.0,        // a storey, world units
     colU: 6.5,          // a window bay
     lineU: 0.28,        // mullion width
-    faceAlpha: 0.10,    // the glass itself, against the sky. Held low: the
-                        // facade is the place, the ledges are the game, and a
-                        // wall bright enough to compete with a hold is a wall
-                        // that has forgotten what it is for.
-    gridAlpha: 0.075,
-    litFrac: 0.20,      // fraction of panes with a light on behind them
-    litA: 0.085,
+    // CRUSHED, DELIBERATELY AND HARD.
+    //
+    // Reference art for this game is near-black across ninety percent of the
+    // frame with a handful of tiny intense highlights, and the facade as first
+    // built was lit more or less evenly everywhere — which is why the frames
+    // read as busy rather than as deep. Dynamic range is the whole difference
+    // between the two, far more than any amount of detail: a wall you can see
+    // everywhere has no darkness for a light to matter against.
+    faceAlpha: 0.045,
+    gridAlpha: 0.030,
+    litFrac: 0.13,      // fraction of panes with a light on behind them
+    litA: 0.055,
     // A tower with an even scatter of lit windows is a texture. Real ones have
     // whole dark storeys and bands of narrow service slits, and it is that
     // vertical irregularity — not the windows themselves — that reads as
     // architecture rather than as a pattern.
-    darkFloorFrac: 0.26,
+    darkFloorFrac: 0.42,   // most storeys are simply dark
     serviceFrac: 0.12,
     // THE REFLECTION, which is the one idea here that belongs to this game
     // alone: the player is the only real light source, and glass is the one
     // surface that can answer it. The radius is generous on purpose — the read
     // is your light travelling across the building as you climb, not a single
     // pane switching on.
-    reflectU: 52,
-    reflectA: 0.62,
+    // TIGHTER AND FAINTER THAN IT WAS.
+    //
+    // At radius 52 and strength 0.62 the reflection lit every pane within a
+    // huge circle, and once the facade itself was crushed dark that circle
+    // became the brightest thing in the frame — a glowing orange blanket half a
+    // screen wide, with the climber a small dark mark inside it. The reference
+    // this is aimed at has ISOLATED points of light in blackness. The reflection
+    // is a touch on the glass beside you, not a floodlight: the player is the
+    // source, and a source must stay brighter than anything it lights.
+    reflectU: 26,
+    reflectA: 0.30,
     maxPanes: 900,      // a hard ceiling, so a pulled-back frame cannot spiral
+  },
+
+  // ------------------------------------------------------------ the shadow
+  //
+  // The only thing in this game that tells you HEIGHT without a number. There is
+  // no third axis and no perspective camera, so the drop below you was
+  // previously something you inferred from the altitude readout rather than
+  // something you saw. The shadow sits on the surface underneath, separates from
+  // your feet as you rise, and rushes back to meet you as you fall.
+  //
+  // It is cast from the same width the physics catches you on, so a MEMORY
+  // corpse — which holds nothing — casts nothing. The shadow can never promise
+  // a landing the collision will refuse.
+  shadow: {
+    rangeU: 34,     // how far down it still reads, world units
+    alpha: 0.42,    // directly underfoot; falls off with the square of the gap
+    wideAt: 1.9,    // width multiple at the far end of the range
+    flatten: 0.30,  // ellipse squash, so it lies ON the surface
   },
 
   // ------------------------------------------------------------- the figure
@@ -119,6 +151,20 @@ export const FEEL = {
     // read for whether a body holds weight first and for what it was wearing
     // second, and acceptance 13 measures exactly that order.
     corpseCostume: 0.70,
+    // The bright point at the chest. The player is not a bright object, the
+    // player is the light source — and a source is a point, not a glowing body.
+    coreR: 0.30,
+    // THE BODY IS DARK. It used to be filled in near-white at 0.97, so the
+    // brightest thing on screen was the silhouette itself and the core had
+    // nothing to be brighter than. A source is a point; the body carrying it is
+    // lit, not luminous.
+    bodyDim: 0.26,     // how far the character's own colour is pulled down
+    bodyAlpha: 0.95,
+    // And a thin lit edge where the body catches its own core, so a dark
+    // silhouette reads as a solid object and not as a hole cut in the scene.
+    rimAlpha: 0.55,
+    rimW: 0.16,
+    rimOff: 0.07,
   },
 
   // --------------------------------------------------------------- gravity
@@ -402,17 +448,35 @@ export const FEEL = {
     // +/-8 degrees: enough that no two bodies look stamped from the same die,
     // little enough that they stack.
     corpseRot: 0.28,
-    // How much of the lit facade a body blocks, scaled by how solid it still is.
-    // Without this the windows behind an eroded corpse shine through harder than
-    // through a fresh one, and the erosion tell inverts: acceptance 13 read
-    // FRESH at luminance 84.7 against THIN at 110.8 — the freshest body on
-    // screen was the darkest one.
-    corpseOcclude: 0.92,
-    // How much a body dims as it cools toward memory. MEMORY_GOLD is brighter
-    // than every warm accent in the palette, so cooling alone made an old body
-    // LIGHTER than a fresh one and inverted the erosion tell. Age has to read as
-    // receding, and receding is darker as well as cooler.
-    memoryDim: 0.42,
+    // How much of the lit facade a body blocks. NOT scaled by erosion: a body
+    // that still holds weight is a solid object, and a decayed one letting more
+    // of a lit building through than a whole one made transparency read as
+    // brightness and inverted the erosion tell in three of six palettes.
+    corpseOcclude: 0.94,
+    // WHERE A MEMORY BODY LANDS, as a fraction of its own palette's accent
+    // luminance. A ratio rather than a subtraction, because each palette starts
+    // from a different brightness and MEMORY_GOLD is one fixed colour: a
+    // constant dim held in ASH and broke in three of the other five, with BLOOM
+    // drawing a memory corpse BRIGHTER than a fresh one. Brightness is how a
+    // player judges whether a hold still takes their weight, so the relationship
+    // has to survive every palette — including ones not written yet.
+    memoryOf: 0.34,
+    // The crack hairlines on a THIN body. Held well below the step between
+    // erosion stages: at 0.55 they darkened THIN past TOP, so a decoration was
+    // overruling the tell it exists to support.
+    crackInk: 0.07,
+    // Constant floor under a corpse's fill alpha. Kept small so most of the
+    // alpha rides on solidity and the four stages separate by construction.
+    fillFloor: 0.04,
+    // THE EROSION LADDER, as multipliers on a body's own colour. Decay used to
+    // be expressed as transparency, and a translucent body shows whatever
+    // happens to be behind it — which is not a property of the body, and broke
+    // the read one palette at a time. A multiplier on the same base colour is
+    // monotonic in every palette by construction rather than by calibration.
+    thinOf: 0.52,
+    topOf: 0.27,
+    memOf: 0.14,   // and MEMORY is one rung below TOP, on the same base
+    bodyAlpha: 0.93,
     // THE BLOOM ON A BODY'S SHELF, as a multiplier on the additive pass a ledge
     // crest has always had. A generated ledge glowed and the thing this game is
     // named after did not: measured side by side at the same height and the same
@@ -831,7 +895,16 @@ export const BIOMES = [
     name: 'BLOOM',
     bgTop: [0x07, 0x04, 0x10], bgBot: [0x12, 0x08, 0x1e],
     rock: [0x7b, 0x53, 0xc8],       // violet
-    accent: [0xff, 0x4f, 0xc4],     // magenta
+    // BRIGHTER THAN MEMORY_GOLD, WHICH IS A CONSTRAINT AND NOT A PREFERENCE.
+    //
+    // This was #ff4fc4 at luminance 124.9 against MEMORY_GOLD's 158.2 — the one
+    // palette whose accent is DARKER than the colour a body cools toward. So in
+    // BLOOM every step toward memory made a corpse brighter, and the erosion
+    // tell inverted no matter what the renderer did: six separate engine fixes
+    // moved it a point or two each and none could win, because the fight was
+    // with the palette, not the code. Any accent must sit above MEMORY_GOLD or
+    // age cannot read as fading anywhere in that biome.
+    accent: [0xff, 0x8f, 0xd8],     // magenta, lifted above memory gold
     ambient: 0.24, shaft: 0.26, sat: 1.12,
   },
   {

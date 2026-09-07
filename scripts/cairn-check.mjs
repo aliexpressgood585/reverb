@@ -535,8 +535,9 @@ const page = await newPage();
 
 // ── 13. the four erosion stages are distinguishable in one still ───────────
 {
-  const r = await page.evaluate(async () => {
-    const { sim, camera, renderer } = window.CAIRN;
+  const measureAt = (atY) => page.evaluate(async (atY2) => {
+    const atY = atY2;
+    const { sim, camera, renderer, FEEL } = window.CAIRN;
     sim.reset(true); sim.phase = 1;
     sim.deaths = 40;
     // One corpse per stage, side by side at the same height.
@@ -549,10 +550,29 @@ const page = await newPage();
     // the four stages look more alike than they ever do in play, and the suite
     // has been reading a pessimistic number on the one property an external
     // reviewer specifically complained about.
+    // THE BUILDING IS SWITCHED OFF FOR THIS MEASUREMENT, AND ONLY THIS ONE.
+    //
+    // Lit windows are a hash of their own grid cell, so the four corpses — which
+    // stand at four different x positions — each get a DIFFERENT background:
+    // two lit panes behind one, none behind another. The sample box takes the
+    // background with it, and that difference is larger than the step between
+    // two erosion stages. It is noise that changed direction between runs and
+    // therefore looked like a consistent finding, which is the most expensive
+    // kind.
+    //
+    // This is not softening the test. What is under test is whether EROSION is
+    // legible, and a random pane behind one body is not erosion. The flat glass
+    // stays; only the per-cell randomness and the player's reflection are
+    // silenced, so all four bodies sit on an identical ground and the only thing
+    // that differs between them is the thing being measured.
+    const keepLit = FEEL.facade.litFrac, keepRefl = FEEL.facade.reflectA;
+    FEEL.facade.litFrac = 0;
+    FEEL.facade.reflectA = 0;
     const ages = [0, 10, 20, 34];
     const xs = [22, 40, 60, 78];
+    const ROW = atY;
     for (let i = 3; i >= 0; i--) {
-      const c = sim.world.corpse(xs[i], 60, 0, 1, 0, 40 - ages[i]);
+      const c = sim.world.corpse(xs[i], ROW, 0, 1, 0, 40 - ages[i]);
       c.glow = 0;
     }
     // THE PLAYER IS PARKED FAR ABOVE, SO ALL FOUR ARE EQUALLY LIT.
@@ -571,11 +591,11 @@ const page = await newPage();
     // 140.4 to 142.8 units away — equal to within two percent — so what is left
     // in the numbers is erosion and nothing else.
     sim.body.x = sim.body.px = sim.body.rx = 50;
-    sim.body.y = sim.body.py = sim.body.ry = 200;
+    sim.body.y = sim.body.py = sim.body.ry = ROW + 140;
     // Every piece of camera and renderer state the live loop may have left
     // dirty. Setting position alone left rotation, shake and the monument
     // pull-back live, and the closest-pair margin still swung 4.6 to 18.0.
-    camera.x = 50; camera.y = 60; camera.zoom = 1; camera.viewH = 150;
+    camera.x = 50; camera.y = ROW; camera.zoom = 1; camera.viewH = 150;
     // Camera stays on the row; only the light moved away.
     camera.rot = 0; camera.rotVel = 0; camera.shake = 0;
     camera.shakeX = 0; camera.shakeY = 0; camera.t = 0;
@@ -598,7 +618,7 @@ const page = await newPage();
     const c2 = cv.getContext('2d', { willReadFrequently: true });
     const sample = (wx) => {
       const px = Math.round(renderer.X(wx) * renderer.dpr);
-      const py = Math.round(renderer.Y(60) * renderer.dpr);
+      const py = Math.round(renderer.Y(ROW) * renderer.dpr);
       const R = Math.round(16 * renderer.dpr);
       const d = c2.getImageData(px - R, py - R, R * 2, R * 2).data;
       let lum = 0, chroma = 0, n = 0;
@@ -616,7 +636,7 @@ const page = await newPage();
       // design and this test could not see it — it measured mean brightness and
       // a lit-pixel COUNT over a fixed box, and the count saturates at 100% for
       // every stage, so it contributed nothing but noise. Measure the bar.
-      const top = Math.round(renderer.Y(60 + 3) * renderer.dpr);
+      const top = Math.round(renderer.Y(ROW + 3) * renderer.dpr);
       const row = c2.getImageData(px - R, top - Math.round(2 * renderer.dpr),
                                   R * 2, Math.round(4 * renderer.dpr)).data;
       let bright = 0;
@@ -630,48 +650,65 @@ const page = await newPage();
         shelf: +((bright / (row.length / 4)) * 100).toFixed(1),
       };
     };
-    return xs.map(sample);
-  });
-  const names = ['FRESH', 'THIN', 'TOP', 'MEMORY'];
-  r.forEach((v, i) => console.log(`      ${names[i].padEnd(7)} lum ${String(v.lum).padStart(5)}  ` +
-    `chroma ${String(v.chroma).padStart(5)}  shelf ${String(v.shelf).padStart(5)}%`));
-  // Each stage must differ from the next by a margin a human eye would catch,
-  // across the three axes the design actually uses: how bright it is, how
-  // saturated it is (accent when fresh, cooling toward gold), and how much
-  // load-bearing shelf it still has.
-  let minGap = Infinity;
-  for (let i = 0; i < 3; i++) {
-    minGap = Math.min(minGap,
-      Math.abs(r[i].lum - r[i + 1].lum)
-      + Math.abs(r[i].chroma - r[i + 1].chroma)
-      + Math.abs(r[i].shelf - r[i + 1].shelf));
-  }
-  // AND THEY MUST RUN THE RIGHT WAY ROUND.
-  //
-  // The margin above scores DISTANCE between stages, never their ORDER, so a
-  // clean inversion still reads as good separation. That is not hypothetical:
-  // when the lit facade went in behind the bodies, the windows shone through a
-  // decayed corpse harder than through a whole one and FRESH came out at
-  // luminance 84.7 against THIN at 110.8 — the freshest body on screen was the
-  // darkest. The gate said PASS at 22.3 against a threshold of 3 and could not
-  // have said anything else. Brightness is what tells a player whether a hold
-  // still takes their weight; a test that cannot see it running backwards is
-  // not testing the thing it is named for.
-  const lums = r.map((v) => v.lum);
-  let inverted = -1;
-  for (let i = 0; i < 3; i++) if (lums[i] < lums[i + 1] - 1) { inverted = i; break; }
+    // THE GROUND EACH BODY STANDS ON, measured with the bodies switched off.
+    //
+    // Five rounds of this check chased the corpse colour while the number
+    // refused to move, and the reason a fix "did nothing" is worth catching
+    // automatically rather than by suspicion: if the sample box is mostly
+    // background, then no amount of changing the body will shift it. A control
+    // per position says which of the two is being measured, every run.
+    const rows = xs.map(sample);
+    for (const c of sim.world.solids) if (c.corpse) c.live = false;
+    renderer.draw(sim, camera, null, { started: true, squash: 0, stretch: 0 }, 1 / 60, false);
+    const floor = xs.map(sample);
+    const out = { rows, floor, biome: renderer.biome.name };
+    FEEL.facade.litFrac = keepLit;
+    FEEL.facade.reflectA = keepRefl;
+    return out;
+  }, atY);
 
-  if (inverted >= 0) {
-    fail(13, `erosion runs BACKWARDS: ${names[inverted]} is dimmer than ` +
-      `${names[inverted + 1]} (${lums[inverted]} vs ${lums[inverted + 1]}) — a ` +
-      `fresher body must never read darker than a decayed one [${lums.join(' > ')}]`);
-  } else if (minGap > 3) {
-    pass(13, `all four erosion stages separate in one frame and run the right way ` +
-      `round (closest neighbouring pair differs by ${minGap.toFixed(1)}; ` +
-      `luminance ${lums.join(' > ')})`);
-  } else {
-    fail(13, `two erosion stages look the same (closest pair differs by only ${minGap.toFixed(1)})`);
+  // EVERY PALETTE, NOT THE ONE THIS SESSION HAPPENS TO BE STANDING IN.
+  //
+  // The accent rotates by altitude, and in VOID and CINDER it is GOLD — the same
+  // family as MEMORY_GOLD, the colour that means "this body will not hold you".
+  // On those two floors the age gradient is drawn in one colour and carries no
+  // information at all, so a check that reads only the current biome passes five
+  // of six by luck. Same lesson as landmark check 9.
+  const names = ['FRESH', 'THIN', 'TOP', 'MEMORY'];
+  const bad = [];
+  let worstGap = Infinity, worstName = '';
+  for (let bi = 0; bi < 6; bi++) {
+    const atY = bi * 150 + 75;                      // the middle of each floor
+    const out = await measureAt(atY);
+    const r = out.rows;
+    const lums = r.map((v) => v.lum);
+    let minGap = Infinity;
+    for (let i = 0; i < 3; i++) {
+      minGap = Math.min(minGap,
+        Math.abs(r[i].lum - r[i + 1].lum)
+        + Math.abs(r[i].chroma - r[i + 1].chroma)
+        + Math.abs(r[i].shelf - r[i + 1].shelf));
+    }
+    // ORDER, not only distance. The margin above scores how far apart the stages
+    // are and never which way round they run, so a clean inversion reads as good
+    // separation — which is exactly what happened when MEMORY_GOLD (luminance
+    // 158.2) turned out to be brighter than the ember accent (144.8) and a fresh
+    // body measured darker than a decayed one.
+    let inverted = -1;
+    for (let i = 0; i < 3; i++) if (lums[i] < lums[i + 1] - 1) { inverted = i; break; }
+    console.log(`      ${out.biome.padEnd(8)} lum ${lums.join(' > ')}` +
+      `   closest pair ${minGap.toFixed(1)}` +
+      (inverted >= 0 ? `   BACKWARDS at ${names[inverted]}` : ''));
+    console.log(`               ground ${out.floor.map((f) => f.lum).join(' | ')}` +
+      `   body above ground ${lums.map((l, i) => (l - out.floor[i].lum).toFixed(1)).join(' | ')}`);
+    if (inverted >= 0) bad.push(`${out.biome}: ${names[inverted]} is dimmer than ${names[inverted + 1]}`);
+    else if (minGap <= 3) bad.push(`${out.biome}: two stages look the same (${minGap.toFixed(1)})`);
+    if (minGap < worstGap) { worstGap = minGap; worstName = out.biome; }
   }
+  bad.length
+    ? fail(13, `erosion does not read in every palette — ${bad.join('; ')}`)
+    : pass(13, `all four erosion stages separate and run the right way round in all ` +
+        `six palettes (worst is ${worstName} at ${worstGap.toFixed(1)})`);
 }
 
 // ── 14. nothing interrupts a climb ─────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { FEEL, COLUMN, BIOME_SPAN, BIOMES, biomeAt, newBiomeSlot, MEMORY_GOLD,
   FLOORS, CHARACTERS } from './feel.js';
 import { landmarksIn } from './sim.js';
-import { makeRng, erosionOf, EROSION } from './sim.js';
+import { makeRng, erosionOf, EROSION, solidHalfWidth } from './sim.js';
 
 /** @typedef {import('./sim.js').Sim} Sim */
 /** @typedef {import('./types.js').Solid} Solid */
@@ -1056,6 +1056,7 @@ export class Renderer {
     // read your own launch. A biome that hides the controls is not a biome, it
     // is a bug with a name.
     if (depth > 0.01) this._dark(ctx, B, sim, depth);
+    this._shadow(ctx, B, sim);
     this._rings(ctx, B);
     this._parts(ctx, B);
     this._trail(ctx, B);
@@ -1863,10 +1864,45 @@ export class Renderer {
       // and the gate never could: it scores the DISTANCE between stages, never
       // their ORDER, so a clean inversion passes at 18.5 against a threshold of
       // 3. It is gated on order now as well.
-      const fade = 1 - cool * FEEL.tower.memoryDim;
-      const cr = lerp(B.accent[0], MEMORY_GOLD[0], cool) * fade;
-      const cg = lerp(B.accent[1], MEMORY_GOLD[1], cool) * fade;
-      const cb = lerp(B.accent[2], MEMORY_GOLD[2], cool) * fade;
+      // THE DIM IS RELATIVE TO THE PALETTE, NOT A FIXED FRACTION.
+      //
+      // A constant 42% cut worked in ASH and failed everywhere else, because
+      // each palette starts from a different brightness and MEMORY_GOLD is a
+      // fixed colour: in BLOOM, whose magenta accent is DARKER than the gold, a
+      // memory corpse came out as the brightest body on screen; in SIGNAL and
+      // VOID the stages collapsed together. Measured over all six, three were
+      // broken — and the old gate never saw it because it only ever read the
+      // palette the running session happened to be standing in.
+      //
+      // So the target is a RATIO, not a subtraction: a memory body must land at
+      // `memoryOf` times the luminance of a fresh one in whatever palette it is
+      // drawn in. Solve for the scale that puts it there and the relationship
+      // holds in all six — and in the seventh nobody has written yet.
+      const aL = Math.max(1, lumOf(B.accent));
+      const mL = Math.max(1, lumOf(MEMORY_GOLD));
+      const want = aL * FEEL.tower.memoryOf;          // target luminance when fully cool
+      const fade = 1 - cool * (1 - clamp(want / mL, 0.05, 1));
+      let cr = lerp(B.accent[0], MEMORY_GOLD[0], cool) * fade;
+      let cg = lerp(B.accent[1], MEMORY_GOLD[1], cool) * fade;
+      let cb = lerp(B.accent[2], MEMORY_GOLD[2], cool) * fade;
+      // COOLING MAY NEVER BRIGHTEN. This is the rule the palettes kept breaking.
+      //
+      // MEMORY_GOLD is one fixed colour and some accents are darker than it —
+      // BLOOM's magenta is luminance 124.9 against gold's 158.2 — so lerping a
+      // body toward memory RAISES its luminance, and a more decayed body came
+      // out brighter than a less decayed one. Tuning the fade could not fix that
+      // in general: it is a property of which two colours a palette happens to
+      // sit between, so every value that worked in one palette failed in
+      // another.
+      //
+      // Clamping the cooled luminance to the fresh colour's makes age
+      // monotonic by construction rather than by calibration. Hue still travels
+      // toward gold — the thing that carries the meaning — but it can only ever
+      // travel downward in brightness, in any palette, including ones nobody
+      // has written yet.
+      const fresh = Math.max(1, lumOf(B.accent));
+      const now = lumOf([cr, cg, cb]);
+      if (now > fresh) { const k = fresh / now; cr *= k; cg *= k; cb *= k; }
       s.glow = Math.max(0, s.glow - 0.02);
       const rimlight = lit * 0.75 + s.glow * 0.4;
 
@@ -1877,7 +1913,25 @@ export class Renderer {
       if (st === EROSION.MEMORY) {
         // Present, permanently. Load-bearing, never again. Pure gold outline,
         // no fill at all — the read is "this is a picture, not a place".
-        ctx.strokeStyle = rgb(MEMORY_GOLD, 0.20 + lit * 0.16);
+        // THE FADED COLOUR, NOT RAW MEMORY_GOLD.
+        //
+        // This branch drew straight from the constant and so escaped every piece
+        // of dimming applied to the other three stages — which is why, in BLOOM,
+        // a MEMORY corpse measured at luminance 47 against a FRESH one at 39.5
+        // and was the brightest body on screen. The one stage that holds NO
+        // weight was the one shouting loudest.
+        // THE SAME LADDER, ONE RUNG FURTHER DOWN.
+        //
+        // This branch drew at a fixed alpha in the un-scaled colour, so it was
+        // the one stage the multiplier never reached — and in BLOOM, whose
+        // accent is darker than MEMORY_GOLD, it came out at 44.8 against a TOP
+        // of 29.6 and a FRESH of 65.6. The body that holds NOTHING was the
+        // second brightest thing on the row.
+        //
+        // A stage that opts out of the rule is a stage that will invert. It gets
+        // `memOf`, below `topOf`, on the same base colour as everything else.
+        const mr = cr * FEEL.tower.memOf, mg = cg * FEEL.tower.memOf, mb = cb * FEEL.tower.memOf;
+        ctx.strokeStyle = `rgba(${mr | 0},${mg | 0},${mb | 0},${(0.20 + lit * 0.16).toFixed(3)})`;
         ctx.lineWidth = Math.max(0.7, this.dpr * 0.7);
         this._figurePath(ctx, s.hw * this.scale, s.hh * this.scale, s.pose);
         ctx.stroke();
@@ -1894,33 +1948,39 @@ export class Renderer {
         // The spread is wider now, and it is widest on the shelf bar below,
         // because the shelf IS the hitbox.
         const solidity = st === EROSION.FRESH ? 1 : st === EROSION.THIN ? 0.5 : 0.24;
-        const fill = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.10 + solidity * (0.22 + rimlight * 0.5)).toFixed(3)})`;
-        const rim = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.08 + solidity * (0.16 + rimlight * 0.8)).toFixed(3)})`;
+        // The constant floor used to be 0.10, which compressed the whole ladder:
+        // FRESH 0.32, THIN 0.21, TOP 0.153 — a 27% step between the last two,
+        // small enough that a decoration drawn on one of them could reverse it.
+        // Most of the alpha rides on solidity now, so the stages are further
+        // apart by construction rather than by tuning.
+        const F2 = FEEL.tower;
+        // EROSION LIVES IN THE COLOUR, NOT IN THE ALPHA. THIS IS THE FIX.
+        //
+        // Every previous attempt expressed decay as transparency, and every one
+        // of them broke, because a translucent body shows whatever is behind it
+        // and "whatever is behind it" is not a property of the body. The last
+        // round made it worst of all: painting an opaque backing in `bgBot` and
+        // then washing the corpse colour over it at up to 0.34 alpha meant
+        // FRESH, THIN and TOP were mostly BACKGROUND COLOUR — while MEMORY, an
+        // outline on a separate branch that never got the backing, stayed
+        // bright. In BLOOM the body that holds nothing measured 45.3 against a
+        // fresh one at 40.
+        //
+        // So: the body is opaque, drawn at one high alpha in every stage, and
+        // the ladder is a MULTIPLIER ON ITS OWN COLOUR. That is monotonic by
+        // construction in any palette — it is the same base scaled down — rather
+        // than by calibration, which is what kept failing one palette at a time.
+        const stage = st === EROSION.FRESH ? 1 : st === EROSION.THIN ? F2.thinOf : F2.topOf;
+        const sr = cr * stage, sg = cg * stage, sb = cb * stage;
+        const fill = `rgba(${sr | 0},${sg | 0},${sb | 0},${F2.bodyAlpha})`;
+        const rim = `rgba(${(sr * 1.35) | 0},${(sg * 1.35) | 0},${(sb * 1.35) | 0},${F2.bodyAlpha})`;
         const hwPx = s.hw * this.scale * narrow;
         const hhPx = s.hh * this.scale;
 
+        // Opaque first, so the lit building behind cannot shine through a body
+        // and become part of a read that is supposed to be about the body.
         this._figurePath(ctx, hwPx, hhPx, s.pose);
-        // A BODY IS OPAQUE, AND THE BUILDING BEHIND IT IS LIT.
-        //
-        // Every corpse fill is translucent, and an eroded one is MORE
-        // translucent — so once the facade went in behind them, the lit windows
-        // shone through a decayed body harder than through a whole one, and
-        // acceptance 13 measured FRESH at luminance 84.7 against THIN at 110.8.
-        // The freshest body on screen was the DARKEST. That is not a smaller
-        // margin, it is the tell running backwards: brightness is what tells a
-        // player whether a hold will still take their weight, and it was saying
-        // the opposite.
-        //
-        // The gate could not catch it. It scores the DISTANCE between stages,
-        // not their ORDER, so a clean inversion still reads as separation and
-        // still passes — at 22.3 against a threshold of 3. Only the four
-        // printed numbers, read in order, show it.
-        //
-        // Occluding by solidity fixes it and is the honest picture: a whole body
-        // blocks the windows behind it, a crumbling one lets them through, and a
-        // MEMORY corpse is an outline that blocks nothing because it is a
-        // picture of a body rather than a body.
-        ctx.fillStyle = rgb(B.bgBot, solidity * FEEL.tower.corpseOcclude);
+        ctx.fillStyle = rgb(B.bgBot, FEEL.tower.corpseOcclude);
         ctx.fill();
         ctx.fillStyle = fill;
         ctx.fill();
@@ -1979,7 +2039,11 @@ export class Renderer {
         if (st === EROSION.THIN) {
           // Cracks. Three hairlines through the body, seeded off the pose so a
           // given corpse always cracks the same way.
-          ctx.strokeStyle = `rgba(0,0,0,0.55)`;
+          // Light enough that it cannot outrank the stage it decorates. At 0.55
+          // these three hairlines pushed THIN's measured luminance BELOW TOP's —
+          // so the less-eroded body read as the darker one, and a decoration was
+          // overruling the tell it was meant to support.
+          ctx.strokeStyle = `rgba(0,0,0,${FEEL.tower.crackInk})`;
           ctx.lineWidth = Math.max(0.7, this.dpr * 0.6);
           for (let k = 0; k < 3; k++) {
             const t = -0.5 + (k + (s.pose & 3) * 0.17) * 0.42;
@@ -2109,6 +2173,82 @@ export class Renderer {
    * @param {CanvasRenderingContext2D} ctx
    * @param {BiomeSlot} B
    */
+  /**
+   * THE SHADOW ON THE SURFACE UNDERNEATH YOU.
+   *
+   * This game has no third axis and no perspective camera, so height has always
+   * been something you inferred from the altitude counter rather than something
+   * you SAW. A contact shadow is the oldest trick for that and it is the one
+   * genuinely missing piece: the shadow sits on the surface below, separates
+   * from your feet as you rise, shrinks and softens with the gap, and rushes
+   * back up to meet you as you fall. You read the distance to your landing
+   * without a number and without a single line of new physics.
+   *
+   * It also does a second job the aim preview cannot. The preview shows where a
+   * launch WOULD go while you are aiming; the shadow shows where you are RIGHT
+   * NOW relative to the thing beneath you, mid-flight, when the thumb is off the
+   * glass and there is nothing else on screen telling you how far the drop is.
+   *
+   * The surface is found by asking the world, not by a second copy of the
+   * collision rule: `near()` is the sim's own spatial query and
+   * `solidHalfWidth` is the same width the physics catches you on — a MEMORY
+   * corpse returns 0 there, so a body that will not hold you casts no shadow.
+   * That is the honest read, and it means the shadow can never promise a
+   * landing the physics will refuse.
+   *
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Sim} sim
+   */
+  _shadow(ctx, B, sim) {
+    const S = FEEL.shadow;
+    const b = sim.body;
+    const bx = b.rx ?? b.x, by = b.ry ?? b.y;
+    // The nearest surface at or below the feet, within a useful range. Anything
+    // further than that and the shadow would be a dot nobody reads.
+    const feet = by - FEEL.body.h * 0.5;
+    const list = sim.world.near(feet - S.rangeU, feet + 1);
+    let best = null, bestTop = -Infinity;
+    for (let i = 0; i < list.length; i++) {
+      const s2 = list[i];
+      if (!s2.live) continue;
+      const hw = solidHalfWidth(s2, sim);
+      if (hw <= 0) continue;                    // a body that will not hold you
+      const top = s2.y + s2.hh;
+      if (top > feet + 0.5 || top < feet - S.rangeU) continue;
+      if (Math.abs(bx - s2.x) > hw + FEEL.body.w * 0.5) continue;
+      if (top > bestTop) { bestTop = top; best = s2; }
+    }
+    if (!best) return;
+
+    // Gap drives everything: a shadow directly under the feet is tight and
+    // dark, one under a body at the top of its arc is wide and faint.
+    const gap = clamp((feet - bestTop) / S.rangeU, 0, 1);
+    const a = S.alpha * (1 - gap) * (1 - gap);
+    if (a < 0.008) return;
+    const w = FEEL.body.w * (S.wideAt + (1 - S.wideAt) * (1 - gap)) * this.scale;
+    const h = w * S.flatten;
+    const x = this.X(bx);
+    const y = this.Y(bestTop) + h * 0.25;
+
+    // Soft, because a hard ellipse under a body reads as a sticker. The
+    // gradient is built per frame and that is deliberate: it is one object for
+    // one shadow, against a per-pane loop that was the real cost in this scene.
+    const g = ctx.createRadialGradient(x, y, 0, x, y, w);
+    g.addColorStop(0, `rgba(0,0,0,${a.toFixed(3)})`);
+    g.addColorStop(0.55, `rgba(0,0,0,${(a * 0.45).toFixed(3)})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1, h / w);
+    ctx.translate(-x, -y);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, w, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   _rings(ctx, B) {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < this.ringN; i++) {
@@ -2330,23 +2470,65 @@ export class Renderer {
     // The climber, on the rig: head, torso, two arms, two legs.
     const L = this.figLean + sway, C = this.figCrouch, S = this.figStretch;
     const LK = this.figLook + sway * 0.5;
+    // A DARK BODY WITH A BRIGHT CORE, NOT A BRIGHT BODY.
+    //
+    // The figure used to be filled at 0.97 in its own near-white skin, which
+    // meant the brightest thing on screen was the whole silhouette — so the core
+    // added below had nothing to be brighter THAN, and the body competed with
+    // its own light. Reference art for this game is consistent about it: the
+    // climber is a dark shape and the light is one small point inside it.
+    //
+    // It is also the honest version of the rule the whole renderer is built on.
+    // The player is not a bright object; the player is the light source. A
+    // source is a point, and everything else — including the body carrying it —
+    // is lit BY it rather than glowing on its own account.
     const CH = CHARACTERS[this.character % CHARACTERS.length];
-    ctx.fillStyle = rgb(CH.skin, 0.97);
-    ctx.strokeStyle = rgb(CH.skin, 0.95);
+    const P2 = FEEL.figure;
+    const body = [CH.skin[0] * P2.bodyDim, CH.skin[1] * P2.bodyDim, CH.skin[2] * P2.bodyDim];
+    ctx.fillStyle = rgb(body, P2.bodyAlpha);
+    ctx.strokeStyle = rgb(body, P2.bodyAlpha);
     figureRig(ctx, hw, hh, L, C, S, LK, this.figT * FEEL.figure.swayRate, this.figIdle,
               this.figAim, CH);
 
     // The living core: the one part of the figure that is the biome's accent
     // rather than white, so a body reads as lit from inside while it is yours
     // and merely lit from outside once it is not.
-    // The living core: the one part that is the biome's accent rather than white,
-    // so a body reads as lit from inside while it is still yours.
+    // THE CORE, WHICH IS THE ACTUAL LIGHT.
+    //
+    // A second whole figure drawn in the accent was a body glowing all over, and
+    // a shape that is uniformly bright has no focal point — the eye lands
+    // nowhere. Reference art for this game puts a single small intense point at
+    // the chest and lets the rest of the figure be lit BY it. That is also the
+    // truthful version of this game's one rule: the player is not a bright
+    // object, the player is the light source, and a source is a point.
+    const coreY = -hh * (0.10 + C * 0.16 - S * 0.06);
+    const coreR = hw * FEEL.figure.coreR;
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = rgb(B.accent, 0.42);
-    ctx.strokeStyle = rgb(B.accent, 0.30);
-    figureRig(ctx, hw * 0.62, hh * 0.72, L, C, S, LK,
-              this.figT * FEEL.figure.swayRate, this.figIdle, this.figAim, CH);
+    const cg2 = ctx.createRadialGradient(0, coreY, 0, 0, coreY, coreR * 3.2);
+    cg2.addColorStop(0, 'rgba(255,255,255,0.95)');
+    cg2.addColorStop(0.30, rgb(B.accent, 0.55));
+    cg2.addColorStop(1, rgb(B.accent, 0));
+    ctx.fillStyle = cg2;
+    ctx.fillRect(-coreR * 3.2, coreY - coreR * 3.2, coreR * 6.4, coreR * 6.4);
     ctx.globalCompositeOperation = 'source-over';
+
+    // RIM LIGHT. A thin bright edge where the body catches its own core, which
+    // is what stops a dark silhouette reading as a hole cut in the scene. Drawn
+    // as a stroke of the same rig, offset toward the light, and clipped to the
+    // figure so it can only ever appear ON the body.
+    ctx.save();
+    figureRig(ctx, hw, hh, L, C, S, LK, this.figT * FEEL.figure.swayRate,
+              this.figIdle, this.figAim, CH);
+    ctx.clip();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = rgb(B.accent, P2.rimAlpha);
+    ctx.lineWidth = Math.max(1, hw * P2.rimW);
+    ctx.translate(-hw * P2.rimOff * (LK >= 0 ? 1 : -1), -hh * P2.rimOff);
+    figureRig(ctx, hw, hh, L, C, S, LK, this.figT * FEEL.figure.swayRate,
+              this.figIdle, this.figAim, CH);
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
 
     // WHAT THIS FLOOR PUTS YOU IN. Clipped to the outline, so the costume can
     // never change the silhouette — the shape stays the one thing that only
