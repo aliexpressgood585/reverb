@@ -555,12 +555,28 @@ const page = await newPage();
       const c = sim.world.corpse(xs[i], 60, 0, 1, 0, 40 - ages[i]);
       c.glow = 0;
     }
+    // THE PLAYER IS PARKED FAR ABOVE, SO ALL FOUR ARE EQUALLY LIT.
+    //
+    // It used to stand at (50, 60), in the middle of the row — which put FRESH
+    // at x=22 twenty-eight units from the light and THIN at x=40 only ten away.
+    // Every brightness in this renderer is BY DESIGN a function of distance to
+    // the player, so the fixture was comparing four corpses at four different
+    // distances and calling the difference erosion. It scrambled the ordering
+    // badly enough that FRESH measured DARKER than THIN, and it means the older
+    // separation figures were partly measuring geometry too.
+    //
+    // In play the confound runs the other way and is harmless: the body you just
+    // made is the one nearest you, so distance reinforces the erosion read. Here
+    // it has to be removed, not reproduced. From 140 units above, the four are
+    // 140.4 to 142.8 units away — equal to within two percent — so what is left
+    // in the numbers is erosion and nothing else.
     sim.body.x = sim.body.px = sim.body.rx = 50;
-    sim.body.y = sim.body.py = sim.body.ry = 60;
+    sim.body.y = sim.body.py = sim.body.ry = 200;
     // Every piece of camera and renderer state the live loop may have left
     // dirty. Setting position alone left rotation, shake and the monument
     // pull-back live, and the closest-pair margin still swung 4.6 to 18.0.
     camera.x = 50; camera.y = 60; camera.zoom = 1; camera.viewH = 150;
+    // Camera stays on the row; only the light moved away.
     camera.rot = 0; camera.rotVel = 0; camera.shake = 0;
     camera.shakeX = 0; camera.shakeY = 0; camera.t = 0;
     camera.mon = 0; camera.monTarget = 0;
@@ -630,9 +646,32 @@ const page = await newPage();
       + Math.abs(r[i].chroma - r[i + 1].chroma)
       + Math.abs(r[i].shelf - r[i + 1].shelf));
   }
-  minGap > 3
-    ? pass(13, `all four erosion stages separate in one frame (closest neighbouring pair differs by ${minGap.toFixed(1)})`)
-    : fail(13, `two erosion stages look the same (closest pair differs by only ${minGap.toFixed(1)})`);
+  // AND THEY MUST RUN THE RIGHT WAY ROUND.
+  //
+  // The margin above scores DISTANCE between stages, never their ORDER, so a
+  // clean inversion still reads as good separation. That is not hypothetical:
+  // when the lit facade went in behind the bodies, the windows shone through a
+  // decayed corpse harder than through a whole one and FRESH came out at
+  // luminance 84.7 against THIN at 110.8 — the freshest body on screen was the
+  // darkest. The gate said PASS at 22.3 against a threshold of 3 and could not
+  // have said anything else. Brightness is what tells a player whether a hold
+  // still takes their weight; a test that cannot see it running backwards is
+  // not testing the thing it is named for.
+  const lums = r.map((v) => v.lum);
+  let inverted = -1;
+  for (let i = 0; i < 3; i++) if (lums[i] < lums[i + 1] - 1) { inverted = i; break; }
+
+  if (inverted >= 0) {
+    fail(13, `erosion runs BACKWARDS: ${names[inverted]} is dimmer than ` +
+      `${names[inverted + 1]} (${lums[inverted]} vs ${lums[inverted + 1]}) — a ` +
+      `fresher body must never read darker than a decayed one [${lums.join(' > ')}]`);
+  } else if (minGap > 3) {
+    pass(13, `all four erosion stages separate in one frame and run the right way ` +
+      `round (closest neighbouring pair differs by ${minGap.toFixed(1)}; ` +
+      `luminance ${lums.join(' > ')})`);
+  } else {
+    fail(13, `two erosion stages look the same (closest pair differs by only ${minGap.toFixed(1)})`);
+  }
 }
 
 // ── 14. nothing interrupts a climb ─────────────────────────────────────────

@@ -1618,7 +1618,23 @@ export class Sim {
    */
   _die() {
     const b = this.body;
-    const rot = (this.world.rng() - 0.5) * 1.1;
+    // ROTATION IS CLAMPED SO BODIES CAN ACTUALLY STACK.
+    //
+    // This was +/-0.55 rad — plus or minus 31 degrees — and at that angle bodies
+    // never tessellate. The pile read as scattered debris with air between it,
+    // which means the one thing the game is named after, a CAIRN, was not drawn
+    // anywhere in the product. An independent review put it plainly: "there is
+    // no tower in any of these images".
+    //
+    // It is also the more honest number. Collision is a flat AABB top, and
+    // DECISIONS §16 forbids drawing a hold anywhere but where the collision is —
+    // a bright shelf bar raked over at 31 degrees tells a player they will slide
+    // off a surface that will in fact catch them square.
+    //
+    // Purely visual either way: `rot` is written once here and read only by the
+    // renderer and the poster, never by the physics, so this cannot touch
+    // WALL = 0.00% or the bodies-landed-on floor.
+    const rot = (this.world.rng() - 0.5) * FEEL.tower.corpseRot;
     const pose = Math.floor(this.world.rng() * 4);
     // THE BODY'S TOP SITS AT THE APEX, NOT ITS CENTRE.
     //

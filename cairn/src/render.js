@@ -1018,8 +1018,21 @@ export class Renderer {
     const depth = 1 - (cam.mon || 0);
     if (depth > 0.01) {
       ctx.globalAlpha = depth;
-      this._bands(ctx, B, cam);
-      if (ui.started) this._bigNumber(ctx, B, Math.max(0, sim.body.ry ?? sim.body.y));
+      // The facade replaces the parallax ridges. `_bands` drew layered spike
+      // silhouettes that made the world a cave, which is both the most-made
+      // background in the genre and the opposite of the reference this was
+      // pointed at — an enormous building against an empty sky.
+      this._facade(ctx, B, cam, sim);
+      // THE GIANT ALTITUDE NUMERAL IS GONE.
+      //
+      // It was the largest graphic element on screen, it duplicated the small
+      // readable counter forty pixels above it, and it collided with whatever
+      // else was in the upper half — landmark lattice, light shafts, facade —
+      // to make the top of the frame unreadable. An independent art review and
+      // my own screen-by-screen pass reached that separately, which is the
+      // strongest signal either of them produced. Deleted rather than dimmed:
+      // there is one tower in this game and it is made of bodies, and nothing
+      // else in the frame gets to be the biggest thing in it.
       if (!reduced) this._shafts(ctx, B, cam);
       this._dust(ctx, B, cam, dt);
       ctx.globalAlpha = 1;
@@ -1102,6 +1115,138 @@ export class Renderer {
    * @param {BiomeSlot} B
    * @param {Camera} cam
    */
+  /**
+   * THE TOWER YOU ARE ACTUALLY CLIMBING.
+   *
+   * THE OLD BACKGROUND WAS THE PROBLEM. Layered spike ridges, a giant altitude
+   * numeral and drifting dust made a CAVE, and a cave of coloured triangles is
+   * the most-made background in indie games — the owner's note, twice, was that
+   * the game looks generic, and this was most of the reason. Worse, it was
+   * exactly inverted from the reference they gave: a photograph of the Burj
+   * Khalifa, where the SKY IS EMPTY and the BUILDING IS ENORMOUS. Ours was a
+   * busy background around a small tower.
+   *
+   * So: empty sky, one huge facade running off the top and bottom of the frame,
+   * and a window grid on it. You are climbing the OUTSIDE of a building, and the
+   * building is bigger than the screen in every direction.
+   *
+   * THE PART THAT IS OURS AND NOBODY ELSE'S: the glass reflects the player.
+   * This game's whole art direction is a dark world with a single living light
+   * in it, and a mirrored facade is the one surface that can answer that light.
+   * A pane near the climber picks up their glow and holds it a moment; the
+   * reflection climbs with you. It is not an effect borrowed from another game —
+   * it falls out of the mechanic this game already has, which is the only kind
+   * of visual idea that cannot be copied off us without copying the design.
+   *
+   * All of it is a handful of rects and one gradient per frame. No assets, no
+   * per-window state, nothing retained: window lights are a hash of their own
+   * grid coordinates, so a pane is lit or dark deterministically and the same
+   * floor looks the same every time you pass it.
+   *
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {Camera} cam
+   * @param {Sim} sim
+   */
+  _facade(ctx, B, cam, sim) {
+    const F = FEEL.facade;
+    const sc = this.scale;
+    const b = sim.body;
+    const px = this.X(b.rx ?? b.x), py = this.Y(b.ry ?? b.y);
+
+    // The face of the building, wider than the play column and running past
+    // both edges of the frame, so it never reads as an object floating in space.
+    const left = this.X(COLUMN * 0.5 - F.halfW);
+    const right = this.X(COLUMN * 0.5 + F.halfW);
+    const g = ctx.createLinearGradient(left, 0, right, 0);
+    g.addColorStop(0, rgb(B.bgTop, 0.0));
+    g.addColorStop(0.16, rgb(B.rock, F.faceAlpha * 0.55));
+    g.addColorStop(0.5, rgb(B.rock, F.faceAlpha));
+    g.addColorStop(0.84, rgb(B.rock, F.faceAlpha * 0.55));
+    g.addColorStop(1, rgb(B.bgTop, 0.0));
+    ctx.fillStyle = g;
+    ctx.fillRect(left, 0, right - left, this.h);
+
+    // MULLIONS AND FLOOR SLABS — the grid that says "building" rather than
+    // "wall". Spaced in world units so they scale with the zoom and never
+    // shimmer, and clipped to whole lines on screen so there is no moire.
+    const fh = F.floorU * sc;                 // floor height in px
+    if (fh < 3) return;                       // pulled too far back to resolve
+    const y0 = this.Y(Math.ceil((cam.y + cam.viewH) / F.floorU) * F.floorU);
+    const cw = F.colU * sc;
+    ctx.lineWidth = Math.max(1, F.lineU * sc);
+
+    // Reflection falls off with distance from the climber, and the falloff is
+    // generous: the point is that you can see your own light travelling over
+    // the glass, not that one pane lights up.
+    //
+    // Compared SQUARED, and rows outside the reflection band skip the test
+    // entirely. A Math.hypot per pane over a nine-hundred-pane cap put
+    // acceptance test 4 from 1.92 to 5.24 ms a frame on this software
+    // rasteriser — the facade is background, and background does not get to be
+    // the most expensive thing in the frame.
+    const R = F.reflectU * sc;
+    const R2 = R * R;
+
+    ctx.strokeStyle = rgb(B.rock, F.gridAlpha);
+    ctx.beginPath();
+    for (let y = y0; y < this.h + fh; y += fh) {
+      ctx.moveTo(left, y); ctx.lineTo(right, y);
+    }
+    for (let x = left; x <= right + cw; x += cw) {
+      ctx.moveTo(x, 0); ctx.lineTo(x, this.h);
+    }
+    ctx.stroke();
+
+    // THE PANES. Lit windows are a hash of the grid cell, so the same floor is
+    // the same every time; the reflection is added on top of whatever the pane
+    // already is.
+    const col0 = Math.floor(left / cw);
+    const rowBase = Math.floor((cam.y + cam.viewH) / F.floorU);
+    // THE PANES. A UNIFORM GRID READS AS A WAFFLE, NOT AS A BUILDING.
+    //
+    // The first version lit a fixed fraction of identical windows and the result
+    // was a regular pattern filling the frame — texture, not architecture. Real
+    // towers have whole dark storeys, service floors of narrow slits, and
+    // stretches where every light is on. Three hashes per floor give that: one
+    // decides the storey's character, one its overall brightness, one the
+    // individual pane. All deterministic from the grid coordinate, so a floor
+    // looks the same every time you pass it and nothing is retained.
+    ctx.globalCompositeOperation = 'lighter';
+    let r = 0;
+    for (let y = y0, ry = rowBase; y < this.h + fh; y += fh, ry--) {
+      const fk = hash1(ry * 374761393);
+      const dark = fk < F.darkFloorFrac;           // a whole storey unlit
+      const service = !dark && fk > 1 - F.serviceFrac;
+      const floorLit = dark ? 0 : (0.35 + hash1(ry * 668265263) * 1.5);
+      // Service floors are a band of narrow slits: the vertical rhythm changes,
+      // which is what stops a tall facade reading as one repeating tile.
+      const iw = service ? cw * 0.20 : cw * 0.68;
+      const ih = service ? fh * 0.22 : fh * 0.60;
+      const iy = service ? fh * 0.40 : fh * 0.20;
+      const step = service ? cw * 0.5 : cw;
+      const wy = y + fh * 0.5;
+      const dy = wy - py, dy2 = dy * dy;
+      const rowLit = dy2 < R2;               // can this row reflect at all?
+      for (let x = left, cxi = col0; x <= right; x += step, cxi++) {
+        const h1 = hash1((ry * 73856093) ^ (cxi * 19349663));
+        const on = h1 < F.litFrac * floorLit ? F.litA * (0.55 + h1 * 3) : 0;
+        let refl = 0;
+        if (rowLit) {
+          const dx = x + step * 0.5 - px;
+          const d2 = dx * dx + dy2;
+          if (d2 < R2) { const k = 1 - Math.sqrt(d2) / R; refl = k * k * F.reflectA; }
+        }
+        const a = on + refl;
+        if (a < 0.012) continue;
+        ctx.fillStyle = rgb(B.accent, Math.min(0.72, a));
+        ctx.fillRect(x + (step - iw) * 0.5, y + iy, iw, ih);
+        if (++r > F.maxPanes) { y = this.h + fh; break; }
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
   _bands(ctx, B, cam) {
     // Silhouetted geometry, never empty, never contrasty. Each band repeats
     // vertically so the tower has depth at any height.
@@ -1703,9 +1848,25 @@ export class Renderer {
       const st = erosionOf(s, sim);
       const age = total > 1 ? 1 - s.order / (total - 1) : 0;
       const cool = clamp(age * 1.15, 0, 1);
-      const cr = lerp(B.accent[0], MEMORY_GOLD[0], cool);
-      const cg = lerp(B.accent[1], MEMORY_GOLD[1], cool);
-      const cb = lerp(B.accent[2], MEMORY_GOLD[2], cool);
+      // RECEDING INTO HISTORY IS A DIMMING AS WELL AS A COOLING.
+      //
+      // MEMORY_GOLD is LUMINANCE 158.2 and ASH's ember accent is 144.8, so
+      // cooling a body toward memory was making it NINE PERCENT BRIGHTER. Age
+      // pulled one way and solidity's falling alpha pulled the other, the hue
+      // won, and the result was a tell running backwards: acceptance 13 read
+      // FRESH at 81.6 against THIN at 105.7 — the freshest body on screen was
+      // the darkest one, in a game where brightness is how a player judges
+      // whether a hold still takes their weight.
+      //
+      // It predates the facade entirely. The lit windows behind the bodies only
+      // widened the gap enough that the four printed numbers made it obvious,
+      // and the gate never could: it scores the DISTANCE between stages, never
+      // their ORDER, so a clean inversion passes at 18.5 against a threshold of
+      // 3. It is gated on order now as well.
+      const fade = 1 - cool * FEEL.tower.memoryDim;
+      const cr = lerp(B.accent[0], MEMORY_GOLD[0], cool) * fade;
+      const cg = lerp(B.accent[1], MEMORY_GOLD[1], cool) * fade;
+      const cb = lerp(B.accent[2], MEMORY_GOLD[2], cool) * fade;
       s.glow = Math.max(0, s.glow - 0.02);
       const rimlight = lit * 0.75 + s.glow * 0.4;
 
@@ -1739,6 +1900,28 @@ export class Renderer {
         const hhPx = s.hh * this.scale;
 
         this._figurePath(ctx, hwPx, hhPx, s.pose);
+        // A BODY IS OPAQUE, AND THE BUILDING BEHIND IT IS LIT.
+        //
+        // Every corpse fill is translucent, and an eroded one is MORE
+        // translucent — so once the facade went in behind them, the lit windows
+        // shone through a decayed body harder than through a whole one, and
+        // acceptance 13 measured FRESH at luminance 84.7 against THIN at 110.8.
+        // The freshest body on screen was the DARKEST. That is not a smaller
+        // margin, it is the tell running backwards: brightness is what tells a
+        // player whether a hold will still take their weight, and it was saying
+        // the opposite.
+        //
+        // The gate could not catch it. It scores the DISTANCE between stages,
+        // not their ORDER, so a clean inversion still reads as separation and
+        // still passes — at 22.3 against a threshold of 3. Only the four
+        // printed numbers, read in order, show it.
+        //
+        // Occluding by solidity fixes it and is the honest picture: a whole body
+        // blocks the windows behind it, a crumbling one lets them through, and a
+        // MEMORY corpse is an outline that blocks nothing because it is a
+        // picture of a body rather than a body.
+        ctx.fillStyle = rgb(B.bgBot, solidity * FEEL.tower.corpseOcclude);
+        ctx.fill();
         ctx.fillStyle = fill;
         ctx.fill();
         ctx.strokeStyle = rim;

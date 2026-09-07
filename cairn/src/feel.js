@@ -48,6 +48,42 @@ export const FEEL = {
     sweepFraction: 0.5,
   },
 
+  // -------------------------------------------------------------- the tower
+  //
+  // The face of the building you climb. Everything is in WORLD units so the grid
+  // scales with the zoom instead of shimmering, and every pane is a hash of its
+  // own grid cell rather than stored state — so a floor looks the same each time
+  // you pass it, and nothing is retained between frames.
+  facade: {
+    halfW: 46,          // half the facade width, world units. Wider than COLUMN
+                        // (100) is deliberate: it must run past both edges so it
+                        // reads as a building and not an object in space.
+    floorU: 7.0,        // a storey, world units
+    colU: 6.5,          // a window bay
+    lineU: 0.28,        // mullion width
+    faceAlpha: 0.10,    // the glass itself, against the sky. Held low: the
+                        // facade is the place, the ledges are the game, and a
+                        // wall bright enough to compete with a hold is a wall
+                        // that has forgotten what it is for.
+    gridAlpha: 0.075,
+    litFrac: 0.20,      // fraction of panes with a light on behind them
+    litA: 0.085,
+    // A tower with an even scatter of lit windows is a texture. Real ones have
+    // whole dark storeys and bands of narrow service slits, and it is that
+    // vertical irregularity — not the windows themselves — that reads as
+    // architecture rather than as a pattern.
+    darkFloorFrac: 0.26,
+    serviceFrac: 0.12,
+    // THE REFLECTION, which is the one idea here that belongs to this game
+    // alone: the player is the only real light source, and glass is the one
+    // surface that can answer it. The radius is generous on purpose — the read
+    // is your light travelling across the building as you climb, not a single
+    // pane switching on.
+    reflectU: 52,
+    reflectA: 0.62,
+    maxPanes: 900,      // a hard ceiling, so a pulled-back frame cannot spiral
+  },
+
   // ------------------------------------------------------------- the figure
   //
   // How the LIVING body carries itself. Pure presentation — nothing here can
@@ -360,6 +396,23 @@ export const FEEL = {
     // platform than a ledge and an enormously better one than nothing.
     corpseW: 5.2,
     corpseH: 6.0,
+    // Full spread of a corpse's resting angle, radians. 1.1 (+/-31 degrees) was
+    // enough to stop bodies tessellating at all, so a pile of them read as
+    // debris rather than as the cairn the game is named for. 0.28 is about
+    // +/-8 degrees: enough that no two bodies look stamped from the same die,
+    // little enough that they stack.
+    corpseRot: 0.28,
+    // How much of the lit facade a body blocks, scaled by how solid it still is.
+    // Without this the windows behind an eroded corpse shine through harder than
+    // through a fresh one, and the erosion tell inverts: acceptance 13 read
+    // FRESH at luminance 84.7 against THIN at 110.8 — the freshest body on
+    // screen was the darkest one.
+    corpseOcclude: 0.92,
+    // How much a body dims as it cools toward memory. MEMORY_GOLD is brighter
+    // than every warm accent in the palette, so cooling alone made an old body
+    // LIGHTER than a fresh one and inverted the erosion tell. Age has to read as
+    // receding, and receding is darker as well as cooler.
+    memoryDim: 0.42,
     // THE BLOOM ON A BODY'S SHELF, as a multiplier on the additive pass a ledge
     // crest has always had. A generated ledge glowed and the thing this game is
     // named after did not: measured side by side at the same height and the same
@@ -584,7 +637,10 @@ export const FEEL = {
     // full-width scanlines rather than as masonry. 86u fills the frame and
     // still overhangs it slightly, which is what a large structure should do.
     widthU: 86,
-    alpha: 0.30,          // it is scenery; the ledges must stay the readable layer
+    // Dropped from 0.30 with the facade: these diagonals were tolerable across a
+    // cave of soft ridges and fight an orthogonal window grid badly — two
+    // structures competing to be the building. The tower is the building now.
+    alpha: 0.15,          // it is scenery; the ledges must stay the readable layer
     lineU: 1.5,           // stroke weight in world units, so it scales with zoom
     detail: 9,            // repeated elements per shape — keep the path cheap
     fadeU: 150,           // fades in over this much approach, so it arrives

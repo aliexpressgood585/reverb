@@ -212,16 +212,35 @@ check(post.ms < 2000 && post.bytes > 10000,
   `encode ${post.encode}ms (first run ${post.cold}ms, ${(post.bytes / 1024).toFixed(0)} KB)`);
 
 // ── 6. a single tap puts it back ──────────────────────────────────────────
+// WAIT FOR THE STATE, NOT FOR A STOPWATCH.
+//
+// This used to tap and sleep 1400 ms. The pull-back decays per FRAME, not per
+// millisecond, so the assertion was really "this container renders fast enough",
+// and once the facade made the scene more expensive it read mon 0.064 against a
+// 0.05 threshold and failed — reproducibly, at the same number, on a build where
+// every part of the state that matters had already returned. A phone at 60 fps
+// covers three times the frames in that window; the container does not.
+//
+// So it polls for the settled state and REPORTS how long it took. That tests the
+// property the line actually claims — one tap returns you to the climb — and a
+// genuine slowdown shows up as a rising number instead of hiding inside a sleep.
 await page.touchscreen.tap(195, 500);
-await delay(1400);
-const closed = await page.evaluate(() => ({
-  monument: window.CAIRN.ui.monument,
-  mon: +window.CAIRN.camera.mon.toFixed(3),
-  locked: window.CAIRN.input.locked,
-  body: document.body.className,
-}));
+const t0 = Date.now();
+let closed = null;
+for (let i = 0; i < 100; i++) {
+  closed = await page.evaluate(() => ({
+    monument: window.CAIRN.ui.monument,
+    mon: +window.CAIRN.camera.mon.toFixed(3),
+    locked: window.CAIRN.input.locked,
+    body: document.body.className,
+  }));
+  if (!closed.monument && closed.mon < 0.05 && !closed.locked && !closed.body) break;
+  await delay(100);
+}
+const took = Date.now() - t0;
 check(!closed.monument && closed.mon < 0.05 && !closed.locked && !closed.body,
-  `one tap returns to the climb (${JSON.stringify(closed)})`);
+  `one tap returns to the climb, settled in ${took}ms on this software ` +
+  `rasteriser (${JSON.stringify(closed)})`);
 
 if (errors.length) { console.log('  page errors: ' + errors.join(' | ')); fails.push('page errors'); }
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nmonument view holds');
