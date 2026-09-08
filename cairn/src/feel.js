@@ -130,6 +130,28 @@ export const FEEL = {
     // The additive pass over a platform's lit lip. Kept low because `lighter`
     // clips toward white and white carries no hue — see the note in `_solids`.
     crestBloom: 0.34,
+    // HOW HOT AND HOW PURE A LIT EDGE IS ALLOWED TO BE.
+    //
+    // Measured against the gameplay painting rather than a close-up: its
+    // brightest 0.5% of pixels sit at luminance 87.5 and the build's at 154,
+    // and among lit pixels it is HALF as saturated (26.5 against 48.3). The
+    // reference is dusty stone catching warm light; the build was neon amber on
+    // black. `crestPeak` cools the lip and `crestWash` mixes it toward the
+    // rock's own colour, which is what turns a strip light back into a surface.
+    crestPeak: 0.66,
+    // Small, and it was 0.34. Washing a lit edge toward `rock` desaturates it,
+    // but ASH's rock is WARM BONE — nearly white — so a third of the way there
+    // turned the amber lips pale, which the reference's are emphatically not.
+    // Purity is trimmed globally by `satTrim` instead; this only knocks the
+    // hard edge off the accent so it reads as lit stone rather than as a tube.
+    crestWash: 0.12,
+    // The lit seam between stones — where the frame's hottest pixels actually
+    // are. See the note in `_solids`; scales every erosion stage together so
+    // the ladder keeps its order.
+    seamPeak: 0.70,
+    // Global purity trim. See the note at the `post.render` call: the reference
+    // is muted stone, and every palette's own `sat` multiplies the other way.
+    satTrim: 0.66,
 
     // THE DEATH, AS STONE SETTLING RATHER THAN AS AN EXPLOSION.
     //
@@ -214,8 +236,8 @@ export const FEEL = {
     // read as busy rather than as deep. Dynamic range is the whole difference
     // between the two, far more than any amount of detail: a wall you can see
     // everywhere has no darkness for a light to matter against.
-    faceAlpha: 0.045,
-    gridAlpha: 0.030,
+    faceAlpha: 0.022,
+    gridAlpha: 0.014,
     litFrac: 0.22,      // a few of the large panes are lit, and the rest of
     litA: 0.045,        // the wall stays dark enough to fall into
     // A tower with an even scatter of lit windows is a texture. Real ones have
@@ -285,8 +307,8 @@ export const FEEL = {
     // call site); a plate at 0.62 behind that grid is two walls at one distance,
     // which is the clutter the exclusive branch was avoiding. At 0.30 it is
     // texture in the deep, which is what it is good at.
-    alpha: 0.30,
-    sink: 0.60,       // pushed back into the dark, or it eats the range
+    alpha: 0.52,
+    sink: 0.40,       // pushed back into the dark, or it eats the range
     tint: 0.10,       // graded toward the biome so six floors are not one photo
   },
 
@@ -999,7 +1021,7 @@ export const FEEL = {
   // NUMBER you are on — not at the same second. See DECISIONS §33 for why a
   // clock race is the one shape this game cannot take.
   ghost: {
-    alpha: 0.30,          // memory-gold and clearly not you
+    alpha: 0.52,          // memory-gold and clearly not you
     ease: 3.4,            // how fast it steps between its launch positions
     trailU: 30,           // how far back its path is drawn from where it stands
     fadeU: 120,           // fades out once it is this far off screen-centre

@@ -1212,7 +1212,29 @@ export class Renderer {
       // and machinery, which is beautiful and is not this wall. It is also the
       // only external file the game ships, so dropping it settles a note from a
       // separate review at no cost.
-      this._deepTower(ctx, B, cam);
+      // THE PAINTED PLATE IS BACK, AND REMOVING IT WAS MY ERROR.
+      //
+      // Three concept paintings were sent. Two are close-ups — one platform, one
+      // figure, a wall of square windows behind. The third is the GAMEPLAY view:
+      // a tall column of thin floating slabs, a tiny pale figure on one of them,
+      // and behind it an enormous cathedral of curved stone — rings, arches,
+      // tiers, receding into haze. Every measurement in this file until now was
+      // taken against a close-up, so the wall was tuned to be a window grid when
+      // the view a player actually spends their time in is monumental stonework.
+      //
+      // Measured against the right painting, the frame's darkness is already
+      // close (46.2% near-black against 40.3%) and the two real gaps run the
+      // OTHER way from everything the last few rounds did: highlights at 154
+      // against 87.5, and lit-pixel chroma at 48.3 against 26.5. The reference
+      // is soft, dusty, mid-toned stone. The build is black with neon amber on
+      // it. It needs more mid-tone, not less, and the plate is the only thing
+      // here that draws any.
+      //
+      // So the plate is the wall again and the grid falls back behind it: the
+      // scattered lit openings in the reference are incidental detail on top of
+      // the stone, which is what `_facade` is now doing rather than being the
+      // architecture itself.
+      this._plate(ctx, B, cam);
       this._facade(ctx, B, cam, sim);
       // THE GIANT ALTITUDE NUMERAL IS GONE.
       //
@@ -2264,8 +2286,14 @@ export class Renderer {
         // what is left. Reverted; the peak gap is the player's own white core
         // and a handful of lit lips, which is where the reference puts its
         // light too.
-        ctx.fillStyle = rgb(B.accent,
-          clamp((0.16 + lit * 0.70) * (0.55 + tier * 0.62) + flash, 0, 1));
+        // Mixed toward rock before it is drawn: a lit edge in this reference is
+        // stone with light ON it, and pure accent at full strength is a neon
+        // tube. `crestWash` is how much of the surface survives the lighting.
+        this._lit[0] = lerp(B.accent[0], B.rock[0], V.crestWash);
+        this._lit[1] = lerp(B.accent[1], B.rock[1], V.crestWash);
+        this._lit[2] = lerp(B.accent[2], B.rock[2], V.crestWash);
+        ctx.fillStyle = rgb(this._lit,
+          clamp(((0.16 + lit * 0.70) * (0.55 + tier * 0.62) + flash) * V.crestPeak, 0, 1));
         ctx.fillRect(sx - w * 0.5, top, w,
           Math.max(1, (active ? 2.4 : 1.4) * this.dpr));
         // THE POOL OF LIGHT A LEDGE THROWS ON THE WALL BEHIND IT.
@@ -2565,7 +2593,16 @@ export class Renderer {
         // falls with solidity as well as its brightness, so a fresh stone has a
         // thick hot seam, a worn one a thin dim line, and a memory none at all.
         // Three properties of one mark, all moving together.
-        ctx.fillStyle = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.30 + solidity * 0.68).toFixed(3)})`;
+        // COOLED, BECAUSE THIS IS WHERE THE FRAME'S HOT PIXELS LIVE.
+        //
+        // Measured: with `_solids` stubbed out the brightest 0.5% of the frame
+        // falls from 154 to 93.7, against 87.5 in the gameplay painting. Two
+        // rounds were spent cooling the LEDGE crest for that and the number
+        // barely moved — it is the corpse seam and the additive pass over it,
+        // drawn in the undimmed cooled colour at up to 0.98 alpha, that clip to
+        // white. `seamPeak` scales every stage together, so the erosion ladder
+        // keeps its ordering and only its absolute brightness comes down.
+        ctx.fillStyle = `rgba(${cr | 0},${cg | 0},${cb | 0},${((0.30 + solidity * 0.68) * FEEL.visual.seamPeak).toFixed(3)})`;
         ctx.fillRect(-hwPx, -hhPx, hwPx * 2,
                      Math.max(1, (1.6 + solidity * 3.0) * this.dpr));
 
@@ -2585,7 +2622,7 @@ export class Renderer {
         // And exactly `hwPx * 2` wide, which is the narrowed hitbox — the one
         // lie this art direction is not allowed to tell is a hold drawn wider
         // than it catches.
-        const bloom = FEEL.tower.corpseBloom * solidity
+        const bloom = FEEL.tower.corpseBloom * FEEL.visual.seamPeak * solidity
           * (FEEL.tower.corpseBloomBase + rimlight * FEEL.tower.corpseBloomLit);
         if (bloom > 0.002) {
           ctx.globalCompositeOperation = 'lighter';

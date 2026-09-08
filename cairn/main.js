@@ -813,7 +813,13 @@ function step(now, real) {
       flash: ui.flash * 0.85,
       lift: grade.lift,
       gain: grade.gain,
-      sat: B.sat,
+      // TRIMMED TOWARD THE REFERENCE. The palettes each PUSH saturation up
+      // (1.06 to 1.30), and measured against the gameplay painting the build's
+      // lit pixels came out at chroma 47.5 against its 26.5 — nearly twice as
+      // pure. That painting is dusty stone catching warm light, not amber on
+      // black, and this is the one lever that moves the whole frame's purity at
+      // once rather than one element at a time.
+      sat: B.sat * FEEL.visual.satTrim,
     });
   }
 

@@ -55,9 +55,9 @@ await delay(600);
 await page.touchscreen.tap(195, 520);
 await delay(400);
 
-const LAYERS = ['_plate', '_deepTower', '_facade', '_shafts', '_dust', '_monolith',
+const LAYERS = ['_plate', '_deepTower', '_facade', '_monolith',
   '_landmarks', '_threads', '_updrafts', '_dark', '_shadow', '_trail', '_ghostRun',
-  '_bestLine'];
+  '_bestLine', '_solids', '_player'];
 
 const rows = await page.evaluate(async (layers) => {
   const { sim, camera, renderer } = window.CAIRN;
@@ -99,6 +99,17 @@ const rows = await page.evaluate(async (layers) => {
     renderer[name] = () => {};
     const off = grab();
     renderer[name] = real;
+    const peakOf = (buf) => {
+      const l = new Float64Array(buf.length / 4);
+      for (let i = 0, k = 0; i < buf.length; i += 4, k++) {
+        l[k] = 0.2126 * buf[i] + 0.7152 * buf[i + 1] + 0.0722 * buf[i + 2];
+      }
+      l.sort();
+      const t = l.subarray(Math.floor(l.length * 0.995));
+      let s2 = 0;
+      for (let i = 0; i < t.length; i++) s2 += t[i];
+      return s2 / t.length;
+    };
     let touched = 0, weight = 0, darkOn = 0, darkOff = 0;
     for (let i = 0; i < base.length; i += 4) {
       const l0 = 0.2126 * base[i] + 0.7152 * base[i + 1] + 0.0722 * base[i + 2];
@@ -114,17 +125,18 @@ const rows = await page.evaluate(async (layers) => {
     // luminance 12 and the build is 13%; this column says which layer is
     // spending that budget, which two rounds of guessing failed to find.
     out.push({ name, touched: +(touched / n * 100).toFixed(1), weight: +(weight / n).toFixed(2),
-      blackCost: +((darkOff - darkOn) / n * 100).toFixed(1) });
+      blackCost: +((darkOff - darkOn) / n * 100).toFixed(1),
+      peakWithout: +peakOf(off).toFixed(1) });
   }
   return out;
 }, LAYERS);
 
 console.log('\nCAIRN — what each layer is worth, on a playing frame\n');
-console.log('  layer          touched%   weight   black cost%');
+console.log('  layer          touched%   weight   black cost%   peak w/o');
 for (const r of rows.sort((a, b) => (b.weight || 0) - (a.weight || 0))) {
   if (r.missing) { console.log(`  ${r.name.padEnd(14)} (not a method)`); continue; }
   const flag = r.touched < 2 ? '   <- invisible' : r.weight < 0.4 ? '   <- near-invisible' : '';
-  console.log(`  ${r.name.padEnd(14)} ${String(r.touched).padStart(7)}   ${String(r.weight).padStart(6)}   ${String(r.blackCost).padStart(6)}${flag}`);
+  console.log(`  ${r.name.padEnd(14)} ${String(r.touched).padStart(7)}   ${String(r.weight).padStart(6)}   ${String(r.blackCost).padStart(6)}   ${String(r.peakWithout ?? '').padStart(6)}${flag}`);
 }
 console.log('');
 await browser.close();
