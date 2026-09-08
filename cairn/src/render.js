@@ -1,7 +1,7 @@
 import { FEEL, COLUMN, BIOME_SPAN, BIOMES, biomeAt, newBiomeSlot, MEMORY_GOLD,
   FLOORS, CHARACTERS } from './feel.js';
 import { landmarksIn } from './sim.js';
-import { makeRng, erosionOf, EROSION, solidHalfWidth } from './sim.js';
+import { erosionOf, EROSION, solidHalfWidth } from './sim.js';
 
 /** @typedef {import('./sim.js').Sim} Sim */
 /** @typedef {import('./types.js').Solid} Solid */
@@ -531,97 +531,8 @@ const rgb = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 /** @type {(c: number[]) => number} */
 const lumOf = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 
-/**
- * THE SILHOUETTE LANGUAGE OF EACH BIOME, in the order BIOMES declares them.
- *
- * Colour tells you which biome you are in. Shape is what stops the twelfth pass
- * through it looking like the first.
- */
-const BAND_KINDS = ['spire', 'block', 'dome', 'needle', 'shard', 'facet'];
-
-/**
- * Which biome darkness belongs to, found by NAME rather than written as 3.
- * Insert a biome one day and a hard-coded index puts the dark in the wrong
- * place with nothing to catch it; this moves with the palette.
- */
+/** Which floor turns the lights off. Read by `_dark`, and by nothing else. */
 const VOID_BIOME = BIOMES.findIndex((b) => b.name === 'VOID');
-
-/**
- * One parallax layer's outline, in a biome's own geometry.
- *
- * Returns `n + 1` points as a flat [x0, y0, x1, y1, ...] with x ascending from 0
- * to 1 and y a height fraction. EVERY KIND MUST RETURN THE SAME LENGTH for a
- * given `n`, because two of them are interpolated against each other while a
- * biome crossfades — a shape that changes its point count would have to pop.
- *
- * @param {string} kind
- * @param {number} level  0 is the furthest and tallest, 2 the nearest
- * @param {number} n      segments; the array is (n + 1) points
- * @param {() => number} rng
- * @returns {Float32Array}
- */
-function bandShape(kind, level, n, rng) {
-  const out = new Float32Array((n + 1) * 2);
-  const amp = 0.42 - level * 0.09;
-  /** @type {(i: number, y: number) => void} */
-  const put = (i, y) => { out[i * 2] = i / n; out[i * 2 + 1] = clamp(y, 0.01, 0.98); };
-
-  if (kind === 'block') {
-    // SIGNAL. Stepped plateaus with vertical walls — architecture, not rock.
-    // A run of points holds one height, then jumps.
-    let h = 0.1 + rng() * amp;
-    let hold = 0;
-    for (let i = 0; i <= n; i++) {
-      if (hold-- <= 0) { h = 0.06 + rng() * amp; hold = 2 + Math.floor(rng() * 3); }
-      put(i, h);
-    }
-  } else if (kind === 'dome') {
-    // BLOOM. Overlapping rounded humps — organic, swollen, no sharp corners.
-    const humps = 3 + level;
-    /** @type {number[][]} */
-    const hs = [];
-    for (let k = 0; k < humps; k++) hs.push([rng(), 0.10 + rng() * 0.22, 0.14 + rng() * amp]);
-    for (let i = 0; i <= n; i++) {
-      const x = i / n;
-      let y = 0.05;
-      for (const [cx, w, hh] of hs) {
-        const d = Math.abs(x - (cx ?? 0)) / (w ?? 0.2);
-        if (d < 1) y = Math.max(y, (hh ?? 0.2) * Math.cos(d * Math.PI * 0.5) ** 0.7);
-      }
-      put(i, y);
-    }
-  } else if (kind === 'needle') {
-    // VOID. Mostly empty, with rare thin spikes. The emptiest biome should LOOK
-    // like the emptiest biome rather than like a dark version of a busy one.
-    for (let i = 0; i <= n; i++) {
-      const spike = rng() < 0.13;
-      put(i, spike ? 0.2 + rng() * amp * 1.5 : 0.02 + rng() * 0.05);
-    }
-  } else if (kind === 'shard') {
-    // CINDER. Asymmetric sawtooth: a slow rise then a vertical drop. Broken.
-    let h = 0.08;
-    for (let i = 0; i <= n; i++) {
-      h += amp * 0.34 * rng();
-      if (h > amp || rng() < 0.12) { put(i, h); h = 0.04 + rng() * 0.06; continue; }
-      put(i, h);
-    }
-  } else if (kind === 'facet') {
-    // GLACIER. Long straight runs meeting at points — crystal, not noise.
-    let i = 0;
-    let h = 0.1 + rng() * amp;
-    while (i <= n) {
-      const run = 3 + Math.floor(rng() * 6);
-      const to = 0.06 + rng() * amp;
-      for (let k = 0; k <= run && i <= n; k++, i++) put(i, h + (to - h) * (k / run));
-      h = to;
-    }
-  } else {
-    // ASH, and the fallback. The original jagged noise, kept exactly, because it
-    // is the silhouette the art direction was tuned against.
-    for (let i = 0; i <= n; i++) put(i, rng() * amp + 0.05);
-  }
-  return out;
-}
 
 // ------------------------------------------------------------------- camera
 
@@ -754,7 +665,6 @@ function hash1(i) {
 
 // -------------------------------------------------------------------- dust
 
-const DUST = 90;
 
 // ----------------------------------------------------------------- renderer
 
@@ -775,54 +685,9 @@ export class Renderer {
     this.w = 1; this.h = 1; this.dpr = 1;
     this.biome = newBiomeSlot();
 
-    /*
-     * PARALLAX BANDS — one silhouette LANGUAGE per biome, not one silhouette.
-     *
-     * This used to be three jagged polygons generated once from a fixed seed and
-     * tiled forever, with only the colour changing by altitude. A player at
-     * 11,045 m reported it as "the design between the stages is boring, it
-     * repeats" and he was exactly right: the biome cycle is six biomes of 150 m,
-     * so at 11 km he had seen the same three shapes in the same six colours
-     * TWELVE times. Hue is not variety.
-     *
-     * Each biome now has its own geometry — spires, blocks, domes, needles,
-     * shards, facets — and every layer of every biome has the same POINT COUNT so
-     * the crossfade between two biomes can interpolate the silhouettes as well as
-     * the colours. Shapes are still generated once at construction; what happens
-     * per frame is a lerp into a preallocated scratch array, so the draw loop
-     * still allocates nothing.
-     */
-    this.bands = [];
-    for (let l = 0; l < 3; l++) {
-      const n = 26 + l * 10;
-      /** @type {Float32Array[]} one silhouette per biome, all the same length */
-      const shapes = [];
-      for (let b = 0; b < BAND_KINDS.length; b++) {
-        shapes.push(bandShape(BAND_KINDS[b] ?? 'spire', l, n, makeRng(0x51ce07 + b * 7919 + l)));
-      }
-      this.bands.push({
-        shapes,
-        /** filled each frame by lerping two shapes; never reallocated */
-        pts: new Float32Array((n + 1) * 2),
-        n,
-        par: [0.15, 0.35, 0.6][l],
-        span: 260 - l * 60,
-      });
-    }
-
-    // Dust, pooled and wrapped into view rather than respawned. Its own seed:
-    // it used to share the bands' generator, so reshaping the bands would have
-    // silently moved every dust mote as well.
-    const rng = makeRng(0xd057);
-    this.dust = new Float32Array(DUST * 5);   // x, y, layer, phase, size
-    for (let i = 0; i < DUST; i++) {
-      const o = i * 5;
-      this.dust[o] = rng() * COLUMN;
-      this.dust[o + 1] = rng() * 400;
-      this.dust[o + 2] = 0.2 + rng() * 0.8;
-      this.dust[o + 3] = rng() * TAU;
-      this.dust[o + 4] = 0.25 + rng() * 0.8;
-    }
+    // THE BAND AND DUST POOLS WENT WITH THEIR LAYERS. See the note further down,
+    // above `_landmarks`, for the measurement. Both allocations, both seeded
+    // generators and both per-frame loops are gone rather than left idle.
 
     // Trail ribbon.
     this.trail = new Float32Array(FEEL.juice.trailPoints * 3); // x, y, age
@@ -1223,10 +1088,13 @@ export class Renderer {
    * @param {Input|null} input
    * @param {UiState} ui
    * @param {number} dt
-   * @param {boolean} reduced
+   * @param {boolean} _reduced no longer read: the two layers it gated (drifting
+   *   light shafts and the dust field) were measured and deleted. Kept in the
+   *   signature because `main.js` and three scripts pass it, and because a
+   *   future layer that must respect reduced motion belongs right here.
    * @returns {BiomeSlot}
    */
-  draw(sim, cam, input, ui, dt, reduced) {
+  draw(sim, cam, input, ui, dt, _reduced) {
     const ctx = this.ctx;
     const B = biomeAt(Math.max(0, sim.body.y), this.biome);
     this._setup(cam);
@@ -1265,8 +1133,6 @@ export class Renderer {
       // strongest signal either of them produced. Deleted rather than dimmed:
       // there is one tower in this game and it is made of bodies, and nothing
       // else in the frame gets to be the biggest thing in it.
-      if (!reduced) this._shafts(ctx, B, cam);
-      this._dust(ctx, B, cam, dt);
       ctx.globalAlpha = 1;
     }
 
@@ -1617,120 +1483,29 @@ export class Renderer {
     }
     ctx.globalCompositeOperation = 'source-over';
   }
-
-  _bands(ctx, B, cam) {
-    // Silhouetted geometry, never empty, never contrasty. Each band repeats
-    // vertically so the tower has depth at any height.
-    //
-    // TWO THINGS STOP IT REPEATING. The silhouette is the current biome's, blended
-    // into the next one exactly as the colours blend — so a biome boundary is a
-    // change of geometry and not only of hue. And the SCALE of that geometry
-    // drifts continuously with altitude on two frequencies that do not divide
-    // into each other, so the combination of colour, shape and scale has no short
-    // period. Twelve passes through six biomes used to be twelve identical
-    // pictures; it now takes kilometres before anything looks like itself again.
-    const kinds = this.bands[0] ? this.bands[0].shapes.length : 1;
-    const i0 = ((B.index % kinds) + kinds) % kinds;
-    const i1 = (i0 + 1) % kinds;
-    const blend = B.blend;
-    const drift = 1
-      + 0.42 * Math.sin(cam.y * 0.00055)
-      + 0.20 * Math.sin(cam.y * 0.00017 + 1.7);
-
-    for (let l = 0; l < this.bands.length; l++) {
-      const band = this.bands[l];
-      const par = band.par;
-      const a = 0.11 + l * 0.075;
-      const spanPx = band.span * drift * this.scale;
-
-      // Lerp the two silhouettes into the scratch array. No allocation.
-      const from = band.shapes[i0], to = band.shapes[i1], pts = band.pts;
-      for (let i = 0; i < pts.length; i += 2) {
-        pts[i] = from[i] ?? 0;
-        pts[i + 1] = (from[i + 1] ?? 0) + ((to[i + 1] ?? 0) - (from[i + 1] ?? 0)) * blend;
-      }
-      const off = ((cam.y * par * this.scale) % spanPx + spanPx) % spanPx;
-      for (let rep = -1; rep <= Math.ceil(this.h / spanPx) + 1; rep++) {
-        const baseY = this.h - off + rep * spanPx;
-        const foot = baseY + spanPx * 1.1;
-        // Opacity lives in the jagged tips; the body of the band is nearly
-        // empty. Filling the whole polygon evenly stacked three layers and
-        // several repeats into a milky haze over the lower half of the frame.
-        const g = ctx.createLinearGradient(0, baseY - spanPx * 0.46, 0, baseY + spanPx * 0.22);
-        g.addColorStop(0, rgb(B.rock, a));
-        g.addColorStop(0.55, rgb(B.rock, a * 0.34));
-        g.addColorStop(1, rgb(B.rock, 0));
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.moveTo(-20, foot);
-        for (let i = 0; i < pts.length; i += 2) {
-          ctx.lineTo(-20 + pts[i] * (this.w + 40), baseY - pts[i + 1] * spanPx);
-        }
-        ctx.lineTo(this.w + 20, foot);
-        ctx.closePath();
-        ctx.fill();
-      }
-    }
-  }
-
-  /**
-   * @param {CanvasRenderingContext2D} ctx
-   * @param {BiomeSlot} B
-   * @param {Camera} cam
-   */
-  _shafts(ctx, B, cam) {
-    // Volumetric light from above, drifting. Intensity is a biome property.
-    const n = 3;
-    for (let i = 0; i < n; i++) {
-      const t = cam.t * 0.045 + i * 2.1;
-      const cx = this.w * (0.2 + 0.3 * i) + Math.sin(t) * this.w * 0.16;
-      const wide = this.w * (0.18 + 0.08 * Math.sin(t * 0.7 + i));
-      const g = ctx.createLinearGradient(cx, -this.h * 0.1, cx + wide * 0.4, this.h);
-      g.addColorStop(0, rgb(B.accent, B.shaft * 0.20));
-      g.addColorStop(0.55, rgb(B.accent, B.shaft * 0.05));
-      g.addColorStop(1, rgb(B.accent, 0));
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(cx - wide * 0.35, -20);
-      ctx.lineTo(cx + wide * 0.35, -20);
-      ctx.lineTo(cx + wide, this.h + 20);
-      ctx.lineTo(cx + wide * 0.28, this.h + 20);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-
-  /**
-   * @param {CanvasRenderingContext2D} ctx
-   * @param {BiomeSlot} B
-   * @param {Camera} cam
-   * @param {number} dt
-   */
-  _dust(ctx, B, cam, dt) {
-    const top = cam.y + cam.viewH * 0.7;
-    const bot = cam.y - cam.viewH * 0.7;
-    for (let i = 0; i < DUST; i++) {
-      const o = i * 5;
-      const layer = this.dust[o + 2];
-      this.dust[o + 3] += dt * (0.4 + layer);
-      const drift = Math.sin(this.dust[o + 3]) * 0.06;
-      this.dust[o] += drift;
-      this.dust[o + 1] += dt * (1.6 + layer * 3.2);
-
-      const wy = this.dust[o + 1];
-      const span = cam.viewH * 1.4;
-      // Parallax by layer, then wrap into view.
-      const py = bot + (((wy - bot * layer) % span) + span) % span;
-      if (wy > top + span) this.dust[o + 1] = bot;
-
-      const px = this.X(this.dust[o]);
-      const py2 = this.Y(py);
-      if (py2 < -20 || py2 > this.h + 20) continue;
-      ctx.fillStyle = rgb(B.accent, 0.06 + layer * 0.10);
-      const r = this.dust[o + 4] * layer * this.dpr * 0.9;
-      ctx.fillRect(px, py2, r, r);
-    }
-  }
+  // THREE LAYERS WERE DELETED HERE, AND THE MEASUREMENT THAT CONDEMNED THEM.
+  //
+  // An art review asked for an audit before any code, and for whatever failed to
+  // earn its place to be REMOVED rather than dimmed. `scripts/cairn-layers.mjs`
+  // is that audit: it draws one playing frame twice per layer, identical except
+  // that the layer's own method is replaced by a no-op, and reports the share of
+  // pixels the layer changes and the mean luminance it adds to the frame.
+  //
+  //   _bands    NEVER CALLED. Three parallax silhouette bands, orphaned when the
+  //             painted plate replaced the drawn skyline, still carrying a shape
+  //             generator, a six-entry per-biome shape table and a lerp buffer.
+  //   _dust     0.0% of pixels touched, weight 0.00. Ninety motes integrated
+  //             every frame and drawn at sub-pixel size and 0.06 alpha — nobody
+  //             has ever seen one. They also answered to nothing: not the
+  //             player, not a landing, not a death.
+  //   _shafts   8.8% touched for 0.34 luminance. Three drifting gradient quads
+  //             washing warm light across the entire frame — the most generic
+  //             effect in the genre, the "even brown haze" the review named, and
+  //             three fresh CanvasGradients per frame on top of it.
+  //
+  // Nothing replaced them. Where they were, the frame is now darker and emptier,
+  // which was the instruction: a region with nothing to say should be black
+  // rather than filled.
 
   /**
    * THE ONE THING IN THE BACKGROUND THAT IS NOT A WALL.

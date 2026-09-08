@@ -23,7 +23,6 @@ export const COLUMN = 100;
  * @property {number[]} rock
  * @property {number[]} accent
  * @property {number} ambient
- * @property {number} shaft
  * @property {number} sat
  * @property {string} name
  * @property {number} index
@@ -1039,14 +1038,14 @@ export const BIOMES = [
     bgTop: [0x0b, 0x06, 0x04], bgBot: [0x1a, 0x0e, 0x08],
     rock: [0xe8, 0xc0, 0x8a],       // warm bone
     accent: [0xff, 0x7a, 0x2e],     // ember
-    ambient: 0.30, shaft: 0.18, sat: 1.20,
+    ambient: 0.30, sat: 1.20,
   },
   {
     name: 'SIGNAL',
     bgTop: [0x03, 0x08, 0x0f], bgBot: [0x06, 0x12, 0x1c],
     rock: [0x2e, 0x8f, 0xa8],       // deep cyan
     accent: [0xe8, 0xfb, 0xff],     // electric white
-    ambient: 0.26, shaft: 0.22, sat: 1.06,
+    ambient: 0.26, sat: 1.06,
   },
   {
     name: 'BLOOM',
@@ -1062,28 +1061,28 @@ export const BIOMES = [
     // with the palette, not the code. Any accent must sit above MEMORY_GOLD or
     // age cannot read as fading anywhere in that biome.
     accent: [0xff, 0x8f, 0xd8],     // magenta, lifted above memory gold
-    ambient: 0.24, shaft: 0.26, sat: 1.12,
+    ambient: 0.24, sat: 1.12,
   },
   {
     name: 'VOID',
     bgTop: [0x00, 0x00, 0x00], bgBot: [0x05, 0x05, 0x07],
     rock: [0x3a, 0x36, 0x2c],       // near black
     accent: [0xf5, 0xc3, 0x5c],     // gold
-    ambient: 0.16, shaft: 0.30, sat: 1.18,
+    ambient: 0.16, sat: 1.18,
   },
   {
     name: 'CINDER',
     bgTop: [0x0c, 0x02, 0x04], bgBot: [0x18, 0x05, 0x08],
     rock: [0xc4, 0x3a, 0x3a],
     accent: [0xff, 0xd0, 0x6a],
-    ambient: 0.14, shaft: 0.34, sat: 1.24,
+    ambient: 0.14, sat: 1.24,
   },
   {
     name: 'GLACIER',
     bgTop: [0x02, 0x07, 0x0d], bgBot: [0x05, 0x11, 0x1d],
     rock: [0xa9, 0xdc, 0xf0],
     accent: [0x6d, 0xf0, 0xff],
-    ambient: 0.12, shaft: 0.38, sat: 1.30,
+    ambient: 0.12, sat: 1.30,
   },
 ];
 
@@ -1116,7 +1115,6 @@ export function biomeAt(y, out) {
     out.accent[c] = lerp(a.accent[c], b.accent[c], t);
   }
   out.ambient = lerp(a.ambient, b.ambient, t);
-  out.shaft = lerp(a.shaft, b.shaft, t);
   out.sat = lerp(a.sat, b.sat, t);
   out.name = t > 0.5 ? b.name : a.name;
   out.index = i;
@@ -1128,6 +1126,6 @@ export function biomeAt(y, out) {
 export function newBiomeSlot() {
   return {
     bgTop: [0, 0, 0], bgBot: [0, 0, 0], rock: [0, 0, 0], accent: [0, 0, 0],
-    ambient: 0, shaft: 0, sat: 1, name: 'ASH', index: 0, blend: 0,
+    ambient: 0, sat: 1, name: 'ASH', index: 0, blend: 0,
   };
 }
