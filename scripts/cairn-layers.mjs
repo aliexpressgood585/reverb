@@ -83,32 +83,48 @@ const rows = await page.evaluate(async (layers) => {
   };
   const base = grab();
   const out = [];
+  // The frame as it stands, so the per-layer costs have a total to sit against.
+  {
+    let dk = 0;
+    for (let i = 0; i < base.length; i += 4) {
+      const l = 0.2126 * base[i] + 0.7152 * base[i + 1] + 0.0722 * base[i + 2];
+      if (l < 12) dk++;
+    }
+    out.push({ name: 'FRAME', touched: 100, weight: 0,
+      blackCost: +(dk / (base.length / 4) * 100).toFixed(1) });
+  }
   for (const name of layers) {
     const real = renderer[name];
     if (typeof real !== 'function') { out.push({ name, missing: true }); continue; }
     renderer[name] = () => {};
     const off = grab();
     renderer[name] = real;
-    let touched = 0, weight = 0;
+    let touched = 0, weight = 0, darkOn = 0, darkOff = 0;
     for (let i = 0; i < base.length; i += 4) {
       const l0 = 0.2126 * base[i] + 0.7152 * base[i + 1] + 0.0722 * base[i + 2];
       const l1 = 0.2126 * off[i] + 0.7152 * off[i + 1] + 0.0722 * off[i + 2];
       const d = Math.abs(l0 - l1);
       if (d > 1.5) touched++;
       weight += d;
+      if (l0 < 12) darkOn++;
+      if (l1 < 12) darkOff++;
     }
     const n = base.length / 4;
-    out.push({ name, touched: +(touched / n * 100).toFixed(1), weight: +(weight / n).toFixed(2) });
+    // HOW MUCH BLACK THIS LAYER COSTS. The concept paintings are 54% below
+    // luminance 12 and the build is 13%; this column says which layer is
+    // spending that budget, which two rounds of guessing failed to find.
+    out.push({ name, touched: +(touched / n * 100).toFixed(1), weight: +(weight / n).toFixed(2),
+      blackCost: +((darkOff - darkOn) / n * 100).toFixed(1) });
   }
   return out;
 }, LAYERS);
 
 console.log('\nCAIRN — what each layer is worth, on a playing frame\n');
-console.log('  layer          touched%   weight');
+console.log('  layer          touched%   weight   black cost%');
 for (const r of rows.sort((a, b) => (b.weight || 0) - (a.weight || 0))) {
   if (r.missing) { console.log(`  ${r.name.padEnd(14)} (not a method)`); continue; }
   const flag = r.touched < 2 ? '   <- invisible' : r.weight < 0.4 ? '   <- near-invisible' : '';
-  console.log(`  ${r.name.padEnd(14)} ${String(r.touched).padStart(7)}   ${String(r.weight).padStart(6)}${flag}`);
+  console.log(`  ${r.name.padEnd(14)} ${String(r.touched).padStart(7)}   ${String(r.weight).padStart(6)}   ${String(r.blackCost).padStart(6)}${flag}`);
 }
 console.log('');
 await browser.close();

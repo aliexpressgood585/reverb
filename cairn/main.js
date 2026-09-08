@@ -793,7 +793,18 @@ function step(now, real) {
     post.render(scene, {
       time: now / 1000,
       speed: reduced ? 0 : speed,
-      bloom: 0.52 + ui.bestFlash * 0.55,
+      // BLOOM IS WHAT WAS FILLING THE FRAME.
+      //
+      // `col = base + bloom * uBloomAmt` adds a blurred bright-pass over every
+      // pixel, so each lit platform bar bleeds a wide warm halo and four of them
+      // up a screen leave nowhere dark. Measured against the concept paintings:
+      // the build's brightest 0.5% of pixels sat at 166 against their 105, and
+      // only 9% of the frame was near-black against their 54%. Crushing the
+      // background gradient moved that to 13%; the rest was here.
+      //
+      // Halved. The record flash keeps its full swell, because that is one beat
+      // in a run and is supposed to blow the frame out.
+      bloom: FEEL.visual.bloom + ui.bestFlash * 0.55,
       grain: reduced ? 0 : 0.03,
       barrel: reduced ? 0 : 0.035,
       // Heavier: the reference frames go to black at the edges, and a facade
@@ -1065,14 +1076,39 @@ const api = {
   if (!c) return { r: 0, g: 0, b: 0, chroma: 0, greyPct: 0 };
   c.drawImage(src, 0, 0, s.width, s.height);
   const d = c.getImageData(0, 0, s.width, s.height).data;
-  let r = 0, g = 0, b = 0, chroma = 0, grey = 0, n = 0;
+  let r = 0, g = 0, b = 0, chromaAll = 0, chroma = 0, grey = 0, n = 0, lit = 0;
   for (let i = 0; i < d.length; i += 4) {
     const R = d[i], G = d[i + 1], B = d[i + 2];
     const mx = Math.max(R, G, B), mn = Math.min(R, G, B);
     const ch = mx - mn;
     const lum = 0.2126 * R + 0.7152 * G + 0.0722 * B;
-    r += R; g += G; b += B; chroma += ch; n++;
-    if (ch < 8 && lum > 25 && lum < 200) grey++;
+    r += R; g += G; b += B; chromaAll += ch; n++;
+    // CHROMA IS ASKED ONLY OF PIXELS BRIGHT ENOUGH TO HAVE A COLOUR.
+    //
+    // It used to be the mean over EVERY pixel, and that measures the wrong
+    // thing: a frame with a large black field scores low not because its colour
+    // is weak but because most of it is black, and black has no hue by
+    // definition. Acceptance 6 exists to catch a frame WASHING OUT — bright and
+    // desaturated — and on the all-pixel mean it punishes the opposite, a frame
+    // getting darker, which is the direction the concept art actually goes.
+    //
+    // Measured against the reference paintings with the same metric: over every
+    // pixel one of them scores 6.8 and reads as 83% "flat grey", which would
+    // fail this gate outright. Asked only of its lit pixels it scores 38.4 with
+    // 1.1% grey — the art is not washed out at all, it is dark with strong
+    // colour in the small part that is lit. The population `greyPct` has always
+    // used is the correct one; chroma was simply asking a different question
+    // from its own neighbour on the same line.
+    if (lum > 25) {
+      lit++; chroma += ch;
+      if (ch < 8 && lum < 200) grey++;
+    }
   }
-  return { r: r / n, g: g / n, b: b / n, chroma: chroma / n, greyPct: (grey / n) * 100 };
+  return {
+    r: r / n, g: g / n, b: b / n,
+    chroma: lit ? chroma / lit : 0,
+    chromaAll: chromaAll / n,
+    litPct: (lit / n) * 100,
+    greyPct: (grey / n) * 100,
+  };
 };

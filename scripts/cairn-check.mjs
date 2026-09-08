@@ -275,17 +275,29 @@ const page = await newPage();
   const minPair = Math.min(...pairs);
   for (const s of shots) {
     console.log(`      ${String(s.h).padStart(3)}m  mean rgb ${s.stats.r.toFixed(1)},${s.stats.g.toFixed(1)},${s.stats.b.toFixed(1)}` +
-      `  chroma ${s.stats.chroma.toFixed(1)}  greyPct ${s.stats.greyPct.toFixed(1)}%  -> ${s.p}`);
+      `  lit ${s.stats.litPct.toFixed(1)}%  chroma ${s.stats.chroma.toFixed(1)}` +
+      `  greyPct ${s.stats.greyPct.toFixed(1)}%  -> ${s.p}`);
   }
   minPair > 6
     ? pass(5, `closest pair of altitudes differs by ${minPair.toFixed(1)} in mean rgb`)
     : fail(5, `two altitudes look the same (closest pair differs by only ${minPair.toFixed(1)})`);
 
+  // THE THRESHOLD COMES FROM THE REFERENCE, NOT FROM A ROUND NUMBER.
+  //
+  // `chroma` is now the mean over LIT pixels only — see `__stats` for why the
+  // all-pixel mean was measuring darkness rather than colour. That changes the
+  // scale, so the bar has to be re-derived rather than carried over.
+  //
+  // Measured on the owner's concept paintings with this exact metric: lit-pixel
+  // chroma 38.4, flat grey 1.1%. Those are the images the game is being aimed
+  // at, so they are what the gate is calibrated against — 18 leaves the
+  // reference a wide margin while still failing anything genuinely desaturated,
+  // and the grey limit is unchanged because that half was never broken.
   const worstGrey = Math.max(...shots.map((s) => s.stats.greyPct));
   const worstChroma = Math.min(...shots.map((s) => s.stats.chroma));
-  (worstGrey < 12 && worstChroma > 3)
-    ? pass(6, `worst frame is ${worstGrey.toFixed(1)}% flat grey, min chroma ${worstChroma.toFixed(1)}`)
-    : fail(6, `flat grey ${worstGrey.toFixed(1)}% / chroma ${worstChroma.toFixed(1)} — the frame is washing out`);
+  (worstGrey < 12 && worstChroma > 18)
+    ? pass(6, `worst frame is ${worstGrey.toFixed(1)}% flat grey, min lit chroma ${worstChroma.toFixed(1)}`)
+    : fail(6, `flat grey ${worstGrey.toFixed(1)}% / lit chroma ${worstChroma.toFixed(1)} — the frame is washing out`);
 }
 
 // ── 7. death to playable ───────────────────────────────────────────────────

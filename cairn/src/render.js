@@ -1191,28 +1191,28 @@ export class Renderer {
       // The plate if it arrived, the drawn building if it did not. Never both:
       // two buildings in one frame is the "two structures competing" mistake
       // the landmarks already had to be dimmed out of.
-      // THE PAINTED PLATE IS THE FAR DISTANCE NOW; THE WINDOW GRID IS THE WALL.
+      // ONE WALL, AND THE PAINTED PLATE IS NOT IT. MEASURED, TWICE.
       //
-      // These used to be exclusive — plate OR drawn building, never both, on the
-      // reasoning that two buildings in one frame is the same "competing
-      // structures" mistake the landmarks had to be dimmed out of. The result
-      // was that the plate always won and `_facade` measured EXACTLY ZERO
-      // pixels in the shipped build: a whole glass tower, its storeys, its
-      // service slits and the player-reflection tuned over several rounds, none
-      // of it ever executing.
+      // These were exclusive — plate OR drawn building — and the plate always
+      // won, so `_facade` executed on exactly zero pixels in the shipped build.
+      // The obvious repair was to draw both, the plate demoted to a far
+      // distance behind the window grid. That was wrong in a way only a
+      // measurement catches: BOTH cover ~96% of the frame, so the fix stacked
+      // two full-screen walls and doubled the light in the one place the art
+      // needs none.
       //
-      // The concept paintings settle which one belongs in front. Both of them
-      // show the same wall: an orderly grid of square window openings, most of
-      // them dark, a handful lit warm — which is precisely what `_facade` was
-      // built to draw and nothing like the arches and machinery in the plate.
-      // So the plate drops back to being the deep, soft, far-off texture it is
-      // good at, and the grid is drawn over it as the surface you climb.
+      // `scripts/cairn-layers.mjs` now reports what each layer costs in BLACK —
+      // the share of pixels it lifts above luminance 12. The plate costs 42
+      // points and the facade 44.4, against a frame that had 33.2% black left
+      // and a reference painting that has 54.3%. Two walls is one wall too many
+      // and there was never a version of this where both fitted.
       //
-      // They no longer compete because they are no longer at the same distance:
-      // the plate is pushed down and desaturated behind, the grid is sharp in
-      // front. That is the one arrangement where having both is depth rather
-      // than clutter.
-      this._plate(ctx, B, cam);
+      // The grid wins because it is what the paintings show: an orderly lattice
+      // of square openings, most dark, a handful lit warm. The plate is arches
+      // and machinery, which is beautiful and is not this wall. It is also the
+      // only external file the game ships, so dropping it settles a note from a
+      // separate review at no cost.
+      this._deepTower(ctx, B, cam);
       this._facade(ctx, B, cam, sim);
       // THE GIANT ALTITUDE NUMERAL IS GONE.
       //
@@ -1271,12 +1271,28 @@ export class Renderer {
   _background(ctx, B, _cam) {
     // Never flat: a vertical gradient, rebuilt only when the biome moves enough
     // to be visible, which is a handful of times per climb.
+    // AND IT IS CRUSHED, BECAUSE THE FRAME HAD NO BLACK IN IT.
+    //
+    // Measured against the concept paintings, side by side, with the same
+    // metric on both: 54.3% of the painting is below luminance 12 and 9.4% of
+    // the build was. Six times less darkness, and that gap — not the figure,
+    // not the stones, not the platforms — is the single largest difference
+    // between the two images.
+    //
+    // The palettes were not the cause and are not the fix. ASH's `bgBot` is
+    // 0x1a0e08, which is luminance 16 — already dark to look at, and already
+    // ABOVE the line, so the wall cleared it everywhere and nothing in the frame
+    // could read as nothing. Editing six palettes to fix that would also move
+    // the six apart from each other, which acceptance 5 measures. One
+    // multiplier on the gradient instead: the palettes keep their relationships
+    // and the whole floor drops together.
+    const D = FEEL.visual.wallDim;
     const key = Math.round(B.index * 100 + B.blend * 60);
     if (key !== this._bgKey) {
       this._bgKey = key;
       const g = ctx.createLinearGradient(0, 0, 0, this.h);
-      g.addColorStop(0, rgb(B.bgTop, 1));
-      g.addColorStop(1, rgb(B.bgBot, 1));
+      g.addColorStop(0, rgb([B.bgTop[0] * D, B.bgTop[1] * D, B.bgTop[2] * D], 1));
+      g.addColorStop(1, rgb([B.bgBot[0] * D, B.bgBot[1] * D, B.bgBot[2] * D], 1));
       this._bg = g;
     }
     if (this._bg) ctx.fillStyle = this._bg;
@@ -2234,6 +2250,20 @@ export class Renderer {
         // Crest: the lit edge, and the only thing you actually aim at. The
         // active one is drawn THICKER as well as brighter — thickness is the
         // half of the tell that survives a small screenshot.
+        // DIMMING THE LIP WAS TRIED AND COST MORE THAN IT BOUGHT.
+        //
+        // The paintings' brightest 0.5% of pixels sit at luminance 105 and the
+        // build's at 162, so scaling these bars down looked like the obvious
+        // last step. It moved the peak to 153 — five percent — and turned
+        // acceptance 6 red at a lit chroma of 16.8.
+        //
+        // The mechanism is worth keeping: the crest is the most SATURATED thing
+        // in the frame, so dimming it pushes those pixels below the lit
+        // threshold and the surviving lit population is less colourful than
+        // before. Cutting the brightest, purest light in a scene desaturates
+        // what is left. Reverted; the peak gap is the player's own white core
+        // and a handful of lit lips, which is where the reference puts its
+        // light too.
         ctx.fillStyle = rgb(B.accent,
           clamp((0.16 + lit * 0.70) * (0.55 + tier * 0.62) + flash, 0, 1));
         ctx.fillRect(sx - w * 0.5, top, w,
@@ -2261,8 +2291,20 @@ export class Renderer {
         // A short bloom-catching bar on the crest, so the landing line reads
         // even when the player's light is nowhere near it.
         ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = rgb(B.accent, clamp((0.05 + lit * 0.22) * (0.55 + tier * 0.62)
-          + urgent * 0.55 + flash * 0.8, 0, 1));
+        // THE ADDITIVE PASS IS WHAT WAS WASHING THE COLOUR OUT.
+        //
+        // Drawn in `lighter`, it raises all three channels equally, so a lip
+        // that is already bright clips toward WHITE — and white has no chroma
+        // at all. That is why acceptance 6 went red while the frame was getting
+        // darker: the darkening was fine, but the brightest pixels in it were
+        // colourless. Dimming the crest itself made that worse (it removes
+        // saturated pixels and leaves the white ones), which is the opposite of
+        // the obvious move and took a red gate to find.
+        //
+        // Cut to a third. The lip keeps its accent colour and its brightness;
+        // what it loses is the white core it was clipping to.
+        ctx.fillStyle = rgb(B.accent, clamp(((0.05 + lit * 0.22) * (0.55 + tier * 0.62)
+          + urgent * 0.55 + flash * 0.8) * FEEL.visual.crestBloom, 0, 1));
         ctx.fillRect(sx - w * 0.5, top - 1.5 * this.dpr, w, 3 * this.dpr);
         ctx.globalCompositeOperation = 'source-over';
 

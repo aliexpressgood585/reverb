@@ -119,6 +119,18 @@ export const FEEL = {
     // frame that killed them and why a dark outline makes a thin line LOUDER.
     landmarkQuiet: 0.30,        // how far the wall behind it is pushed down
 
+    // THE BLACK FLOOR. One multiplier on the background gradient, and the
+    // largest single difference between this game and the paintings it is aimed
+    // at — see `_background`. Measured side by side: the reference is 54.3%
+    // below luminance 12; the build was 9.4%.
+    wallDim: 0.42,
+    // And the other half of the same problem: a blurred bright-pass added to
+    // every pixel. See the note at the `post.render` call in main.js.
+    bloom: 0.26,
+    // The additive pass over a platform's lit lip. Kept low because `lighter`
+    // clips toward white and white carries no hue — see the note in `_solids`.
+    crestBloom: 0.34,
+
     // THE DEATH, AS STONE SETTLING RATHER THAN AS AN EXPLOSION.
     //
     // A death used to be a full-screen white wash and twenty-two bright shards
@@ -1102,7 +1114,23 @@ export const BIOMES = [
     name: 'SIGNAL',
     bgTop: [0x03, 0x08, 0x0f], bgBot: [0x06, 0x12, 0x1c],
     rock: [0x2e, 0x8f, 0xa8],       // deep cyan
-    accent: [0xe8, 0xfb, 0xff],     // electric white
+    // ELECTRIC, BUT AN ACTUAL COLOUR.
+    //
+    // This was 0xe8fbff — "electric white", chroma 23, which is white with a
+    // rumour of blue in it. Everything lit on this floor took that colour, so a
+    // third of the frame was lit and none of it had a hue. Acceptance 6 called
+    // it washing out the moment that test started measuring chroma among LIT
+    // pixels instead of averaging the black in, and it was right: the other
+    // five floors measure 37 to 74 on that axis and SIGNAL measured 16.6.
+    //
+    // It had been true since the palette was written. The old all-pixel metric
+    // could not see it because the black field dominated the mean, which is the
+    // same class of blindness as acceptance 13's control — a number that looked
+    // like an answer to a question nobody had asked.
+    //
+    // A cyan bright enough to still read as electric against deep-cyan rock,
+    // with hue this time. Nothing else about the floor changes.
+    accent: [0x6f, 0xe8, 0xff],     // electric cyan
     ambient: 0.26, sat: 1.06,
   },
   {
