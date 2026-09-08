@@ -23,8 +23,9 @@
 import { chromium } from 'playwright';
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const [src, out] = process.argv.slice(2);
-if (!src || !out) { console.error('usage: cairn-plate.mjs <painting.png> <out.webp>'); process.exit(2); }
+const [src, out, y0f, y1f] = process.argv.slice(2);
+if (!src || !out) { console.error('usage: cairn-plate.mjs <painting> <out.webp> [y0] [y1]'); process.exit(2); }
+const CROP = [y0f ? +y0f : 0.06, y1f ? +y1f : 0.56];
 
 const browser = await chromium.launch({
   executablePath: '/opt/pw-browsers/chromium',
@@ -33,7 +34,7 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
 
-const url = await page.evaluate(async (b64) => {
+const url = await page.evaluate(async ({ b64, crop }) => {
   const im = await new Promise((res, rej) => {
     const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = b64;
   });
@@ -41,7 +42,7 @@ const url = await page.evaluate(async (b64) => {
   // The architecture band: below the top edge, above the figure and the lit
   // column it stands in. Fractions of the source so a different painting of the
   // same shape still lands somewhere sensible.
-  const y0 = Math.round(H * 0.06), y1 = Math.round(H * 0.56);
+  const y0 = Math.round(H * crop[0]), y1 = Math.round(H * crop[1]);
   const bh = y1 - y0;
 
   const cv = document.createElement('canvas');
@@ -63,7 +64,8 @@ const url = await page.evaluate(async (b64) => {
   c.fillStyle = g2; c.fillRect(0, bh - fade, W, fade);
 
   return cv.toDataURL('image/webp', 0.86);
-}, 'data:image/png;base64,' + readFileSync(src).toString('base64'));
+}, { b64: (src.endsWith('.jpg') ? 'data:image/jpeg;base64,' : 'data:image/png;base64,')
+       + readFileSync(src).toString('base64'), crop: CROP });
 
 const buf = Buffer.from(url.split(',')[1], 'base64');
 writeFileSync(out, buf);

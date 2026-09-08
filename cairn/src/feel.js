@@ -320,7 +320,7 @@ export const FEEL = {
     // each other: acceptance 5's closest pair fell to 10.5 and 6's lit chroma to
     // 17.5, both from the same cause. The grade is what puts each floor's own
     // colour back into the stone.
-    tint: 0.46,       // graded toward the biome so six floors are not one photo
+    tint: 0.10,       // graded toward the biome so six floors are not one photo
   },
 
   // ------------------------------------------------------------ the shadow

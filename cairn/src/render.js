@@ -811,15 +811,36 @@ export class Renderer {
     this.figLook = 0;
     this.figAim = 0;
 
-    // The painted background plate. Loaded once, never blocking: if it is not
-    // there the vector facade draws instead and the game is merely less pretty.
-    this._plateImg = null;
+    // ONE PAINTED WALL PER FLOOR.
+    //
+    // A single plate repeated up an infinite tower is one photograph doing six
+    // jobs: measured, it flattened the palettes into each other badly enough to
+    // drop acceptance 5's closest altitude pair to 10.5 and 6's lit chroma to
+    // 17.5, and `plate.tint` had to be pushed to 0.46 to grade the difference
+    // back in — colouring a brown photograph rather than showing each floor's
+    // own stone.
+    //
+    // These are painted per biome, so the colour is IN the art. The tint drops
+    // back to a whisper and each floor is its own building.
+    //
+    // VOID HAS NO PLATE OF ITS OWN, and that is not an omission. It is the floor
+    // whose whole idea is that the lights go out — `_dark` already takes the
+    // world away there — so it borrows SIGNAL's stone and never gets to show it.
+    //
+    // Loading is lazy and never blocking: a plate that has not arrived draws
+    // nothing, and the game is merely less pretty for a moment.
+    /** @type {(HTMLImageElement|null)[]} */
+    this._plates = [null, null, null, null, null, null];
     try {
-      const im = new Image();
-      im.decoding = 'async';
-      im.src = new URL('./bg/facade.webp', import.meta.url).href;
-      this._plateImg = im;
-    } catch { /* no window, or blocked: the facade covers it */ }
+      const files = ['floor-ash', 'floor-signal', 'floor-bloom',
+        'floor-signal', 'floor-cinder', 'floor-glacier'];
+      for (let i = 0; i < files.length; i++) {
+        const im = new Image();
+        im.decoding = 'async';
+        im.src = new URL(`./bg/${files[i]}.webp`, import.meta.url).href;
+        this._plates[i] = im;
+      }
+    } catch { /* no window, or blocked: the frame is just its gradient */ }
     // WHICH CLIMBER. One per run, never per jump: a body that changed species
     // between attempts would make silhouette vary for a reason unrelated to
     // whether a corpse still holds weight, which is the read the tower needs.
@@ -1418,14 +1439,20 @@ export class Renderer {
    * @param {BiomeSlot} B
    * @param {Camera} cam
    */
-  _plate(ctx, B, cam) {
-    const P = FEEL.plate;
-    const img = this._plateImg;
-    if (!img || !img.complete || !img.naturalWidth) return false;
+  /**
+   * One painted wall, tiled up the frame. Returns 1 if it drew anything.
+   *
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {HTMLImageElement|null} img
+   * @param {Camera} cam
+   * @param {number} alpha
+   */
+  _plateOne(ctx, img, cam, alpha) {
+    if (!img || !img.complete || !img.naturalWidth || alpha <= 0.003) return 0;
     // Cover the frame width, repeat vertically, and scroll slower than the climb.
     const w = this.w, scale = w / img.naturalWidth;
     const h = img.naturalHeight * scale;
-    let off = (-cam.y * this.scale * P.parallax) % h;
+    let off = (-cam.y * this.scale * FEEL.plate.parallax) % h;
     if (off > 0) off -= h;
     // MIRRORED ON ALTERNATE COPIES, so the repeat has no seam.
     //
@@ -1433,7 +1460,7 @@ export class Renderer {
     // where one copy ends and the next begins, and the eye finds it instantly on
     // a slow scroll — a fade at the bottom edge was not enough. Flipping every
     // other copy makes each join a mirror of itself, which has no edge to see.
-    ctx.globalAlpha = P.alpha;
+    ctx.globalAlpha = alpha;
     let idx = Math.floor((off - this.h) / h);
     for (let y = off; y < this.h; y += h, idx++) {
       if (((idx % 2) + 2) % 2 === 1) {
@@ -1447,6 +1474,24 @@ export class Renderer {
       }
     }
     ctx.globalAlpha = 1;
+    return 1;
+  }
+
+  _plate(ctx, B, cam) {
+    const P = FEEL.plate;
+    const n = this._plates.length;
+    const i0 = ((B.index % n) + n) % n;
+    const i1 = (i0 + 1) % n;
+    // CROSSFADED ACROSS A FLOOR BOUNDARY, on the same `blend` the palette uses.
+    //
+    // Six painted walls swapped on an index would change the entire background
+    // in one frame at the exact altitude where the colours are already mid-fade.
+    // `B.blend` is how far through the crossfade the palette is; the stone
+    // follows it, so a floor's architecture arrives at the same rate as its
+    // light. Two draws instead of one, and only while a boundary is on screen.
+    const drew = this._plateOne(ctx, this._plates[i0], cam, P.alpha * (1 - B.blend))
+      | this._plateOne(ctx, this._plates[i1], cam, P.alpha * B.blend);
+    if (!drew) return false;
     // And pushed back down into the dark. A background plate that lifts the
     // blacks costs exactly what the darkening pass bought: the frame stops
     // having anywhere for a light to matter against.
