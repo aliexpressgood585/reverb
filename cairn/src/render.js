@@ -220,10 +220,37 @@ export function figureRig(ctx, hw, hh, lean, crouch, stretch, look, phase, idle,
   ctx.closePath();
   ctx.fill();
 
-  // ---- HEAD, clear of the shoulders and turned where the climber is looking.
+  // ---- HEAD. A WEDGE, NOT A BALL, AND THIS IS THE SIGNATURE.
+  //
+  // Three separate reviews asked for "an abstract, asymmetric, recognisable
+  // silhouette" and got a rounder helmet each time, because an ellipse is what
+  // you draw when you are thinking about a head rather than about a shape. The
+  // owner's concept paintings answer it directly: the figure wears a tall
+  // angular wedge that rises to a point and leans off-axis, like folded paper.
+  // At the size this is drawn on a phone, that wedge is the ONLY part of the
+  // figure carrying identity — the limbs are four strokes and the torso is a
+  // trapezoid, and both of those belong to every stick figure ever drawn.
+  //
+  // The asymmetry is the point and it is deliberately not centred: the peak
+  // sits toward the side the climber is facing, so turning the head turns the
+  // shape as well as moving it. A symmetrical wedge reads as a hat; an
+  // off-centre one reads as a person wearing something.
+  //
+  // The corpse keeps its rounded outline. That is not an inconsistency to fix
+  // later: `bodyOutline`'s crown IS the load-bearing shelf a player lands on,
+  // pinned to -hh and measured by acceptance 13, and a peak is not a surface
+  // you can stand on. Alive it is a shape; dead it is a platform.
   const hcx = hipX - lean * W * 0.22 + look * W * 0.18;
+  const tilt = lean * 0.10;
+  const face = look >= 0 ? 1 : -1;
   ctx.beginPath();
-  ctx.ellipse(hcx, headY, rh, rh * 1.04, lean * 0.10, 0, Math.PI * 2);
+  ctx.moveTo(hcx - rh * 0.66, headY + rh * 0.92);            // jaw, back
+  ctx.lineTo(hcx + rh * 0.66, headY + rh * 0.92);            // jaw, front
+  ctx.lineTo(hcx + face * rh * 0.34 + tilt * rh,
+             headY - rh * 1.30);                             // the peak
+  ctx.lineTo(hcx - face * rh * 0.92 + tilt * rh,
+             headY - rh * 0.30);                             // the fold
+  ctx.closePath();
   ctx.fill();
 
   // ---- AND WHICH CLIMBER THIS IS.
@@ -2124,7 +2151,7 @@ export class Renderer {
         ctx.save();
         ctx.translate(sx - w * 0.5, top);
         ctx.scale(w, skirt);
-        ctx.globalAlpha = 0.22 + lit * 0.36;
+        ctx.globalAlpha = (0.22 + lit * 0.36) * (0.55 + V.platformFace);
         ctx.fillStyle = this._unitFace(ctx, this._lit);
         ctx.fillRect(0, 0, 1, 1);
         ctx.restore();
@@ -2842,14 +2869,22 @@ export class Renderer {
     // The light it casts. A clean streak widens it and lifts the core — the
     // only place momentum is ever visible, and it reads as the tower getting
     // brighter around you rather than as a score going up.
+    // TIGHT AND FAINT, BECAUSE THE BODY IS THE BRIGHT THING NOW.
+    //
+    // At radius 66 and 0.34 this threw a warm pool most of a phone wide, which
+    // was the right call while the figure was a dark shape needing something to
+    // separate it from the wall. With the body back at its own bone white — see
+    // `figure.bodyDim` — the pool competes with the thing it was lighting, and
+    // the reference paintings put almost no light in the air at all: a lip on a
+    // platform, a handful of lit windows, the core, and black everywhere else.
     const M = this.momentum;
-    const R = 66 * this.scale * (1 + FEEL.momentum.lightGain * M);
+    const R = 40 * this.scale * (1 + FEEL.momentum.lightGain * M);
     const lift = 1 + FEEL.momentum.lightAlpha * M;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.translate(x, y);
     ctx.scale(R, R);
-    ctx.globalAlpha = Math.min(1, 0.34 * lift);
+    ctx.globalAlpha = Math.min(1, FEEL.visual.playerHalo * lift);
     ctx.fillStyle = this._unitHalo(ctx, B.accent);
     ctx.fillRect(-1, -1, 2, 2);
     ctx.restore();

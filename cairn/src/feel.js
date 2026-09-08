@@ -71,7 +71,13 @@ export const FEEL = {
     // crest-width note in `_solids`).
     playerScale: 1.18,
     playerCoreIntensity: 0.95,  // the white point at the chest
-    playerRimIntensity: 0.42,   // the single lit edge. One side only.
+    // The pool the figure throws on the wall behind it. Small: the reference
+    // paintings light almost nothing in the air, and a pale body inside a wide
+    // warm pool has nothing left to be brighter than.
+    playerHalo: 0.13,
+    // The lit edge. Near nothing now — a rim exists to stop a DARK silhouette
+    // reading as a hole cut in the scene, and the body is no longer dark.
+    playerRimIntensity: 0.10,   // the single lit edge. One side only.
     playerContactShadow: 0.55,  // the shadow directly underfoot
     // The core breathes while you stand. ONLY the core — the body stays still
     // enough that this can never read as input lag.
@@ -86,9 +92,24 @@ export const FEEL = {
 
     // THE PLATFORMS, as three materials rather than one shape at six distances.
     // Brightness, implied thickness and a shadow — never more saturation.
-    activePlatformGlow: 0.72,   // the ledge under your feet
-    inactivePlatformGlow: 0.30, // every other ledge
-    platformShadow: 0.55,       // the dark band under a crest, which is what
+    // MEASURED AGAINST THE PAINTINGS, NOT AGAINST THE LAST BUILD.
+    //
+    // A platform in the reference art is a SOLID BLOCK — a slab with a real
+    // front face, a dark textured body, and one thin bright line along its top.
+    // The light lives on that line and nowhere else; there is no pool, no bloom
+    // and no halo around it. What shipped was the opposite: a bright bar
+    // throwing a wide warm pool, repeated up the screen, which is most of why
+    // the frame reads as "everything glows" rather than as architecture.
+    //
+    // So the glow multipliers come down hard and the SLAB comes up: a heavier
+    // front face and a stronger shadow under the lip. The tier separation is
+    // untouched — it was already carrying its job — it just runs over a much
+    // smaller range of light.
+    activePlatformGlow: 0.40,   // the ledge under your feet
+    inactivePlatformGlow: 0.14, // every other ledge
+    platformFace: 0.62,         // the front of the slab, which is now the part
+                                // of a platform you actually see
+    platformShadow: 0.78,       // the dark band under a crest, which is what
                                 // makes a slab read as having a front face
 
     // THE LANDMARK. It is scenery and it is a secret you can claim, so it can
@@ -307,15 +328,32 @@ export const FEEL = {
     // read for whether a body holds weight first and for what it was wearing
     // second, and acceptance 13 measures exactly that order.
     corpseCostume: 0.70,
-    // The bright point at the chest. The player is not a bright object, the
-    // player is the light source — and a source is a point, not a glowing body.
+    // The bright point at the chest — a small white diamond in the reference
+    // art, and the one thing about the figure that never changed through any of
+    // this.
     coreR: 0.30,
-    // THE BODY IS DARK. It used to be filled in near-white at 0.97, so the
-    // brightest thing on screen was the silhouette itself and the core had
-    // nothing to be brighter than. A source is a point; the body carrying it is
-    // lit, not luminous.
-    bodyDim: 0.26,     // how far the character's own colour is pulled down
-    bodyAlpha: 0.95,
+    // THE BODY IS PALE, AND THIS REVERSES AN ARGUMENT I MADE AND WAS WRONG ABOUT.
+    //
+    // It was 0.97 originally, then crushed to 0.26 on the reasoning that "the
+    // player is the light source, and a source is a point, not a glowing body".
+    // That reasoning is sound in the abstract and it is not what this game looks
+    // like. The owner's own concept paintings — three of them, sent twice, with
+    // the instruction that the game should match them one to one — show a figure
+    // in BONE WHITE standing against a dark warm wall. It is the brightest thing
+    // in the frame by a wide margin, and it is what makes those images read at
+    // thumbnail size.
+    //
+    // Two later art reviews then asked for "a dark silhouette, as though made of
+    // black stone or smoked glass", which is the opposite, and both were
+    // followed. When a third-party review and the owner's own reference disagree
+    // about the same object, the reference wins; a review is an opinion about
+    // the work, and the paintings ARE the brief.
+    //
+    // The halo the dark body needed came down with it. A pale figure inside a
+    // wide amber pool has nothing to be brighter than either — the mistake was
+    // never the value, it was lighting the body and the air around it together.
+    bodyDim: 0.90,     // how far the character's own colour is pulled down
+    bodyAlpha: 0.97,
     // And a thin lit edge where the body catches its own core, so a dark
     // silhouette reads as a solid object and not as a hole cut in the scene.
     // Its strength is `visual.playerRimIntensity`; these two are its shape.
