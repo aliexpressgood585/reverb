@@ -152,7 +152,44 @@ async function run(size) {
   });
   await shot('4-landing');
 
-  // 5. A STRETCH OF TOWER. Pulled back far enough that several holds and
+  // 5. THE DEATH ITSELF, mid-fall, with the chips still in the air.
+  //
+  // Driven through the simulation's own death — `sim._die()` — rather than by
+  // posing the renderer, because the thing under test is whether the chips and
+  // the corpse the physics places agree about where the shelf is. Posing them
+  // separately would prove only that two numbers I typed match.
+  await page.evaluate(() => {
+    const { sim, camera, renderer, FEEL } = window.CAIRN;
+    const b = sim.body;
+    b.peakX = b.x; b.peakY = b.y + 24;
+    sim._die();
+    renderer.shatter(b.peakX, b.peakY, FEEL.visual.deathFragments);
+    // Part-way through the arc: thrown, falling, not yet all landed.
+    for (let i = 0; i < 22; i++) renderer.step(1 / 60, 0);
+    // CLOSE, AND WITHOUT THE PULL-BACK. Dying raises the monument camera, which
+    // is right in the game and useless in a screenshot of a four-unit stone: the
+    // first version of this frame photographed the whole tower and the chips
+    // were nine pixels across.
+    camera.x = b.peakX; camera.y = b.peakY; camera.viewH = 90;
+    camera.mon = 0; camera.monTarget = 0;
+    camera.rot = 0; camera.shakeX = 0; camera.shakeY = 0;
+    renderer.draw(sim, camera, null, { started: true, squash: 0, stretch: 0 },
+      1 / 60, false);
+  });
+  await shot('5-death');
+
+  // 6. THE STONE IT LEFT, a beat later — chips settled and fading, the corpse
+  // standing on its own with its heart still warm.
+  await page.evaluate(() => {
+    const { sim, camera, renderer } = window.CAIRN;
+    for (let i = 0; i < 34; i++) renderer.step(1 / 60, 0);
+    camera.mon = 0; camera.monTarget = 0;
+    renderer.draw(sim, camera, null, { started: true, squash: 0, stretch: 0 },
+      1 / 60, false);
+  });
+  await shot('6-cairn');
+
+  // 7. A STRETCH OF TOWER. Pulled back far enough that several holds and
   // several erosion stages are in one frame — the view the material hierarchy
   // has to survive.
   await page.evaluate(() => {
@@ -163,7 +200,7 @@ async function run(size) {
     renderer.draw(sim, camera, null, { started: true, squash: 0, stretch: 0 },
       1 / 60, false);
   });
-  await shot('5-tower');
+  await shot('7-tower');
 
   await page.close();
 }

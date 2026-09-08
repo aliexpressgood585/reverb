@@ -831,7 +831,13 @@ export class Renderer {
     // Impact rings and death particles, both pooled.
     this.rings = new Float32Array(12 * 4);    // x, y, age, force
     this.ringN = 0;
-    this.parts = new Float32Array(160 * 7);   // x,y,vx,vy,age,life,seed
+    // x, y, vx, vy, age, life, seed, kind, rest
+    //
+    // `kind` is 0 for the crystallising shards a crumble throws and 1 for the
+    // stone chips a death leaves, and `rest` is the world height a chip settles
+    // on — the corpse's own shelf line. One pool, two behaviours, because a
+    // second array would be a second thing to cap, clear and profile.
+    this.parts = new Float32Array(160 * 9);
     this.partN = 0;
 
     this._bgKey = -1;
@@ -1108,7 +1114,7 @@ export class Renderer {
    */
   burst(x, y, n, speed = 1) {
     for (let k = 0; k < n && this.partN < 160; k++) {
-      const o = this.partN++ * 7;
+      const o = this.partN++ * 9;
       const a = (k / n) * TAU + Math.random() * 0.4;
       const sp = (18 + Math.random() * 34) * speed;
       this.parts[o] = x; this.parts[o + 1] = y;
@@ -1117,6 +1123,49 @@ export class Renderer {
       this.parts[o + 4] = 0;
       this.parts[o + 5] = 0.55 + Math.random() * 0.35;
       this.parts[o + 6] = Math.random();
+      this.parts[o + 7] = 0;
+      this.parts[o + 8] = 0;
+    }
+  }
+
+  /**
+   * A DEATH, AS STONE RATHER THAN AS AN EXPLOSION.
+   *
+   * The body comes apart into a few dark chips, thrown a short way, which fall
+   * under a gravity heavier than the player's and come to rest on the line the
+   * corpse's shelf occupies — `rest`, which `_die` has already fixed at the
+   * apex. They settle, they hold, and they fade off, leaving the body the
+   * simulation placed there standing on its own.
+   *
+   * They deliberately do NOT assemble into the corpse. The corpse already
+   * exists, at a position physics owns, and a second stack of stones drawn near
+   * it would be two objects claiming one surface — the exact class of lie this
+   * renderer refuses everywhere else. These are the pieces arriving; the thing
+   * they arrive at is already the platform.
+   *
+   * @param {number} x
+   * @param {number} y the apex, which is where the corpse's top sits
+   * @param {number} n
+   */
+  shatter(x, y, n) {
+    const V = FEEL.visual;
+    for (let k = 0; k < n && this.partN < 160; k++) {
+      const o = this.partN++ * 9;
+      // Thrown across and UP, never down: a chip that starts by falling has no
+      // arc to read, and the arc is the whole of the weight.
+      const a = -Math.PI * 0.5 + (k / Math.max(1, n - 1) - 0.5) * 2.1;
+      const sp = (26 + Math.random() * 26) * V.deathFragSpeed;
+      this.parts[o] = x + (Math.random() - 0.5) * FEEL.body.w * 0.7;
+      this.parts[o + 1] = y - Math.random() * FEEL.body.h * 0.4;
+      this.parts[o + 2] = Math.sin(a) * sp;
+      this.parts[o + 3] = Math.cos(a) * sp * -1;
+      this.parts[o + 4] = 0;
+      this.parts[o + 5] = V.deathFragLife * (0.85 + Math.random() * 0.3);
+      this.parts[o + 6] = Math.random();
+      this.parts[o + 7] = 1;
+      // Each chip rests a little below the shelf, so four of them read as a
+      // small heap rather than as four things balanced on one line.
+      this.parts[o + 8] = y - Math.random() * FEEL.tower.corpseH * 0.45;
     }
   }
 
@@ -1138,11 +1187,25 @@ export class Renderer {
       }
     }
     for (let i = this.partN - 1; i >= 0; i--) {
-      const o = i * 7;
+      const o = i * 9;
       const t = (this.parts[o + 4] += dt) / this.parts[o + 5];
       if (t >= 1) {
-        const l = --this.partN * 7;
-        for (let k = 0; k < 7; k++) this.parts[o + k] = this.parts[l + k];
+        const l = --this.partN * 9;
+        for (let k = 0; k < 9; k++) this.parts[o + k] = this.parts[l + k];
+        continue;
+      }
+      if (this.parts[o + 7] === 1) {
+        // A STONE CHIP. Gravity, then the floor, then nothing — it stays where
+        // it landed for the rest of its life rather than drifting, because a
+        // stone that keeps moving after it has settled is not a stone.
+        this.parts[o + 3] -= FEEL.visual.deathFragGravity * dt;
+        this.parts[o] += this.parts[o + 2] * dt;
+        this.parts[o + 1] += this.parts[o + 3] * dt;
+        if (this.parts[o + 1] <= this.parts[o + 8]) {
+          this.parts[o + 1] = this.parts[o + 8];
+          this.parts[o + 2] *= 0.22;      // one small skid, then still
+          this.parts[o + 3] = 0;
+        }
         continue;
       }
       // Outward, then pulled home.
@@ -1206,6 +1269,11 @@ export class Renderer {
       this._dust(ctx, B, cam, dt);
       ctx.globalAlpha = 1;
     }
+
+    // OVER the wall and its lights, UNDER everything that has rules. The ring
+    // works by taking light away, so it has to come after the thing it darkens;
+    // it is scenery, so it has to come before anything a player can aim at.
+    this._monolith(ctx, B, cam, depth);
 
     // Behind the ledges, in front of the parallax. Unheld ones fade out with
     // the monument pull-back like the rest of the atmosphere — at full zoom the
@@ -1662,6 +1730,106 @@ export class Renderer {
       const r = this.dust[o + 4] * layer * this.dpr * 0.9;
       ctx.fillRect(px, py2, r, r);
     }
+  }
+
+  /**
+   * THE ONE THING IN THE BACKGROUND THAT IS NOT A WALL.
+   *
+   * A broken ring, enormous, far enough back that it barely moves — the object
+   * the frame is built around and the only thing in the scene that gives the
+   * shaft a size. Everything else back there is texture: panes, storeys, haze,
+   * a painted plate. Texture tells you what the surface is; it never tells you
+   * how big the space is, and "how big is this" was the note.
+   *
+   * WHY IT IS NOT THE LANDMARK LAYER. `_landmarks` looks like the right place
+   * and is the wrong one: those are GAMEPLAY objects. You can aim into a
+   * landmark's heart and claim it permanently, and the aim preview draws the
+   * exact spot the corpse will rest — so a landmark that took a parallax offset
+   * would be drawn somewhere its own secret is not, and the one mechanic in this
+   * game nobody is told about would stop being aimable. Scenery that moves at a
+   * different rate cannot also be a target. So this is a separate, ruleless
+   * thing, and the previous attempt to make the gameplay landmark carry both
+   * jobs is why it had to be deleted.
+   *
+   * IT WORKS BY SUBTRACTION. Drawn OVER the lit facade, in black, so the wall
+   * goes dark across it and the ring is a hole rather than a shape. Two lit arcs
+   * on the rim are the only light it adds, and they sit at a seventh of a crest.
+   * A structure that is brighter than the things you stand on is a structure
+   * players try to stand on.
+   *
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {BiomeSlot} B
+   * @param {{y: number, viewH: number}} cam
+   * @param {number} depth 1 while playing, 0 at full monument pull-back
+   */
+  _monolith(ctx, B, cam, depth = 1) {
+    const M = FEEL.visual.monolith;
+    if (depth <= 0.01) return;
+    // ONE PER BIOME BAND, so a ring arrives, passes, and another follows — which
+    // is what makes it read as a place you are moving through rather than as a
+    // decal stuck to the camera. Its anchor is the band's midpoint; parallax
+    // then holds it nearly still as you climb past it.
+    const band = Math.floor(cam.y / BIOME_SPAN);
+    const anchor = (band + 0.5) * BIOME_SPAN;
+    const sy = this.Y(anchor + (cam.y - anchor) * (1 - M.parallax));
+    const r = M.radiusU * this.scale;
+    if (sy < -r * 1.6 || sy > this.h + r * 1.6) return;
+    // Off to one side, deterministically per band, so two neighbours are never
+    // stacked and the play column is never centred inside one.
+    const side = ((band * 2654435761) >>> 0) % 2 ? 1 : -1;
+    const sx = this.X(COLUMN * 0.5) + side * r * 0.34;
+
+    ctx.save();
+    ctx.translate(sx, sy);
+
+    // The quiet zone first: the wall behind goes down before anything is drawn
+    // on it, so the ring has darkness to be dark against.
+    ctx.save();
+    ctx.globalAlpha = M.quiet * depth;
+    ctx.scale(r * 1.5, r * 1.5);
+    ctx.fillStyle = this._unitDark(ctx);
+    ctx.fillRect(-1, -1, 2, 2);
+    ctx.restore();
+
+    // The ring itself: a thick black band with a real break in it. The break is
+    // the whole idea — an unbroken circle reads as a lens flare or a vignette,
+    // and a broken one reads as something that used to work.
+    const from = M.gapTo * TAU, to = (M.gapFrom + 1) * TAU;
+    ctx.globalAlpha = M.opacity * depth;
+    ctx.strokeStyle = 'rgba(0,0,0,1)';
+    ctx.lineCap = 'butt';
+    ctx.lineWidth = r * 0.30;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.82, from, to);
+    ctx.stroke();
+    // A hub and three spokes, black, so it is a mechanism and not a hoop.
+    ctx.lineWidth = r * 0.07;
+    for (let i = 0; i < 3; i++) {
+      const a = from + (to - from) * (0.18 + i * 0.32);
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * r * M.hubR * 1.5, Math.sin(a) * r * M.hubR * 1.5);
+      ctx.lineTo(Math.cos(a) * r * 0.70, Math.sin(a) * r * 0.70);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(0, 0, r * M.hubR, 0, TAU);
+    ctx.fillStyle = 'rgba(0,0,0,1)';
+    ctx.fill();
+
+    // And two lit arcs, which are all the light this is allowed. Not the whole
+    // rim — an outlined ring is a wireframe, and the reference for this game
+    // puts light on a fraction of an edge and lets the rest go.
+    ctx.globalAlpha = M.edge * depth;
+    ctx.strokeStyle = rgb(B.accent, 1);
+    ctx.lineWidth = Math.max(1, r * 0.012);
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.97, from + 0.16, from + 0.74);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.67, to - 0.62, to - 0.14);
+    ctx.stroke();
+    ctx.restore();
+    ctx.globalAlpha = 1;
   }
 
   /**
@@ -2340,8 +2508,21 @@ export class Renderer {
       const fresh = Math.max(1, lumOf(B.accent));
       const now = lumOf([cr, cg, cb]);
       if (now > fresh) { const k = fresh / now; cr *= k; cg *= k; cb *= k; }
+      // THE NEWEST STONE HAS A HEART, FOR A FEW SECONDS.
+      //
+      // `glow` is already set on a fresh corpse and already decays to nothing;
+      // all that is added is a slow breath on the way down. It is the only
+      // moment in the game where the tower answers — the body you just left is
+      // warm, and then it is a platform like every other one. Riding it on
+      // `glow` means it can never reach a body that has cooled, and acceptance
+      // 13's fixture zeroes `glow` on every corpse it measures, so the erosion
+      // ladder is not reading a heartbeat.
       s.glow = Math.max(0, s.glow - 0.02);
-      const rimlight = lit * 0.75 + s.glow * 0.4;
+      const beat = s.glow > 0
+        ? 1 + FEEL.visual.cairnPulse
+          * (0.5 - 0.5 * Math.cos(this.figT * FEEL.visual.cairnPulseRate))
+        : 1;
+      const rimlight = lit * 0.75 + s.glow * 0.4 * beat;
 
       ctx.save();
       ctx.translate(sx, sy);
@@ -2723,16 +2904,34 @@ export class Renderer {
    * @param {BiomeSlot} B
    */
   _parts(ctx, B) {
-    ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < this.partN; i++) {
-      const o = i * 7;
+      const o = i * 9;
       const t = this.parts[o + 4] / this.parts[o + 5];
+      const px = this.X(this.parts[o]), py = this.Y(this.parts[o + 1]);
+      if (this.parts[o + 7] === 1) {
+        // A CHIP OF THE BODY: dark, with one lit edge along its top.
+        //
+        // Drawn in source-over and not additive, which is the whole difference
+        // between a piece of rock and a spark. It is the same sentence the
+        // figure makes — a dark thing with light on one side of it — said by
+        // something a twentieth of the size, so a death reads as the climber
+        // coming apart rather than as a new effect arriving.
+        const w = (1.5 + this.parts[o + 6] * 1.6) * this.scale;
+        const h = w * (0.52 + this.parts[o + 6] * 0.3);
+        const a = t < 0.75 ? 1 : 1 - (t - 0.75) / 0.25;
+        ctx.fillStyle = `rgba(0,0,0,${(0.82 * a).toFixed(3)})`;
+        ctx.fillRect(px - w * 0.5, py - h * 0.5, w, h);
+        ctx.fillStyle = rgb(B.accent, 0.75 * a);
+        ctx.fillRect(px - w * 0.5, py - h * 0.5, w, Math.max(1, this.dpr));
+        continue;
+      }
+      ctx.globalCompositeOperation = 'lighter';
       const a = (1 - t) * 0.85;
       const s = (0.5 + this.parts[o + 6] * 1.3) * this.scale * (1 - t * 0.4);
       ctx.fillStyle = rgb(B.accent, a);
-      ctx.fillRect(this.X(this.parts[o]) - s * 0.5, this.Y(this.parts[o + 1]) - s * 0.5, s, s);
+      ctx.fillRect(px - s * 0.5, py - s * 0.5, s, s);
+      ctx.globalCompositeOperation = 'source-over';
     }
-    ctx.globalCompositeOperation = 'source-over';
   }
 
   /**

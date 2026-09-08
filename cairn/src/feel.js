@@ -98,6 +98,60 @@ export const FEEL = {
     // built here and both deleted after a screenshot — see `_landmarks` for the
     // frame that killed them and why a dark outline makes a thin line LOUDER.
     landmarkQuiet: 0.30,        // how far the wall behind it is pushed down
+
+    // THE DEATH, AS STONE SETTLING RATHER THAN AS AN EXPLOSION.
+    //
+    // A death used to be a full-screen white wash and twenty-two bright shards
+    // that flew outward and were pulled back in. That is a detonation, and this
+    // game's one sentence is EVERY DEATH LEAVES A STONE — the moment should read
+    // as something heavy arriving, not as something bright going off.
+    //
+    // Four dark chips with a lit top edge, thrown a short way, falling under
+    // their own gravity, and coming to rest on the line the corpse's shelf sits
+    // on. They do not BECOME the body — the body is already there, placed by the
+    // simulation, and drawing a second one would be two objects claiming the
+    // same surface. They land on it and fade, so what is left standing is the
+    // thing you can climb on.
+    deathFragments: 4,          // 3-5 reads as pieces; more reads as debris
+    deathFragSpeed: 0.55,       // a fraction of a shard's throw
+    deathFragGravity: 210,      // world units/s^2. Heavier than the player: rock
+    deathFragLife: 1.15,        // seconds, including the rest at the bottom
+    deathFlash: 0.16,           // was 1.0, a full white screen. See `handleDeath`
+    // And the newest stone keeps a warm heart for a few seconds, which is the
+    // only moment the tower ever says something back.
+    cairnPulse: 0.55,           // depth of the breath, as a share of the bloom
+    cairnPulseRate: 2.4,        // radians/second
+
+    // THE ONE BACKGROUND STRUCTURE.
+    //
+    // Distinct from `landmark` above, which is a GAMEPLAY object: it sits in the
+    // play plane, you can aim into its heart and claim it, so it can never take
+    // a parallax offset without making that secret unaimable. This is the other
+    // thing — scenery with no rules attached, far enough back to move at a
+    // fraction of the camera and dark enough to be a hole rather than a shape.
+    //
+    // A BROKEN RING, because the painted plate behind it is already full of
+    // arcs and a second vocabulary would read as two games. Drawn over the lit
+    // facade rather than under it: it has to TAKE light away to have presence,
+    // and something behind a lit wall cannot.
+    monolith: {
+      opacity: 0.55,      // of the dark mass, over the wall
+      parallax: 0.045,    // share of the climb it travels. Almost still.
+      // BOTH SIZES WERE SHOT ON A PHONE AND THE BIG ONE WON.
+      //
+      // The argument for shrinking it was that at 120 the ring is 240 units
+      // across against a 150-unit view, so a player never sees the whole
+      // machine — only a slab of curve. That is true and it does not matter: at
+      // 86 the ring fits, reads as a dark disc off to one side, and stops being
+      // enormous, which was the entire job. Scale comes from an object running
+      // off the edges of the frame; a landmark you can see all of is a prop.
+      radiusU: 120,       // world units at the reference zoom
+      edge: 0.13,         // the two or three lit arcs on its rim
+      quiet: 0.34,        // the black it sits in
+      hubR: 0.13,         // the black centre, as a share of the radius
+      gapFrom: 0.62,      // where the ring is broken, in turns
+      gapTo: 1.02,
+    },
   },
 
   // -------------------------------------------------------------- the tower

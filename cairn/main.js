@@ -235,7 +235,15 @@ function begin() {
  */
 function handleDeath() {
   ui.dead = 0.0001;
-  ui.flash = 1;
+  // NOT A WHITE SCREEN.
+  //
+  // `uFlash` is `mix(col, vec3(1.0), f)` in the composite shader, so this was a
+  // full white wash over every pixel — the single most generic thing a game can
+  // do at the moment of failure, and the exact opposite of what the sentence on
+  // the title card promises. The impact still lands: the simulation freezes for
+  // 90 ms, the camera kicks, the audio drops and the hand buzzes. What is left
+  // here is a trace, enough that a death has a beat, far short of an event.
+  ui.flash = FEEL.visual.deathFlash;
   const meant = sim.deathMeant;
   audio.death(meant);
   // Three short pulses that resolve, against the long fall of an ordinary
@@ -243,7 +251,11 @@ function handleDeath() {
   // looking away from the screen.
   buzz(meant ? [18, 40, 18, 40, 34] : [60, 30, 90]);
   const b = sim.body;
-  if (!reduced) renderer.burst(b.peakX, b.peakY, 22);
+  // The body comes apart into a few stones that fall onto the shelf the corpse
+  // already occupies. `peakY` is exactly where that shelf is — `_die` fixes the
+  // corpse's TOP at the apex, so the chips and the thing they land on agree
+  // without either of them being told about the other.
+  if (!reduced) renderer.shatter(b.peakX, b.peakY, FEEL.visual.deathFragments);
   camera.kick(1);
 }
 
