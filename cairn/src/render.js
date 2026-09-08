@@ -823,9 +823,10 @@ export class Renderer {
     // These are painted per biome, so the colour is IN the art. The tint drops
     // back to a whisper and each floor is its own building.
     //
-    // VOID HAS NO PLATE OF ITS OWN, and that is not an omission. It is the floor
-    // whose whole idea is that the lights go out — `_dark` already takes the
-    // world away there — so it borrows SIGNAL's stone and never gets to show it.
+    // The order is the order of `BIOMES`, and it is checked rather than assumed:
+    // ASH, SIGNAL, BLOOM, VOID, CINDER, GLACIER. A plate in the wrong slot would
+    // put cyan stone on the ember floor and nothing would fail — it would just
+    // be quietly wrong forever.
     //
     // Loading is lazy and never blocking: a plate that has not arrived draws
     // nothing, and the game is merely less pretty for a moment.
@@ -833,7 +834,7 @@ export class Renderer {
     this._plates = [null, null, null, null, null, null];
     try {
       const files = ['floor-ash', 'floor-signal', 'floor-bloom',
-        'floor-signal', 'floor-cinder', 'floor-glacier'];
+        'floor-void', 'floor-cinder', 'floor-glacier'];
       for (let i = 0; i < files.length; i++) {
         const im = new Image();
         im.decoding = 'async';
@@ -1504,68 +1505,11 @@ export class Renderer {
     ctx.globalCompositeOperation = 'source-over';
     return true;
   }
-
-  /**
-   * A SECOND TOWER, FURTHER AWAY, AND THE AIR BETWEEN THEM.
-   *
-   * The facade was a single plane, so the world had a surface but no DEPTH — and
-   * depth is most of what the reference art is doing. Two cheap things fix it,
-   * and they only work together:
-   *
-   * A distant facade at a smaller world scale and a slower parallax, so it slides
-   * behind the near one as you climb. Same code, different numbers: the grid it
-   * draws is finer because it is further off, which is the one cue that reads as
-   * distance without a perspective camera.
-   *
-   * And HAZE between the two. A far building drawn merely dimmer still reads as
-   * a dim near building; a far building drawn dim AND veiled reads as far. The
-   * veil is a single vertical gradient, which is also why fog is the cheapest
-   * depth in any 2D renderer — one rect for an effect a third axis would cost a
-   * rewrite to get.
-   *
-   * @param {CanvasRenderingContext2D} ctx
-   * @param {BiomeSlot} B
-   * @param {Camera} cam
-   */
-  _deepTower(ctx, B, cam) {
-    const F = FEEL.facade, D = F.deep;
-    const sc = this.scale * D.scale;
-    const fh = D.floorU * sc, cw = D.colU * sc;
-    if (fh < 2.5) return;
-    // Parallax: the far tower moves a fraction of the near one.
-    const py = cam.y * D.parallax;
-    const y0 = this.h - ((py * sc) % fh);
-    const left = 0, right = this.w;
-    ctx.strokeStyle = rgb(B.rock, D.gridAlpha);
-    ctx.lineWidth = Math.max(1, F.lineU * sc);
-    ctx.beginPath();
-    for (let y = y0; y > -fh; y -= fh) { ctx.moveTo(left, y); ctx.lineTo(right, y); }
-    for (let x = left; x <= right + cw; x += cw) { ctx.moveTo(x, 0); ctx.lineTo(x, this.h); }
-    ctx.stroke();
-
-    ctx.globalCompositeOperation = 'lighter';
-    let r = 0;
-    const row0 = Math.floor(py / D.floorU);
-    for (let y = y0, ry = row0; y > -fh; y -= fh, ry++) {
-      if (hash1(ry * 912931) < D.darkFloorFrac) continue;
-      for (let x = left, cxi = 0; x <= right; x += cw, cxi++) {
-        const h1 = hash1((ry * 40503) ^ (cxi * 15485863));
-        if (h1 > D.litFrac) continue;
-        ctx.fillStyle = rgb(B.accent, D.litA);
-        ctx.fillRect(x + cw * 0.18, y + fh * 0.22, cw * 0.64, fh * 0.56);
-        if (++r > D.maxPanes) { y = -fh; break; }
-      }
-    }
-    ctx.globalCompositeOperation = 'source-over';
-
-    // THE AIR. Dim alone reads as a dim near wall; dim AND veiled reads as far.
-    const g = ctx.createLinearGradient(0, 0, 0, this.h);
-    g.addColorStop(0, rgb(B.bgTop, D.hazeTop));
-    g.addColorStop(0.55, rgb(B.bgBot, D.hazeMid));
-    g.addColorStop(1, rgb(B.bgBot, D.hazeBot));
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, this.w, this.h);
-  }
+  // `_deepTower` WAS DELETED HERE. A drawn far-off tower with its own haze,
+  // built when the background was vector and the frame needed depth behind the
+  // glass. Six painted walls arrived with their depth already in them, and this
+  // stopped being called two commits ago; `scripts/cairn-layers.mjs` measured it
+  // at exactly zero pixels. Its config went with it — see `facade.deep` in feel.js.
 
   _facade(ctx, B, cam, sim) {
     const F = FEEL.facade;
