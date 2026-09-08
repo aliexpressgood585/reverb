@@ -151,7 +151,7 @@ export const FEEL = {
     seamPeak: 0.70,
     // Global purity trim. See the note at the `post.render` call: the reference
     // is muted stone, and every palette's own `sat` multiplies the other way.
-    satTrim: 0.66,
+    satTrim: 0.80,
 
     // THE DEATH, AS STONE SETTLING RATHER THAN AS AN EXPLOSION.
     //
@@ -307,9 +307,20 @@ export const FEEL = {
     // call site); a plate at 0.62 behind that grid is two walls at one distance,
     // which is the clutter the exclusive branch was avoiding. At 0.30 it is
     // texture in the deep, which is what it is good at.
-    alpha: 0.52,
-    sink: 0.40,       // pushed back into the dark, or it eats the range
-    tint: 0.10,       // graded toward the biome so six floors are not one photo
+    // HIGH, BECAUSE THIS IS NOW THE WALL AND NOT A TEXTURE BEHIND ONE.
+    // At 0.52 with a 0.40 sink over it the painted stone was crushed back into
+    // the flat brown it was brought in to replace.
+    alpha: 0.88,
+    sink: 0.14,       // pushed back into the dark, or it eats the range
+    // RAISED WITH THE PLATE'S ALPHA, AND FOR THE REASON IT WAS WRITTEN.
+    //
+    // "So six floors are not one photo" — at 0.10 that was true enough while the
+    // plate was a faint texture behind a drawn wall. Now it IS the wall, at 0.88,
+    // and one brown photograph across every altitude flattens the palettes into
+    // each other: acceptance 5's closest pair fell to 10.5 and 6's lit chroma to
+    // 17.5, both from the same cause. The grade is what puts each floor's own
+    // colour back into the stone.
+    tint: 0.46,       // graded toward the biome so six floors are not one photo
   },
 
   // ------------------------------------------------------------ the shadow
@@ -1021,7 +1032,10 @@ export const FEEL = {
   // NUMBER you are on — not at the same second. See DECISIONS §33 for why a
   // clock race is the one shape this game cannot take.
   ghost: {
-    alpha: 0.52,          // memory-gold and clearly not you
+    // HIGH, BECAUSE THIS IS NOW THE WALL AND NOT A TEXTURE BEHIND ONE.
+    // At 0.52 with a 0.40 sink over it the painted stone was crushed back into
+    // the flat brown it was brought in to replace.
+    alpha: 0.88,          // memory-gold and clearly not you
     ease: 3.4,            // how fast it steps between its launch positions
     trailU: 30,           // how far back its path is drawn from where it stands
     fadeU: 120,           // fades out once it is this far off screen-centre

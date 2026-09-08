@@ -1234,8 +1234,16 @@ export class Renderer {
       // scattered lit openings in the reference are incidental detail on top of
       // the stone, which is what `_facade` is now doing rather than being the
       // architecture itself.
+      // ONE WALL, AND IT IS THE PAINTING.
+      //
+      // `_facade` drew a lattice of square openings over the plate, which made
+      // sense while the plate was a 13 KB smudge. The plate is now cut properly
+      // from the concept painting and carries its own arches, masonry courses
+      // and lit windows — so the vector grid was a second set of windows drawn
+      // on top of a first, and its mullions read as a wireframe laid over stone.
+      // Removed from the path rather than dimmed: two walls has been the wrong
+      // answer every time it has been tried in this file.
       this._plate(ctx, B, cam);
-      this._facade(ctx, B, cam, sim);
       // THE GIANT ALTITUDE NUMERAL IS GONE.
       //
       // It was the largest graphic element on screen, it duplicated the small
