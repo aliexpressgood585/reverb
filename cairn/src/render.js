@@ -36,7 +36,52 @@ import { erosionOf, EROSION, solidHalfWidth } from './sim.js';
  * @param {number} pose 0-3, the four ways a body comes to rest
  */
 export function figurePath(ctx, hw, hh, pose) {
-  bodyOutline(ctx, hw, hh, [0, 0.22, -0.18, 0.34][pose & 3], 0, 0, 0);
+  stoneOutline(ctx, hw, hh, pose);
+}
+
+/**
+ * A STONE. What a body becomes, and what the game is named after.
+ *
+ * It was a human silhouette — head, shoulders, torso — on the reasoning that the
+ * player should be able to SEE that the thing they are standing on used to be
+ * them. That reasoning produced a tower of little people, and the owner's
+ * concept paintings show the opposite and show it twice: a cairn of rounded
+ * dark boulders, stacked, with heat in the seams between them. The word on the
+ * title card is CAIRN, not a column of bodies, and a cairn is made of stones.
+ *
+ * THE CROWN IS STILL EXACTLY -hh, AND IT IS STILL FLAT. That line is the
+ * load-bearing shelf; `_solids` draws the bright bar on it because DECISIONS
+ * §16 forbids drawing a hold anywhere but where the collision is. A boulder
+ * modelled with a domed top would be a surface you cannot stand on drawn over
+ * one you can, so the top two thirds of the width are a straight edge and the
+ * rounding happens below it — which is also what a weathered stone in a stack
+ * actually looks like, because the one above it flattened this one.
+ *
+ * NOTHING EXCEEDS ±hw EITHER. Erosion narrows a corpse by scaling `hw`, and a
+ * stone drawn wider than it catches is the one lie this renderer refuses.
+ *
+ * @param {CanvasRenderingContext2D} ctx centred on the body
+ * @param {number} hw
+ * @param {number} hh
+ * @param {number} pose 0-3, the four ways a stone comes to rest
+ */
+function stoneOutline(ctx, hw, hh, pose) {
+  const W = hw, H = hh;
+  // Four stones, none of them a mirror of another: the lean shifts where the
+  // boulder is widest and how far the flat top runs, so a stack reads as
+  // gathered rocks rather than as one rock repeated.
+  const lean = [0, 0.16, -0.13, 0.24][pose & 3];
+  const flat = 0.62 + Math.abs(lean) * 0.3;      // how much of the top is shelf
+  const bulge = 0.72 + lean * 0.18;              // where the widest point sits
+  ctx.beginPath();
+  ctx.moveTo(-W * flat, -H);
+  ctx.lineTo(W * flat, -H);                      // the shelf, dead flat
+  ctx.quadraticCurveTo(W, -H + H * 0.25, W * 0.96, -H + H * 2 * bulge * 0.5);
+  ctx.quadraticCurveTo(W * 0.90, H * 0.72, W * 0.44, H);
+  ctx.lineTo(-W * 0.40, H);
+  ctx.quadraticCurveTo(-W * 0.92, H * 0.70, -W * 0.97, -H + H * 2 * (1 - bulge) * 0.5);
+  ctx.quadraticCurveTo(-W, -H + H * 0.22, -W * flat, -H);
+  ctx.closePath();
 }
 
 /**
@@ -1146,10 +1191,29 @@ export class Renderer {
       // The plate if it arrived, the drawn building if it did not. Never both:
       // two buildings in one frame is the "two structures competing" mistake
       // the landmarks already had to be dimmed out of.
-      if (!this._plate(ctx, B, cam)) {
-        this._deepTower(ctx, B, cam);
-        this._facade(ctx, B, cam, sim);
-      }
+      // THE PAINTED PLATE IS THE FAR DISTANCE NOW; THE WINDOW GRID IS THE WALL.
+      //
+      // These used to be exclusive — plate OR drawn building, never both, on the
+      // reasoning that two buildings in one frame is the same "competing
+      // structures" mistake the landmarks had to be dimmed out of. The result
+      // was that the plate always won and `_facade` measured EXACTLY ZERO
+      // pixels in the shipped build: a whole glass tower, its storeys, its
+      // service slits and the player-reflection tuned over several rounds, none
+      // of it ever executing.
+      //
+      // The concept paintings settle which one belongs in front. Both of them
+      // show the same wall: an orderly grid of square window openings, most of
+      // them dark, a handful lit warm — which is precisely what `_facade` was
+      // built to draw and nothing like the arches and machinery in the plate.
+      // So the plate drops back to being the deep, soft, far-off texture it is
+      // good at, and the grid is drawn over it as the surface you climb.
+      //
+      // They no longer compete because they are no longer at the same distance:
+      // the plate is pushed down and desaturated behind, the grid is sharp in
+      // front. That is the one arrangement where having both is depth rather
+      // than clutter.
+      this._plate(ctx, B, cam);
+      this._facade(ctx, B, cam, sim);
       // THE GIANT ALTITUDE NUMERAL IS GONE.
       //
       // It was the largest graphic element on screen, it duplicated the small
@@ -2407,10 +2471,29 @@ export class Renderer {
         // the ladder is a MULTIPLIER ON ITS OWN COLOUR. That is monotonic by
         // construction in any palette — it is the same base scaled down — rather
         // than by calibration, which is what kept failing one palette at a time.
+        // A STONE IS DARK ROCK. THE LIGHT LIVES IN THE SEAM.
+        //
+        // The body used to be filled in the accent, so a fresh corpse was a
+        // bright amber figure and the tower was a column of glowing shapes. The
+        // paintings show the opposite and it is the same inversion the player
+        // itself just had corrected: the boulders are near-black, and what is
+        // lit is the line where one meets the next. Heat in the seams, not in
+        // the rock.
+        //
+        // The erosion ladder is NOT weakened by this — it moves onto the shelf
+        // bar below, which is the better place for it anyway. DECISIONS §16
+        // already calls that bar the fastest read in the design, because it is
+        // drawn exactly as wide as the collision: the thing that tells you
+        // whether a stone still holds your weight is now the only lit thing on
+        // it. `stage` still runs the same ladder, over a much darker base.
         const stage = st === EROSION.FRESH ? 1 : st === EROSION.THIN ? F2.thinOf : F2.topOf;
-        const sr = cr * stage, sg = cg * stage, sb = cb * stage;
+        const R = FEEL.tower.stoneRock;
+        const sr = cr * stage * R, sg = cg * stage * R, sb = cb * stage * R;
         const fill = `rgba(${sr | 0},${sg | 0},${sb | 0},${F2.bodyAlpha})`;
-        const rim = `rgba(${(sr * 1.35) | 0},${(sg * 1.35) | 0},${(sb * 1.35) | 0},${F2.bodyAlpha})`;
+        // The rim is where a stone catches the seam light off the one above it,
+        // so it stays much brighter than the rock it edges.
+        const rk = FEEL.tower.stoneRim / Math.max(0.001, R);
+        const rim = `rgba(${(sr * rk) | 0},${(sg * rk) | 0},${(sb * rk) | 0},${F2.bodyAlpha})`;
         const hwPx = s.hw * this.scale * narrow;
         const hhPx = s.hh * this.scale;
 
@@ -2425,12 +2508,24 @@ export class Renderer {
         ctx.lineWidth = Math.max(0.8, this.dpr * (st === EROSION.TOP ? 0.6 : 0.9));
         ctx.stroke();
 
-        // The load-bearing surface, drawn as a bright bar exactly as wide as the
-        // collision actually is. Fresh corpses get a full shelf; eroded ones a
-        // visibly shorter one. This is the tell that reads fastest.
-        ctx.fillStyle = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.16 + solidity * 0.80).toFixed(3)})`;
+        // THE SEAM, and it now carries the whole erosion ladder.
+        //
+        // This was a 2-pixel bar and the ladder lived in the body's brightness.
+        // That worked while a corpse was a lit amber figure and stopped working
+        // the moment it became dark rock: with the mass near the wall's own
+        // luminance, acceptance 13 read an ERODED stone as darker than a dead
+        // one, which is the tell running backwards on the one question a player
+        // actually asks — will this hold me.
+        //
+        // So the light moved to where the paintings put it and where DECISIONS
+        // §16 already said the fastest read was: the line where one stone meets
+        // the next. It is exactly as wide as the collision, and now its HEIGHT
+        // falls with solidity as well as its brightness, so a fresh stone has a
+        // thick hot seam, a worn one a thin dim line, and a memory none at all.
+        // Three properties of one mark, all moving together.
+        ctx.fillStyle = `rgba(${cr | 0},${cg | 0},${cb | 0},${(0.30 + solidity * 0.68).toFixed(3)})`;
         ctx.fillRect(-hwPx, -hhPx, hwPx * 2,
-                     Math.max(1, (st === EROSION.FRESH ? 2.1 : 1.2) * this.dpr));
+                     Math.max(1, (1.6 + solidity * 3.0) * this.dpr));
 
         // AND IT CATCHES LIGHT THE WAY A LEDGE CREST DOES.
         //

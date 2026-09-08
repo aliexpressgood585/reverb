@@ -268,8 +268,13 @@ export const FEEL = {
   // reference art's mood but not its medium.
   plate: {
     parallax: 0.22,   // fraction of the climb the background travels
-    alpha: 0.62,
-    sink: 0.46,       // pushed back into the dark, or it eats the range
+    // PUSHED BACK, because it is the far distance now rather than the wall.
+    // The drawn window grid sits in front of it (see the note at the `_plate`
+    // call site); a plate at 0.62 behind that grid is two walls at one distance,
+    // which is the clutter the exclusive branch was avoiding. At 0.30 it is
+    // texture in the deep, which is what it is good at.
+    alpha: 0.30,
+    sink: 0.60,       // pushed back into the dark, or it eats the range
     tint: 0.10,       // graded toward the biome so six floors are not one photo
   },
 
@@ -667,6 +672,21 @@ export const FEEL = {
     // happens to be behind it — which is not a property of the body, and broke
     // the read one palette at a time. A multiplier on the same base colour is
     // monotonic in every palette by construction rather than by calibration.
+    // A CORPSE IS A STONE, AND A STONE IS DARK ROCK.
+    //
+    // The body was filled in the biome accent, which made a fresh corpse a
+    // glowing amber figure and the tower a column of lit shapes. The concept
+    // paintings show near-black boulders with heat only in the seams between
+    // them. `stoneRock` is how far the body's colour is crushed toward rock;
+    // `stoneRim` is the edge, which catches the seam light off the stone above
+    // and so stays well brighter than the mass it outlines.
+    //
+    // The erosion ladder did NOT move into these. It rides the shelf bar, which
+    // is drawn exactly as wide as the collision and is the fastest read in the
+    // game — so the one lit thing on a stone is now the thing that says whether
+    // it will still hold you. See the note in `_solids`.
+    stoneRock: 0.70,
+    stoneRim: 0.85,
     thinOf: 0.52,
     topOf: 0.27,
     memOf: 0.14,   // and MEMORY is one rung below TOP, on the same base
