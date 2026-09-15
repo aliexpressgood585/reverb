@@ -11,6 +11,9 @@ import * as Money from './src/money.js';
 import { initLang, t, height as fmtHeight } from './src/i18n.js';
 import { Panel } from './src/panel.js';
 import { track, EVENTS } from './src/analytics.js';
+import { nextGoal, readChallenge, challengeURL } from './src/climb.js';
+
+let challenge = readChallenge(location.search);
 
 /**
  * CAIRN — the loop.
@@ -114,6 +117,9 @@ const input = new Input(surface, sim);
 
 const ui = {
   squash: 0, squashVel: 0,
+  goal: FEEL.climb.goalStep,
+  feedback: 0,
+  challengeWon: false,
   flash: 0,
   bestFlash: 0,
   dead: 0,            // seconds since death, drives the return-to-base pan
@@ -156,10 +162,16 @@ let dpr = 1;
 let accum = 0;
 let lastFrame = performance.now();
 let paused = false;
+let sharing = false;
 let lastBiome = 0;
 
 const el = {
   small: need('height'),
+  goal: need('goal'),
+  guide: need('guide'),
+  feedback: need('feedback'),
+  challenge: /** @type {HTMLButtonElement} */ (need('challenge')),
+  challengeLink: /** @type {HTMLDivElement} */ (need('challenge-link')),
   card: need('card'),
   toast: need('toast'),
   best: need('best'),
@@ -212,6 +224,8 @@ function begin() {
   ui.bestAtRunStart = sim.best;
   ui.recordCrossed = false;
   ui.runFloor = sim.body.y;
+  ui.goal = nextGoal(sim.body.y);
+  ui.challengeWon = false;
   Money.newRun();
   hideCard();
   track(EVENTS.RUN_START, { daily: !!ui.daily });
@@ -305,6 +319,8 @@ function finishDeath() {
   ui.runStood = 0;
   ui.runLaunches = 0;
   ui.runFloor = sim.body.y;
+  ui.goal = nextGoal(sim.body.y);
+  ui.challengeWon = false;
   Money.newRun();
 
   // The summary lands AFTER control has come back, so the retry is never gated.
@@ -519,8 +535,20 @@ function reveal() {
  */
 /** @param {boolean} daily */
 function setMode(daily) {
-  if (daily === !!ui.daily) return;
+  if (daily === !!ui.daily && !challenge) return;
   Store.save(sim);                                // bank the tower being left
+  challenge = null;
+  history.replaceState(null, '', location.pathname);
+  ui.goal = FEEL.climb.goalStep;
+  ui.challengeWon = false;
+  ui.dead = 0;
+  ui.runLaunches = 0;
+  ui.runStood = 0;
+  lastStoodOn = null;
+  ui.feedback = 0;
+  el.feedback.textContent = '';
+  input.abort();
+  audio.stopCharge();
   ui.daily = daily;
   ui.beats = {};
   // `ui.taught` is deliberately NOT reset: the lesson is per player, not per
@@ -537,9 +565,11 @@ function setMode(daily) {
   camera.y = 0; camera.x = COLUMN * 0.5;
   renderer.trailN = 0;
   ui.bestAtRunStart = sim.best;
+  ui.runFloor = sim.body.y;
   ui.recordCrossed = false;
   el.daily.className = daily ? 'corner on' : 'corner';
   el.daily.textContent = daily ? t('hud.daily.on', { date: date.slice(5) }) : t('hud.daily');
+  applyLang();
   track(EVENTS.MODE, { daily });
   try { localStorage.setItem('cairn.mode', daily ? 'daily' : ''); } catch { /* private */ }
 }
@@ -547,7 +577,8 @@ function setMode(daily) {
 el.daily.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   e.stopPropagation();
-  setMode(!ui.daily);
+  if (sharing || !el.challengeLink.hidden) return;
+  setMode(challenge ? false : !ui.daily);
 });
 
 input.onMonument = () => {
@@ -587,6 +618,22 @@ function drainEvents() {
       const force = clamp(e[i + 1] ?? 0, 0, FEEL.maxFallSpeed) / FEEL.maxFallSpeed;
       renderer.ring(e[i + 2], e[i + 3], force);
       audio.land(force);
+      const perch = sim.body.standing;
+      if (perch && !perch.corpse && ui.runLaunches > 0
+          && Math.abs(sim.body.x - perch.x) <= solidHalfWidth(perch, sim) * FEEL.climb.perfectFraction) {
+        feedback(t('climb.perfect'));
+        if (!reduced) renderer.ring(e[i + 2], e[i + 3], FEEL.climb.perfectFraction);
+      }
+      if (sim.body.y >= ui.goal) {
+        feedback(t('climb.milestone', { n: ui.goal }));
+        audio.chime();
+        ui.goal = nextGoal(sim.body.y);
+      }
+      if (challenge && !ui.challengeWon && sim.body.y >= challenge.target) {
+        ui.challengeWon = true;
+        feedback(t('climb.won'), FEEL.climb.stoneSeconds);
+        audio.chime();
+      }
       camera.kick(force);
       ui.squashVel -= force * FEEL.visual.landingSquashKick;
       // AND THE SURFACE ANSWERS. Three things, all small, all over inside a
@@ -708,6 +755,7 @@ function update(real) {
     if (b.standing !== lastStoodOn) {
       lastStoodOn = b.standing;
       ui.runStood++;
+      feedback(t('climb.stone', { n: b.standing.order + 1 }), FEEL.climb.stoneSeconds);
       track(EVENTS.STOOD_ON_SELF, { height: Math.round(b.y) });
     }
     teach();
@@ -732,6 +780,10 @@ function update(real) {
 
   ui.flash = Math.max(0, ui.flash - real * 9);
   ui.bestFlash = Math.max(0, ui.bestFlash - real * 1.6);
+  if (ui.feedback > 0) {
+    ui.feedback = Math.max(0, ui.feedback - real);
+    if (!ui.feedback) el.feedback.textContent = '';
+  }
   if (ui.toast > 0) { ui.toast -= real; if (ui.toast <= 0) el.toast.className = ''; }
   if (ui.banner > 0) { ui.banner -= real; if (ui.banner <= 0) el.best.className = ''; }
 
@@ -809,7 +861,7 @@ function step(now, real) {
       barrel: reduced ? 0 : 0.035,
       // Heavier: the reference frames go to black at the edges, and a facade
       // still visible in the corners is a frame with no darkness to fall into.
-      vignette: 0.74,
+      vignette: FEEL.visual.vignette,
       flash: ui.flash * 0.85,
       lift: grade.lift,
       gain: grade.gain,
@@ -840,6 +892,7 @@ function step(now, real) {
     camera.monX = towerMidline();
   }
 
+  updateClimbHud();
   if (debugOn) drawDebug(real);
 }
 
@@ -871,11 +924,81 @@ let lastSteps = 0;
 /** The body most recently stood on, so one landing counts once. */
 let lastStoodOn = /** @type {import('./src/types.js').Solid|null} */ (null);
 
+/** @param {string} text @param {number} seconds */
+function feedback(text, seconds = FEEL.climb.feedbackSeconds) {
+  el.feedback.textContent = text;
+  ui.feedback = seconds;
+}
+
+function updateClimbHud() {
+  const visible = ui.started && !ui.monument;
+  el.challenge.hidden = !visible || sim.best < 1;
+  const goalText = visible
+    ? `${challenge && !ui.challengeWon ? t('hud.target', { n: challenge.target }) : t('hud.goal', { n: ui.goal })} · ${t('hud.record', { n: Math.floor(sim.best) })}` : '';
+  if (el.goal.textContent !== goalText) el.goal.textContent = goalText;
+  let hint = '';
+  if (visible && sim.body.grounded && !ui.dead && !ui.taught) {
+    if (input.aiming) hint = t('guide.release');
+    else if (sim.deaths > 0) hint = t('guide.stone');
+    else if (ui.runLaunches < FEEL.climb.tutorialJumps) hint = t('guide.drag');
+  }
+  if (el.guide.textContent !== hint) el.guide.textContent = hint;
+}
+
+// Sharing is initiated by a player and pauses the run until the sheet closes.
+function resumeAfterShare() {
+  sharing = false;
+  paused = document.hidden || panel.open || !el.challengeLink.hidden;
+  lastFrame = performance.now(); accum = 0;
+  audio.duck(paused);
+}
+
+el.challenge.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  if (sharing) return;
+  sharing = true;
+  paused = true;
+  input.abort(); audio.stopCharge(); audio.duck(true);
+  try {
+    const url = challengeURL(location.href, sim.world.seed, sim.best);
+    const text = t('challenge.text', { n: Math.floor(sim.best) });
+    if (navigator.share) {
+      try { await navigator.share({ title: 'CAIRN', text, url }); return; }
+      catch (error) { if (error instanceof Error && error.name === 'AbortError') return; }
+    }
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(`${text}\n${url}`);
+        toast(t('toast.copied'));
+        return;
+      }
+    } catch { /* A selectable link works without clipboard permission. */ }
+    const box = el.challengeLink;
+    const label = box.querySelector('p');
+    const field = box.querySelector('input');
+    const close = box.querySelector('button');
+    if (!label || !field || !close) return;
+    label.textContent = t('challenge.copy');
+    field.value = url;
+    field.setAttribute('aria-label', t('challenge.copy'));
+    close.textContent = t('challenge.close');
+    box.hidden = false;
+    field.focus(); field.select();
+    const dismiss = () => {
+      box.hidden = true;
+      resumeAfterShare();
+      el.challenge.focus();
+    };
+    close.onclick = dismiss;
+    box.onkeydown = (event) => { if (event.key === 'Escape') dismiss(); };
+  } finally { resumeAfterShare(); }
+});
+
 // -------------------------------------------------------------------- pause
 
 document.addEventListener('visibilitychange', () => {
-  paused = document.hidden;
-  audio.duck(document.hidden);
+  paused = document.hidden || sharing || panel.open || !el.challengeLink.hidden;
+  audio.duck(paused);
   if (document.hidden) {
     input.abort(); audio.stopCharge(); Store.save(sim); Progress.flush();
   }
@@ -931,6 +1054,9 @@ const panel = new Panel(el.panel, {
     camera.y = 0;
     renderer.trailN = 0;
     ui.started = false;
+    ui.taught = false;
+    ui.feedback = 0;
+    el.feedback.textContent = '';
     showTitle();
   },
   getAudio: () => audio,
@@ -946,6 +1072,7 @@ el.menu.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   e.stopPropagation();
   audio.unlock();
+  if (sharing || !el.challengeLink.hidden) return;
   if (panel.open) { panel.hide(); return; }
   paused = true;
   input.abort();
@@ -957,10 +1084,13 @@ el.menu.addEventListener('pointerdown', (e) => {
 
 /** Re-render every string in place after a language change. */
 function applyLang() {
-  el.daily.textContent = ui.daily
+  el.daily.textContent = challenge ? t('hud.exitChallenge') : ui.daily
     ? t('hud.daily.on', { date: Store.dailyDate().slice(5) })
     : t('hud.daily');
   el.monshare.textContent = t('hud.share');
+  el.challenge.textContent = t('hud.challenge');
+  el.menu.setAttribute('aria-label', t('menu.title'));
+  lastShown = -1;
   if (!ui.started) showTitle();
 }
 
@@ -978,7 +1108,7 @@ addEventListener('pointerdown', (e) => {
 // the first load, or the endless slot gets read into a daily session.
 let bootDaily = false;
 try { bootDaily = localStorage.getItem('cairn.mode') === 'daily'; } catch { /* private */ }
-if (bootDaily) {
+if (bootDaily && !challenge) {
   const d = Store.dailyDate();
   ui.daily = true;
   sim.dailyDate = d;
@@ -986,6 +1116,12 @@ if (bootDaily) {
   Store.setSlot(`daily.${d}`);
   sim.reset(true);
   el.daily.className = 'corner on';
+}
+if (challenge) {
+  sim.world.seed = challenge.seed;
+  sim.dailyDate = null;
+  Store.setSlot(`challenge.${challenge.seed}`);
+  sim.reset(true);
 }
 initLang();
 Progress.load();

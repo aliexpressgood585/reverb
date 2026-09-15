@@ -10,6 +10,7 @@ import { erosionOf, EROSION, solidHalfWidth } from './sim.js';
 /**
  * The presentation-layer state main.js owns and the renderer reads.
  * @typedef {object} UiState
+ * @property {number} [goal]
  * @property {number} squash
  * @property {number} flash
  * @property {number} bestFlash
@@ -204,8 +205,10 @@ function limb(ctx, x, y, a1, a2, l1, l2) {
  * @param {number} look -1..1
  * @param {number} phase idle cycle, radians — the weight shift while standing
  * @param {number} idle 0..1 how settled the body is
+ * @param {number} [aim]
+ * @param {typeof CHARACTERS[number]} [ch]
  */
-export function figureRig(ctx, hw, hh, lean, crouch, stretch, look, phase, idle, aim, ch) {
+export function figureRig(ctx, hw, hh, lean, crouch, stretch, look, phase, idle, aim = 0, ch) {
   const H = hh, W = hw;
   const C = ch || CHARACTERS[0];
   // ANGLES ARE MEASURED FROM STRAIGHT DOWN, because `limb` steps by
@@ -322,6 +325,7 @@ export function figureRig(ctx, hw, hh, lean, crouch, stretch, look, phase, idle,
  * @param {number} look -1..1
  */
 function characterMark(ctx, hx, hy, rh, W, H, kind, ink, look) {
+  /** @param {number} t */
   const col = (t) => `rgba(${ink[0] | 0},${ink[1] | 0},${ink[2] | 0},${t})`;
   ctx.save();
   if (kind === 'helmet') {
@@ -459,7 +463,9 @@ function characterMark(ctx, hx, hy, rh, W, H, kind, ink, look) {
  */
 export function costumeMarks(ctx, W, H, kind, a, look, accent) {
   if (a <= 0.02) return;
+  /** @param {number} t */
   const ink = (t) => `rgba(14,11,16,${(t * a).toFixed(3)})`;
+  /** @param {number} t */
   const lit = (t) => `rgba(${accent[0] | 0},${accent[1] | 0},${accent[2] | 0},${(t * a).toFixed(3)})`;
   const rh = Math.min(H * 0.26, W * 0.46);
   const hy = -H + rh;                 // head centre
@@ -1282,6 +1288,17 @@ export class Renderer {
     // OVER the wall and its lights, UNDER everything that has rules. The ring
     // works by taking light away, so it has to come after the thing it darkens;
     // it is scenery, so it has to come before anything a player can aim at.
+    if (depth > 0.01) {
+      // A little cold air opens into dawn as the climber gains altitude.
+      const C = FEEL.climb;
+      const dawn = clamp((sim.body.y - C.hazeWarmAt) / C.hazeWarmSpan, 0, 1);
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = C.hazeAlpha * depth;
+      ctx.fillStyle = `rgb(${lerp(65, 220, dawn) | 0},${lerp(125, 163, dawn) | 0},${lerp(180, 104, dawn) | 0})`;
+      ctx.fillRect(0, 0, this.w, this.h);
+      ctx.restore();
+    }
     this._monolith(ctx, B, cam, depth);
 
     // Behind the ledges, in front of the parallax. Unheld ones fade out with
@@ -1292,6 +1309,7 @@ export class Renderer {
     // they share. `_landmarks` decides per structure; `depth` goes in as a
     // parameter rather than as a globalAlpha wrapped round the whole pass.
     this._landmarks(ctx, B, cam, sim, depth);
+    if (depth > 0.01 && ui.started) this._goalBeacon(ctx, ui.goal || FEEL.climb.goalStep, depth);
 
     this._threads(ctx, B, sim);
     this._updrafts(ctx, B, sim);
@@ -1313,6 +1331,28 @@ export class Renderer {
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     return B;
+  }
+
+  /** A vertical beacon is scenery, never a horizontal imitation of a hold.
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {number} goal
+   * @param {number} alpha */
+  _goalBeacon(ctx, goal, alpha) {
+    const y = this.Y(goal), x = this.X(COLUMN * 0.5);
+    const radius = FEEL.climb.goalWidth * this.scale;
+    if (y < -radius || y > this.h + radius) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = rgb(MEMORY_GOLD, FEEL.climb.goalGlow);
+    ctx.lineWidth = this.dpr;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, Math.PI, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = rgb(MEMORY_GOLD, 1);
+    ctx.font = `${FEEL.climb.stoneLabelPx * this.dpr}px ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`${goal}m`, x, y - radius - FEEL.climb.stoneLabelPx * this.dpr);
+    ctx.restore();
   }
 
   /**
@@ -1478,6 +1518,7 @@ export class Renderer {
     return 1;
   }
 
+  /** @param {CanvasRenderingContext2D} ctx @param {BiomeSlot} B @param {Camera} cam */
   _plate(ctx, B, cam) {
     const P = FEEL.plate;
     const n = this._plates.length;
@@ -1511,6 +1552,7 @@ export class Renderer {
   // stopped being called two commits ago; `scripts/cairn-layers.mjs` measured it
   // at exactly zero pixels. Its config went with it — see `facade.deep` in feel.js.
 
+  /** @param {CanvasRenderingContext2D} ctx @param {BiomeSlot} B @param {Camera} cam @param {Sim} sim */
   _facade(ctx, B, cam, sim) {
     const F = FEEL.facade;
     const sc = this.scale;
@@ -2416,13 +2458,13 @@ export class Renderer {
       // `memoryOf` times the luminance of a fresh one in whatever palette it is
       // drawn in. Solve for the scale that puts it there and the relationship
       // holds in all six — and in the seventh nobody has written yet.
-      const aL = Math.max(1, lumOf(B.accent));
+      const aL = Math.max(1, lumOf(MEMORY_GOLD));
       const mL = Math.max(1, lumOf(MEMORY_GOLD));
       const want = aL * FEEL.tower.memoryOf;          // target luminance when fully cool
       const fade = 1 - cool * (1 - clamp(want / mL, 0.05, 1));
-      let cr = lerp(B.accent[0], MEMORY_GOLD[0], cool) * fade;
-      let cg = lerp(B.accent[1], MEMORY_GOLD[1], cool) * fade;
-      let cb = lerp(B.accent[2], MEMORY_GOLD[2], cool) * fade;
+      let cr = lerp(MEMORY_GOLD[0], MEMORY_GOLD[0], cool) * fade;
+      let cg = lerp(MEMORY_GOLD[1], MEMORY_GOLD[1], cool) * fade;
+      let cb = lerp(MEMORY_GOLD[2], MEMORY_GOLD[2], cool) * fade;
       // COOLING MAY NEVER BRIGHTEN. This is the rule the palettes kept breaking.
       //
       // MEMORY_GOLD is one fixed colour and some accents are darker than it —
@@ -2663,6 +2705,14 @@ export class Renderer {
         }
       }
       ctx.restore();
+      if (s.order === total - 1 && st !== EROSION.MEMORY && !_cam.mon) {
+        ctx.save();
+        ctx.fillStyle = rgb(MEMORY_GOLD, 1);
+        ctx.font = `${FEEL.climb.stoneLabelPx * this.dpr}px ui-monospace, monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText(`#${s.order + 1}`, sx, sy - (s.hh + FEEL.body.h) * this.scale);
+        ctx.restore();
+      }
     }
   }
 
@@ -2805,10 +2855,10 @@ export class Renderer {
    * landing the physics will refuse.
    *
    * @param {CanvasRenderingContext2D} ctx
-   * @param {BiomeSlot} B
+   * @param {BiomeSlot} _B
    * @param {Sim} sim
    */
-  _shadow(ctx, B, sim) {
+  _shadow(ctx, _B, sim) {
     const S = FEEL.shadow;
     const b = sim.body;
     const bx = b.rx ?? b.x, by = b.ry ?? b.y;
@@ -2857,6 +2907,7 @@ export class Renderer {
     ctx.restore();
   }
 
+  /** @param {CanvasRenderingContext2D} ctx @param {BiomeSlot} B */
   _rings(ctx, B) {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < this.ringN; i++) {
@@ -3015,6 +3066,8 @@ export class Renderer {
    * @param {BiomeSlot} B
    * @param {Sim} sim
    * @param {UiState} ui
+   * @param {Input|null} input
+   * @param {number} dt
    */
   _player(ctx, B, sim, ui, input, dt) {
     const b = sim.body;
@@ -3119,6 +3172,19 @@ export class Renderer {
     ctx.scale(sx, sy);
 
     // The climber, on the rig: head, torso, two arms, two legs.
+    const scarf = FEEL.climb;
+    const tail = -Math.sign(b.vx || this.figLean || 1);
+    const flutter = Math.sin(this.figT * scarf.scarfSpeed) * scarf.scarfWave * hh;
+    ctx.save();
+    ctx.fillStyle = rgb(MEMORY_GOLD, 1);
+    ctx.beginPath();
+    ctx.moveTo(0, -hh * 0.55);
+    ctx.quadraticCurveTo(tail * hw * 1.5, -hh * 0.7 + flutter,
+      tail * hw * scarf.scarfLength, -hh * 0.2 + flutter);
+    ctx.lineTo(tail * hw * scarf.scarfLength, -hh * 0.02 + flutter);
+    ctx.quadraticCurveTo(tail * hw * 1.5, -hh * 0.45 + flutter, 0, -hh * 0.4);
+    ctx.fill();
+    ctx.restore();
     const L = this.figLean + sway, C = this.figCrouch, S = this.figStretch;
     const LK = this.figLook + sway * 0.5;
     // A DARK BODY WITH A BRIGHT CORE, NOT A BRIGHT BODY.
