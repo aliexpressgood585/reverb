@@ -24,6 +24,23 @@
  */
 
 const EN = {
+  "guide.drag": "DRAG UP TO AIM · RELEASE TO JUMP",
+  "guide.release": "RELEASE TO JUMP",
+  "guide.stone": "YOUR GOLDEN STONE IS A STEP. LAND ON IT.",
+  "guide.stood": "YOUR PAST SELF LIFTED YOU HIGHER",
+  "hud.goal": "NEXT {n}m",
+  "hud.record": "BEST {n}m",
+  "hud.challenge": "CHALLENGE A FRIEND",
+  "hud.target": "FRIEND’S TARGET {n}m",
+  "hud.exitChallenge": "LEAVE CHALLENGE",
+  "climb.perfect": "PRECISE LANDING",
+  "climb.milestone": "{n}m REACHED",
+  "climb.stone": "STONE #{n} LIFTED YOU HIGHER",
+  "climb.won": "FRIEND’S TARGET REACHED",
+  "challenge.text": "I reached {n}m in CAIRN. Same starting tower. Can you reach me?",
+  "challenge.copy": "COPY THIS LINK TO CHALLENGE A FRIEND",
+  "challenge.close": "CLOSE",
+
   'lang.name': 'English',
   'title.tagline': 'EVERY DEATH LEAVES A STONE',
   'title.begin': 'TOUCH TO BEGIN',
@@ -91,6 +108,23 @@ const EN = {
 
 /** @type {Record<Key, string>} */
 const HE = {
+  "guide.drag": "גרור למעלה לכיוון · שחרר לקפיצה",
+  "guide.release": "שחרר כדי לקפוץ",
+  "guide.stone": "האבן הזהובה שלך היא מדרגה. נחת עליה.",
+  "guide.stood": "הניסיון הקודם שלך הרים אותך גבוה יותר",
+  "hud.goal": "היעד הבא {n} מ׳",
+  "hud.record": "שיא {n} מ׳",
+  "hud.challenge": "אתגר חבר",
+  "hud.target": "יעד החבר {n} מ׳",
+  "hud.exitChallenge": "יציאה מהאתגר",
+  "climb.perfect": "נחיתה מדויקת",
+  "climb.milestone": "הגעת ל־{n} מ׳",
+  "climb.stone": "אבן מס׳ {n} הרימה אותך גבוה יותר",
+  "climb.won": "הגעת ליעד של החבר",
+  "challenge.text": "הגעתי ל־{n} מטר ב־CAIRN. אותו מגדל התחלתי. תצליח להגיע אליי?",
+  "challenge.copy": "העתק את הקישור כדי לאתגר חבר",
+  "challenge.close": "סגירה",
+
   'lang.name': 'עברית',
   'title.tagline': 'כל מוות משאיר אבן',
   'title.begin': 'גע כדי להתחיל',

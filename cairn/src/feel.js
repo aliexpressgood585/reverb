@@ -60,6 +60,23 @@ export const FEEL = {
   // one source of truth per number. Two of the requested dials are not here
   // because they are not canvas values at all — the title's opacity and the CTA's
   // pulse live in `style.css` as `--title-op` and `--cta-pulse`.
+  climb: {
+    goalStep: 100,
+    maxTarget: 1000000,
+    perfectFraction: 0.22,
+    feedbackSeconds: 1.6,
+    stoneSeconds: 3.5,
+    tutorialJumps: 3,
+    scarfLength: 2.8,
+    scarfWave: 0.22,
+    scarfSpeed: 5,
+    goalWidth: 35,
+    goalGlow: 0.18,
+    stoneLabelPx: 11,
+    hazeAlpha: 0.11,
+    hazeWarmAt: 450,
+    hazeWarmSpan: 300,
+  },
   visual: {
     // THE PLAYER.
     //
@@ -69,15 +86,16 @@ export const FEEL = {
     // are deliberately NOT scaled: a corpse is a platform, and drawing a platform
     // wider than it catches is the one lie this renderer refuses (see the
     // crest-width note in `_solids`).
+    vignette: 0.48,
     playerScale: 1.18,
     playerCoreIntensity: 0.95,  // the white point at the chest
     // The pool the figure throws on the wall behind it. Small: the reference
     // paintings light almost nothing in the air, and a pale body inside a wide
     // warm pool has nothing left to be brighter than.
-    playerHalo: 0.13,
+    playerHalo: 0.21,
     // The lit edge. Near nothing now — a rim exists to stop a DARK silhouette
     // reading as a hole cut in the scene, and the body is no longer dark.
-    playerRimIntensity: 0.10,   // the single lit edge. One side only.
+    playerRimIntensity: 0.22,   // the single lit edge. One side only.
     playerContactShadow: 0.55,  // the shadow directly underfoot
     // The core breathes while you stand. ONLY the core — the body stays still
     // enough that this can never read as input lag.
@@ -105,9 +123,9 @@ export const FEEL = {
     // front face and a stronger shadow under the lip. The tier separation is
     // untouched — it was already carrying its job — it just runs over a much
     // smaller range of light.
-    activePlatformGlow: 0.40,   // the ledge under your feet
-    inactivePlatformGlow: 0.14, // every other ledge
-    platformFace: 0.62,         // the front of the slab, which is now the part
+    activePlatformGlow: 0.55,   // the ledge under your feet
+    inactivePlatformGlow: 0.28, // every other ledge
+    platformFace: 0.78,         // the front of the slab, which is now the part
                                 // of a platform you actually see
     platformShadow: 0.78,       // the dark band under a crest, which is what
                                 // makes a slab read as having a front face
@@ -123,7 +141,7 @@ export const FEEL = {
     // largest single difference between this game and the paintings it is aimed
     // at — see `_background`. Measured side by side: the reference is 54.3%
     // below luminance 12; the build was 9.4%.
-    wallDim: 0.42,
+    wallDim: 0.60,
     // And the other half of the same problem: a blurred bright-pass added to
     // every pixel. See the note at the `post.render` call in main.js.
     bloom: 0.26,
@@ -138,7 +156,7 @@ export const FEEL = {
     // reference is dusty stone catching warm light; the build was neon amber on
     // black. `crestPeak` cools the lip and `crestWash` mixes it toward the
     // rock's own colour, which is what turns a strip light back into a surface.
-    crestPeak: 0.66,
+    crestPeak: 0.88,
     // Small, and it was 0.34. Washing a lit edge toward `rock` desaturates it,
     // but ASH's rock is WARM BONE — nearly white — so a third of the way there
     // turned the amber lips pale, which the reference's are emphatically not.
@@ -148,7 +166,7 @@ export const FEEL = {
     // The lit seam between stones — where the frame's hottest pixels actually
     // are. See the note in `_solids`; scales every erosion stage together so
     // the ladder keeps its order.
-    seamPeak: 0.70,
+    seamPeak: 0.90,
     // Global purity trim. See the note at the `post.render` call: the reference
     // is muted stone, and every palette's own `sat` multiplies the other way.
     satTrim: 0.80,
