@@ -3,6 +3,7 @@ import { Sim, PHASE, EV, CLOSE, predict, solidHalfWidth, erosionOf,
   landmarkOf, landmarksIn } from './src/sim.js';
 import { Input } from './src/input.js';
 import { Renderer, Camera } from './src/render.js';
+import { CityRenderer } from './src/city.js';
 import { Post } from './src/post.js';
 import { Audio } from './src/audio.js';
 import * as Store from './src/store.js';
@@ -98,17 +99,19 @@ const view = /** @type {HTMLCanvasElement} */ (need('view'));
 const scene = document.createElement('canvas');
 
 const sim = new Sim(0x1a2b3c);
-const renderer = new Renderer(scene);
+const cityCanvas = document.createElement('canvas');
+const city = CityRenderer.create(cityCanvas);
+const renderer = new Renderer(scene, !city);
+const renderedScene = city ? cityCanvas : scene;
 const camera = new Camera();
 const audio = new Audio();
 const post = Post.create(view);
 
 if (!post) {
-  // No WebGL: promote the 2D canvas into the page and skip the grade.
-  view.replaceWith(scene);
-  scene.id = 'view';
+  view.replaceWith(renderedScene);
+  renderedScene.id = 'view';
 }
-const surface = /** @type {HTMLElement} */ (post ? view : scene);
+const surface = /** @type {HTMLElement} */ (post ? view : renderedScene);
 surface.style.touchAction = 'none';
 
 const input = new Input(surface, sim);
@@ -184,10 +187,11 @@ const el = {
 };
 
 function resize() {
-  dpr = Math.min(devicePixelRatio || 1, 2);
+  dpr = Math.min(devicePixelRatio || 1, city ? FEEL.city.dpr : 2);
   const w = innerWidth;
   const h = innerHeight;
   renderer.resize(w, h, dpr);
+  if (city) city.resize(w, h, dpr);
   if (post) post.resize(w, h, dpr);
 }
 addEventListener('resize', resize);
@@ -834,7 +838,9 @@ function step(now, real) {
   // there — one smoothed value, so the light and the bed never disagree about
   // how well the run is going.
   renderer.step(real, sim.momentum / FEEL.momentum.max);
-  const B = renderer.draw(sim, camera, input, ui, real, reduced);
+  const B = city
+    ? city.draw(sim, camera, input, ui, real, reduced, renderer)
+    : renderer.draw(sim, camera, input, ui, real, reduced);
 
   if (post) {
     const speed = clamp(Math.abs(b.vy) / FEEL.maxFallSpeed, 0, 1);
@@ -842,7 +848,7 @@ function step(now, real) {
       grade.lift[i] = (B.bgTop[i] / 255) * 0.35 + ui.wash * (B.accent[i] / 255) * 0.10;
       grade.gain[i] = 1 + (B.accent[i] / 255 - 0.5) * 0.06;
     }
-    post.render(scene, {
+    post.render(renderedScene, {
       time: now / 1000,
       speed: reduced ? 0 : speed,
       // BLOOM IS WHAT WAS FILLING THE FRAME.
@@ -858,10 +864,10 @@ function step(now, real) {
       // in a run and is supposed to blow the frame out.
       bloom: FEEL.visual.bloom + ui.bestFlash * 0.55,
       grain: reduced ? 0 : 0.03,
-      barrel: reduced ? 0 : 0.035,
+      barrel: city || reduced ? 0 : 0.035,
       // Heavier: the reference frames go to black at the edges, and a facade
       // still visible in the corners is a frame with no darkness to fall into.
-      vignette: FEEL.visual.vignette,
+      vignette: city ? FEEL.city.vignette : FEEL.visual.vignette,
       flash: ui.flash * 0.85,
       lift: grade.lift,
       gain: grade.gain,
@@ -1211,7 +1217,7 @@ const api = {
  * so it measures the graded image rather than the raw scene.
  */
 /** @type {any} */ (window).__stats = function () {
-  const src = post ? view : scene;
+  const src = post ? view : renderedScene;
   const s = document.createElement('canvas');
   s.width = 160; s.height = 340;
   const c = s.getContext('2d', { willReadFrequently: true });
