@@ -360,19 +360,30 @@ function crossedRecord() {
 // ------------------------------------------------------------------ cards
 
 let introShown = false;
+/**
+ * THE TITLE IS ALREADY IN THE DOCUMENT; THIS ADOPTS IT.
+ *
+ * `index.html` ships the wordmark as real markup so it paints with the page
+ * rather than waiting for this bundle — on a cold 3G connection that moved the
+ * moment a player first sees a game from 2055 ms to the first paint. The nodes
+ * are reused rather than replaced, so nothing flashes when the engine arrives;
+ * only the text is re-set, which is what puts the player's own language on a
+ * card that shipped in English.
+ *
+ * Dropping `.boot` is the handover: until it is gone the card is a picture of a
+ * game that is still loading, and afterwards it is the live title screen.
+ */
 function showTitle() {
   el.card.className = introShown ? 'on' : 'on intro';
   introShown = true;
-  el.card.replaceChildren();
-  const h = document.createElement('h1');
+  const h = el.card.querySelector('h1') ?? el.card.appendChild(document.createElement('h1'));
+  let tag = el.card.querySelector('.tag');
+  if (!tag) { tag = document.createElement('p'); tag.className = 'tag'; el.card.append(tag); }
+  let go = el.card.querySelector('.go');
+  if (!go) { go = document.createElement('p'); go.className = 'go'; el.card.append(go); }
   h.textContent = t('menu.title');
-  const tag = document.createElement('p');
-  tag.className = 'tag';
   tag.textContent = t('title.tagline');
-  const go = document.createElement('p');
-  go.className = 'go';
   go.textContent = t('title.begin');
-  el.card.append(h, tag, go);
 }
 function hideCard() { el.card.className = ''; }
 
@@ -1190,6 +1201,7 @@ addEventListener('beforeinstallprompt', installManifest);
 // the game itself is using.
 const api = {
   sim, input, camera, renderer, audio, post, FEEL, Store, predict,
+  city,
   begin, frame, update, ui, monument, teach, setMode, panel,
   // Momentum and close calls are invisible by design, so the only way to check
   // they do anything is to read the sim's own vocabulary rather than a copy of

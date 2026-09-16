@@ -156,6 +156,17 @@ html, body {
 
 #card.on { display: flex; }
 
+/* THE CARD BEFORE THE ENGINE EXISTS.
+   `index.html` ships the title as markup so it paints with the document instead
+   of waiting for the bundle — on cold 3G that is the difference between seeing a
+   game at 2055 ms and seeing it on first paint. But for those few hundred
+   milliseconds a tap has nothing to reach: the input handler is created by the
+   bundle. So the invitation holds still and sits back until `showTitle()` drops
+   `.boot`, at which point it starts breathing and means what it says.
+   A call to action that pulses while nothing can answer it is a lie. */
+#card.boot .go { animation: none; opacity: 0.4; }
+#card.boot .go::after { animation: none; opacity: 0.25; }
+
 #card h1 {
   font-family: var(--font-display);
   /* A QUARTER LARGER, AND STILL THIN.

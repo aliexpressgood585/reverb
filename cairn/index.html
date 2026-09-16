@@ -60,7 +60,22 @@
 <p id="feedback" role="status" aria-live="polite"></p>
 <button id="challenge" class="corner" type="button"></button>
 <div id="challenge-link" role="dialog" aria-labelledby="challenge-caption" hidden><p id="challenge-caption"></p><input readonly aria-label="Challenge link" /><button type="button"></button></div>
-<div id="card"></div>
+<!-- THE TITLE IS IN THE DOCUMENT, NOT BUILT BY THE BUNDLE.
+     Measured on a cold 3G connection, the wordmark used to appear at 2055 ms
+     because `showTitle()` lives in main.js and could not run until the whole
+     engine — Three.js included — had downloaded and parsed. A player on a slow
+     phone stared at a black rectangle for two seconds before seeing that this
+     was a game at all.
+     Marked up here it paints with the document. `showTitle()` still owns it and
+     still replaces the text once the language is known; this is the English
+     default standing in until then, not a second source of truth. The `.boot`
+     class is dropped the moment the engine is ready, which is what turns the
+     invitation from "loading" into "touch to begin". -->
+<div id="card" class="on intro boot">
+  <h1>CAIRN</h1>
+  <p class="tag">EVERY DEATH LEAVES A STONE</p>
+  <p class="go">TOUCH TO BEGIN</p>
+</div>
 <p id="toast"></p>
 <div id="best"></div>
 <p id="streak"></p>

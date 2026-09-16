@@ -9,6 +9,8 @@ import { EROSION, erosionOf, solidHalfWidth } from './sim.js';
 /** @typedef {import('./render.js').Renderer} Effects */
 /** @typedef {import('./input.js').Input} Input */
 const C = FEEL.city;
+/** The arc of a thumb that is not on the glass. Read, never written. */
+const EMPTY_ARC = /** @type {number[]} */ ([]);
 /** Stable decoration only; never touches the world's random generator.
  * @param {number} n */
 const hash = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
@@ -286,9 +288,19 @@ export class CityRenderer {
     this.camera.aspect=w/h;
   }
 
-  /** @param {Sim} sim @param {GameCamera} cam @param {Input} input
+  /** @param {Sim} sim @param {GameCamera} cam @param {Input|null} input
    * @param {UiState} ui @param {number} dt @param {boolean} reduced @param {Effects} fx */
   draw(sim,cam,input,ui,dt,reduced,fx) {
+    // A NULL INPUT IS LEGAL, as it is for the 2D renderer this replaced — that
+    // one is typed `Input|null` and every offline harness passes null. This
+    // method dereferenced `input.aiming` directly, so the whole test surface
+    // (perf probes, frame captures, the erosion gate) threw on its first call.
+    // Not reachable from the live loop, which always holds a real Input; that is
+    // exactly why it survived review. Rather than substitute a fake Input, the
+    // four fields actually read are lifted out once, so the type stays honest
+    // about what a renderer needs from the player's thumb.
+    const aiming=!!input?.aiming, aimVx=input?.vx??0;
+    const arc=input?.arc??EMPTY_ARC, landing=input?.landing??null;
     this.time+=dt;
     const b=sim.body, B=biomeAt(Math.max(0,b.y),this.biome);
     const cx=cam.x-cam.shakeX;
@@ -340,6 +352,12 @@ export class CityRenderer {
       } else if(si<C.maxStones) {
         const stage=erosionOf(s,sim);
         this.put(this.stones,si,s.x,s.y,-2,hw*2,s.hh*2,4,s.rot*0.3);
+        // THE BODY AGES, not only the seam above it. Every corpse is one
+        // instance of one shared material, so an instance colour is the only
+        // place the ladder can live on the stone itself — and without it THIN
+        // and TOP rendered pixel-identically. See FEEL.city.stoneLadder.
+        this.color.setScalar(C.stoneLadder[stage]??C.stoneLadder[2]);
+        this.stones.setColorAt(si,this.color);
         this.put(this.seams,si,s.x,top,0,hw*2,stage===EROSION.FRESH?0.45:0.18,0.15);
         this.color.setScalar(stage===EROSION.FRESH?1:stage===EROSION.THIN?0.45:0.2);
         this.seams.setColorAt(si,this.color);
@@ -356,6 +374,7 @@ export class CityRenderer {
     this.finish(this.stones,si); this.finish(this.seams,si); this.finish(this.memories,mi);
     if(this.lips.instanceColor)this.lips.instanceColor.needsUpdate=true;
     if(this.seams.instanceColor)this.seams.instanceColor.needsUpdate=true;
+    if(this.stones.instanceColor)this.stones.instanceColor.needsUpdate=true;
     const x=b.rx??b.x, y=b.ry??b.y;
     if(b.grounded&&!this.lastGrounded) {this.landingAt=this.time;this.landingX=x;this.landingY=y-FEEL.body.h/2;}
     this.lastGrounded=b.grounded;
@@ -366,10 +385,10 @@ export class CityRenderer {
     this.robot.rotation.z=reduced?0:T.MathUtils.clamp(-b.vx*0.002,-0.18,0.18);
     this.robot.rotation.y=T.MathUtils.clamp(b.vx*0.008,-0.45,0.45);
     this.robot.visible=ui.dead===0;
-    if(this.head) this.head.rotation.y=T.MathUtils.clamp(input.aiming?input.vx*0.009:b.vx*0.009,-0.5,0.5);
+    if(this.head) this.head.rotation.y=T.MathUtils.clamp(aiming?aimVx*0.009:b.vx*0.009,-0.5,0.5);
     for(let i=0;i<2;i++) {
       const side=i?1:-1;
-      this.arms[i].rotation.z=side*(input.aiming?0.32:!b.grounded?0.75:0.1+pulse*0.3);
+      this.arms[i].rotation.z=side*(aiming?0.32:!b.grounded?0.75:0.1+pulse*0.3);
       this.legs[i].rotation.z=!b.grounded?side*0.19:0;
       this.legs[i].rotation.x=!b.grounded?side*0.2:0;
     }
@@ -377,21 +396,21 @@ export class CityRenderer {
     if(this.eye) {
       const blink=reduced?1:(Math.sin(this.time*C.blinkRate)>0.995?0.12:1);
       this.eye.scale.y=blink;
-      this.eye.position.x=T.MathUtils.clamp((input.aiming?input.vx:b.vx)*0.006,-0.22,0.22);
+      this.eye.position.x=T.MathUtils.clamp((aiming?aimVx:b.vx)*0.006,-0.22,0.22);
     }
     for(let i=0;i<this.ribbon.length;i++) {
       this.ribbon[i].rotation.z=reduced?-0.08:Math.sin(this.time*C.ribbonSpeed-i*0.65)*C.ribbonWave-b.vx*0.001;
     }
     let ai=0;
-    if(input.aiming) for(let i=0;i<input.arc.length-1&&ai<C.maxArcPoints;i+=2) {
-      this.put(this.arc,ai++,input.arc[i],input.arc[i+1],0.2,0.28,0.28,0.28);
+    if(aiming) for(let i=0;i<arc.length-1&&ai<C.maxArcPoints;i+=2) {
+      this.put(this.arc,ai++,arc[i],arc[i+1],0.2,0.28,0.28,0.28);
     }
     this.finish(this.arc,ai);
-    this.previewStone.visible=input.aiming&&sim.predictPeak.dies;
+    this.previewStone.visible=aiming&&sim.predictPeak.dies;
     this.previewStone.position.set(sim.predictPeak.x,sim.predictPeak.y-FEEL.tower.corpseH/2,-2);
     this.previewStone.scale.set(FEEL.tower.corpseW,FEEL.tower.corpseH,4);
-    this.halo.visible=input.aiming&&!!input.landing;
-    if(input.landing) {this.halo.position.set(input.landing.x,input.landing.y+input.landing.hh,0.3);this.halo.scale.set(4,0.7,1);}
+    this.halo.visible=aiming&&!!landing;
+    if(landing) {this.halo.position.set(landing.x,landing.y+landing.hh,0.3);this.halo.scale.set(4,0.7,1);}
     let ri=0;
     if(!reduced) for(let i=0;i<fx.ringN&&ri<32;i++) {
       const o=i*4,life=fx.rings[o+2]/(FEEL.juice.ringMs/1000),radius=2+life*10;

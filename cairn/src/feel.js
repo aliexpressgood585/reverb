@@ -93,6 +93,24 @@ export const FEEL = {
     gold: 0xffc56b,
     night: 0x0b1028,
     phases: [0x132a30, 0x18383b, 0x303148, 0x101d29, 0x3c272c, 0x24484c],
+
+    // HOW BRIGHT A CORPSE'S BODY IS AT EACH RUNG OF THE EROSION LADDER,
+    // as a multiplier on the shared gold material: FRESH, THIN, TOP.
+    //
+    // Every corpse is one instance of one material, so without this the body
+    // does not age at all and the only tell is the seam above it. Measured
+    // (`npm run city`), that made THIN and TOP render IDENTICALLY — same peak
+    // brightness to 0.1, same lit area to 3 pixels in 2,220 — because the seam
+    // is a thin bright bar that loses to the body's own highlight, so the
+    // brightest thing on screen was the same unaged body in both cases. THIN
+    // still holds your weight and TOP is a ledge you cannot cling to; a player
+    // who cannot tell them apart is being asked to guess.
+    //
+    // The 2D renderer carried the ladder on the body for exactly this reason.
+    // These dim the DIFFUSE colour only — the emissive gold floor is untouched,
+    // so an old stone goes dull rather than invisible and the tower still reads
+    // as a tower at night.
+    stoneLadder: [1, 0.58, 0.3],
   },
   climb: {
     goalStep: 100,

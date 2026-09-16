@@ -1430,3 +1430,140 @@ And the single-hue direction stays until a person has looked at it. Everything
 is amber-on-amber with only the player's diamond off the hue, and cooling the
 rock away from the accent would separate the layers — but that is the whole art
 direction, it is taste rather than a defect, and it is very easy to make worse.
+
+## 38. The renderer players actually see had no gate at all
+
+A 3D city renderer arrived from a separate fork and took over the frame. It is
+good work and it stays. But every visual gate in this repository points at
+`renderer.draw` — the Canvas2D path — and since the fork landed that function is
+not called on any device with WebGL. Fourteen acceptance tests, a landmark check,
+a layer audit and a palette check were all guarding a renderer almost nobody
+sees, and the one they do see had no coverage whatsoever.
+
+### The gate could not even be written, because the renderer crashed on it
+
+`city.draw` dereferenced `input.aiming` directly. The 2D renderer it replaced is
+typed `Input|null` and every offline harness in `scripts/` passes null, so the
+first line of any probe threw. It was never reachable from the live loop, which
+always holds a real Input — which is exactly why it survived review. The four
+fields a renderer actually reads off a thumb are lifted out once now, so the
+signature stays honest instead of a fake Input being handed in to keep a type
+checker quiet.
+
+### Where the erosion tell lives in 3D, and where the instrument must look
+
+Two earlier attempts at this gate reported a tidy, confident, completely false
+result. The first drew the WebGL canvas into a 2D canvas and read that — a
+context without `preserveDrawingBuffer` has its drawing buffer cleared at
+composite, so it was measuring nothing and would have condemned the renderer for
+it. The second used `gl.readPixels` correctly but aimed its sample boxes with
+`city.camera`, which is only positioned INSIDE `draw`; the projection ran against
+a camera that had not been moved yet.
+
+The version that works has no projection in it at all. One corpse per frame,
+alone, at the point the camera is looking at; each frame differenced against a
+control frame of the identical scene with no corpse in it; and the stone is then
+found FROM the difference — the changed pixels ARE the stone. Nothing is aimed,
+so nothing can be aimed wrongly, and a frame that captured nothing reports
+"blind" instead of reporting a tie.
+
+It found a real defect on the first honest run, in all six palettes:
+
+```
+                       FRESH    THIN     TOP   MEMORY
+before   peak added    173.4   147.5   147.5     79.5
+         lit area       3209    2224    2221     1477
+after    peak added    173.4   130.2   111.4     79.5
+```
+
+THIN and TOP were **pixel-identical** — same peak to 0.1, same area to three
+pixels in 2,220. The cause: `city.draw` puts every corpse into one InstancedMesh
+with one shared gold material, so the body does not age at all, and the ladder
+was carried entirely by the seam above it — a thin bright bar that loses to the
+body's own highlight. The brightest thing on screen was the same unaged body in
+both cases.
+
+THIN still holds your weight and TOP is a ledge you cannot cling to. A player who
+cannot tell them apart is being asked to guess, on the one question this game is
+about. `FEEL.city.stoneLadder` puts the ladder back on the body as an instance
+colour, diffuse only, so an old stone goes dull rather than invisible.
+
+### A performance claim, withdrawn
+
+A first probe wrapped `city.draw` in `performance.now()` and reported 6 ms empty
+against 30 ms with a full tower, and a proposal was written on top of it. The
+control refused: hiding the stones made the frame SLOWER (2.5 → 16 ms) and hiding
+the skyline slower still (28 ms). Hiding work cannot cost time. WebGL calls are
+asynchronous, so timing them from JavaScript measures submission to the command
+queue, not execution — a tight loop just measures how far the GPU has fallen
+behind. The figure was wrong and was withdrawn before it reached the user twice.
+
+Measured instead as the interval between real animation frames in the live loop,
+which is what a player feels and which queue depth cannot fake:
+
+```
+empty tower    16.0 fps   median 62.4 ms
+130 corpses    13.4 fps   median 74.4 ms      a full tower costs -16%
+```
+
+The proposal it was built on — that corpses need instancing and culling — was
+wrong twice over: `city.js` already does both. Software raster here, so the
+absolute numbers mean nothing; the ratio is the finding, and it is fine.
+
+### Time to interactive, and the part of it that was free
+
+The bundle quadrupled when Three.js arrived, which LOOKS like a load problem. The
+budget is about the first interaction, not the byte count, so all three were
+measured on a cold cache over throttled connections:
+
+```
+                       title    ready   playable
+4G  4Mbit/40ms          90ms    536ms     1352ms
+3G  1.6Mbit/150ms      198ms   1294ms     2078ms      budget 2000ms
+```
+
+The title used to appear at 2055 ms on 3G — a black rectangle for two seconds —
+for no reason at all: the wordmark is DOM, and it was being built by `main.js`,
+so it could not paint until the whole engine including Three.js had downloaded
+and parsed. It ships as markup in `index.html` now and paints with the document.
+`showTitle()` adopts those nodes rather than replacing them, so nothing flashes,
+and the call to action holds still until the engine can answer a tap.
+
+Playable is still 78 ms over budget on 3G. That last gap is not download — 784 ms
+elapse between the engine existing and the first started frame, which is shader
+compilation, and this harness is a software rasteriser where that is far slower
+than on a phone. Closing it properly means splitting Three.js out of the critical
+path, which is a real architectural change and is not being done on the strength
+of a number measured on swiftshader.
+
+### Acceptance 13 is red, it has been red for a long time, and this is why
+
+```
+SIGNAL   body over ground 86.1 > 13.1 > -2.2 > -0.1    BACKWARDS at TOP
+VOID     body over ground 29.1 >  5.1 >  1.1 >  0.0    closest pair 2.3
+```
+
+Identical to the digit at `ad4a4f9` (before the 3D fork), at `154b57f` (after it)
+and with everything in this section applied — so it is neither caused nor changed
+by any of it. It is older debt, and it is worth stating plainly rather than
+leaving as a failing line in a log.
+
+The test scores what a body ADDS to the frame over a control of the same wall
+without it, and requires that to fall monotonically with decay. That model was
+correct when a corpse was a lit amber figure. §16 then moved the art the other
+way — "a stone is dark rock, the light lives in the seam" — and a dark stone in
+front of a lit wall SUBTRACTS light. In SIGNAL the wall behind the sample is at
+23.5 and a TOP body brings it to 21.3, so the most legible thing in the frame, a
+silhouette, scores negative; in VOID both TOP and MEMORY sit within about one
+luminance point of the wall and the box mean cannot separate them. The `shelf`
+term is the right one and counts pixels over 120, which a seam at 0.46 alpha over
+faded gold never reaches.
+
+So the gate's premise and the art direction now contradict each other, and
+satisfying the gate as written means turning the stones back into lit shapes —
+which was rejected against the concept paintings, on purpose. The fix is to score
+SEPARATION against the local background in either direction, plus the seam term
+at a weight that reflects how small a seam is, rather than "brighter means more
+alive". That is a redesign of the test, it must not be done in the same pass as a
+change that would benefit from it being weaker, and it is not done here. The 3D
+path — the one every WebGL device runs — now has its own gate and passes it.
