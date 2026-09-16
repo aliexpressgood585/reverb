@@ -68,6 +68,7 @@ export class CityRenderer {
     this.struts = this.instances(this.box, this.dark, C.maxPlatforms);
     this.updrafts = this.instances(this.box, new T.MeshBasicMaterial({color:C.cyan,transparent:true,opacity:0.12,depthWrite:false}), C.maxPlatforms);
     this.stones = this.instances(this.round, this.gold, C.maxStones);
+    this.lanterns = this.instances(new T.CircleGeometry(1,16), new T.MeshBasicMaterial({color:C.gold,toneMapped:false}), C.maxStones);
     this.seams = this.instances(this.box, new T.MeshBasicMaterial({ color: C.gold, toneMapped: false }), C.maxStones);
     this.memories = this.instances(new T.OctahedronGeometry(1), new T.MeshBasicMaterial({color:C.gold,wireframe:true,transparent:true,opacity:0.22}), C.maxStones);
     this.city = new T.Group(); this.scene.add(this.city);
@@ -127,34 +128,56 @@ export class CityRenderer {
   }
 
   buildRobot() {
-    this.torso = this.part(this.robot,this.armor,[2.5,2.15,1.65],[0,3.05,-0.7]);
+    // THE LANTERN KEEPER: salvaged ivory shell, one amber lens, a repair arm,
+    // and a long signal ribbon. Readable through silhouette at phone scale.
+    const ivory = new T.MeshStandardMaterial({color:0xe4d9b9,metalness:0.22,roughness:0.62});
+    const copper = new T.MeshStandardMaterial({color:0xb86e48,metalness:0.72,roughness:0.4});
+    const coat = new T.MeshStandardMaterial({color:0x245957,roughness:0.86});
+    const lamp = new T.MeshBasicMaterial({color:0xffdc8a,toneMapped:false});
+    this.torso = this.part(this.robot,coat,[2.2,2.1,1.6],[0,2.95,-0.65]);
+    this.part(this.robot,copper,[1.8,0.3,1.7],[0,2.2,-0.65]);
     this.part(this.robot,this.dark,[1.65,0.65,1.2],[0,1.85,-0.6]);
-    this.part(this.robot,this.dark,[1.6,1.6,1],[0,3.15,-1.85]);
-    this.head = new T.Group(); this.head.position.set(0,4.4,-0.65); this.robot.add(this.head);
-    this.part(this.head,this.armor,[2.65,1.65,1.85],[0,0.5,0]);
-    this.part(this.head,this.dark,[2.35,0.85,0.25],[0,0.5,0.98]);
-    for (const side of [-1,1]) {
-      this.part(this.head,this.cyan,[0.52,0.22,0.12],[side*0.58,0.52,1.14]);
-      this.part(this.head,this.dark,[0.3,0.7,0.75],[side*1.4,0.48,0]);
-    }
-    this.part(this.robot,this.cyan,[0.75,0.42,0.12],[0,3.25,0.2]);
+    // A tiny glass courier canister and its three protective ribs.
+    this.part(this.robot,copper,[1.65,2.4,0.85],[0.15,3.3,-1.9]);
+    this.part(this.robot,lamp,[1.15,1.6,0.25],[0.15,3.4,-2.4]);
+    for(const x of [-0.5,0.15,0.8]) this.part(this.robot,this.dark,[0.1,2,0.12],[x,3.4,-2.55]);
+    this.head = new T.Group(); this.head.position.set(0,4.5,-0.65); this.robot.add(this.head);
+    const shell = new T.Mesh(this.sphere,ivory); shell.scale.set(1.65,1.3,1.1); this.head.add(shell);
+    const bezel = new T.Mesh(new T.TorusGeometry(0.92,0.18,8,32),copper);
+    bezel.position.set(0,0,0.95); this.head.add(bezel);
+    const glass = new T.Mesh(new T.CircleGeometry(0.86,32),this.dark);
+    glass.position.z=1.05; this.head.add(glass);
+    this.eye = new T.Mesh(new T.CircleGeometry(0.55,24),lamp);
+    this.eye.position.set(0,0,1.08); this.head.add(this.eye);
+    this.part(this.head,ivory,[1.75,0.21,0.35],[0,0.8,1.07]);
+    // An asymmetric antenna, a taped repair patch and a single shoulder plate.
+    this.part(this.head,copper,[0.14,1.15,0.14],[-1.14,1.12,0]);
+    this.part(this.head,lamp,[0.3,0.3,0.3],[-1.14,1.75,0]);
+    this.part(this.head,coat,[0.58,0.3,0.17],[1.18,-0.52,0.65]);
+    this.part(this.robot,ivory,[1.1,0.6,1.1],[-1.35,3.85,-0.65]);
     /** @type {T.Group[]} */ this.arms=[];
     /** @type {T.Group[]} */ this.legs=[];
     for (const side of [-1,1]) {
-      const arm=new T.Group(); arm.position.set(side*1.55,3.8,-0.65); this.robot.add(arm); this.arms.push(arm);
-      this.part(arm,this.dark,[0.62,0.6,0.72],[0,-0.2,0]);
-      this.part(arm,this.armor,[0.7,1.28,0.85],[0,-0.9,0]);
-      this.part(arm,this.dark,[0.65,0.62,0.75],[0,-1.67,0.1]);
+      const arm=new T.Group(); arm.position.set(side*1.4,3.65,-0.65); this.robot.add(arm); this.arms.push(arm);
+      this.part(arm,copper,[0.45,0.6,0.6],[0,-0.2,0]);
+      this.part(arm,side<0?coat:copper,[side<0?0.7:0.42,1.3,0.65],[0,-0.9,0]);
+      this.part(arm,this.dark,[0.7,0.58,0.75],[0,-1.64,0.1]);
       const leg=new T.Group(); leg.position.set(side*0.64,1.75,-0.6); this.robot.add(leg); this.legs.push(leg);
-      this.part(leg,this.dark,[0.65,0.7,0.7],[0,-0.3,0]);
-      this.part(leg,this.armor,[0.8,1.0,0.82],[0,-0.9,0]);
-      this.part(leg,this.dark,[0.95,0.45,1.5],[0,-1.53,0.26]);
-      this.part(leg,this.cyan,[0.7,0.10,0.12],[0,-1.52,1.03]);
+      this.part(leg,copper,[0.45,1.2,0.5],[0,-0.55,0]);
+      this.part(leg,ivory,[0.7,0.65,0.7],[0,-0.7,0]);
+      this.part(leg,this.dark,[1.05,0.45,1.6],[0,-1.53,0.26]);
+      this.part(leg,lamp,[0.6,0.1,0.12],[0,-1.52,1.08]);
     }
     this.scarf = new T.Group(); this.scarf.position.set(-0.8,4.0,-0.7); this.robot.add(this.scarf);
-    const cloth=new T.MeshStandardMaterial({color:0xff6729,emissive:0x571500,roughness:0.8,side:T.DoubleSide});
+    const cloth=new T.MeshStandardMaterial({color:0xf2754f,emissive:0x421608,roughness:0.9,side:T.DoubleSide});
     this.part(this.robot,cloth,[2.2,0.35,1.8],[0,4.02,-0.65]);
-    this.tail=this.part(this.scarf,cloth,[3.2,0.53,0.13],[-1.4,-0.2,0]);
+    /** @type {T.Group[]} */ this.ribbon=[];
+    let parent=this.scarf;
+    for(let i=0;i<5;i++) {
+      const joint=new T.Group(); joint.position.x=i===0?0:-0.9; parent.add(joint);
+      this.part(joint,cloth,[1.05,0.6-i*0.07,0.1],[-0.45,0,0]);
+      this.ribbon.push(joint); parent=joint;
+    }
   }
 
   buildCity() {
@@ -172,6 +195,11 @@ export class CityRenderer {
     map.magFilter=T.LinearFilter; map.minFilter=T.LinearMipmapLinearFilter;
     const facade=new T.MeshStandardMaterial({color:0xadc7e5,map,emissive:0x8ec3ec,emissiveMap:map,emissiveIntensity:0.42,metalness:0.35,roughness:0.65});
     const walls=new T.MeshStandardMaterial({color:0x172b45,metalness:0.55,roughness:0.5});
+    const ceramic=new T.MeshStandardMaterial({color:0x688985,metalness:0.18,roughness:0.82});
+    const patina=new T.MeshStandardMaterial({color:0x294f4b,metalness:0.48,roughness:0.72});
+    const copper=new T.MeshStandardMaterial({color:0xa6714e,metalness:0.6,roughness:0.56});
+    const keel=new T.ConeGeometry(1,1,4);
+    const arc=new T.TorusGeometry(1,0.025,5,48,Math.PI*1.45);
     /** @type {T.Group[]} */ this.towers=[];
     for(let i=0;i<C.buildingCount;i++) {
       const g=new T.Group();
@@ -180,25 +208,62 @@ export class CityRenderer {
       const x=COLUMN/2+side*(65+hash(i+70)*230);
       g.position.set(x,hash(i+100)*C.skylineSpan-C.skylineSpan/2,-65-band*105-hash(i+44)*80);
       g.userData.baseY=g.position.y;
-      const tower=new T.Mesh(this.box,[walls,walls,walls,walls,facade,walls]);
-      tower.scale.set(width,height,depth); g.add(tower);
-      this.part(g,walls,[width*0.77,7,depth*0.83],[0,height/2+3.5,0],false);
-      this.part(g,i%3?this.cyan:this.pink,[width*0.8,0.55,0.3],[0,height/2+7.2,depth/2],false);
+      const kind=i%3;
+      if(kind===0) {
+        // Twin ribs carry a suspended habitat, leaving an open vertical slit.
+        for(const side of [-1,1]) {
+          this.part(g,ceramic,[width*0.24,height,depth],[side*width*0.38,0,0],false);
+          this.part(g,facade,[width*0.23,height*0.76,0.3],[side*width*0.38,0,depth/2+0.2],false);
+        }
+        for(let deck=0;deck<4;deck++) {
+          this.part(g,copper,[width*1.14,2.6,depth*1.12],[0,(deck/3-0.5)*height*0.75,0],false);
+        }
+      } else if(kind===1) {
+        // Stacked seed-pod apartments with offset terraces, not a rectangular skyline.
+        this.part(g,patina,[width*0.22,height,depth*0.4],[0,0,0],false);
+        for(let deck=0;deck<5;deck++) {
+          const dx=(deck%2?1:-1)*width*0.16, yy=(deck/4-0.5)*height*0.75;
+          this.part(g,ceramic,[width,height*0.12,depth],[dx,yy,0]);
+          this.part(g,facade,[width*0.8,height*0.07,0.2],[dx,yy,depth/2+0.1],false);
+          this.part(g,patina,[width*1.15,1.4,depth*1.1],[dx,yy-height*0.065,0],false);
+        }
+      } else {
+        this.part(g,walls,[width*0.7,height,depth],[0,0,0],false);
+        this.part(g,facade,[width*0.7,height*0.85,0.2],[0,0,depth/2+0.1],false);
+        const crown=new T.Mesh(arc,copper); crown.scale.set(width*0.8,width*0.8,width*0.8);
+        crown.position.set(0,height/2,-depth/2); crown.rotation.z=0.4; g.add(crown);
+        this.part(g,ceramic,[width*1.3,4,depth*1.1],[0,height*0.3,0],false);
+      }
+      const hanging=new T.Mesh(keel,patina);
+      hanging.position.y=-height/2-12; hanging.rotation.z=Math.PI;
+      hanging.scale.set(width*0.48,24,depth*0.48);g.add(hanging);
+      // Hanging signal cables and warm beacons belong to the same world as the keeper.
       if(i%4===0) {
-        this.part(g,this.metal,[0.6,19,0.6],[0,height/2+16,0],false);
-        this.part(g,this.pink,[1.1,1.1,1.1],[0,height/2+26,0],false);
+        this.part(g,copper,[0.2,38,0.2],[width*0.35,-height/2-15,depth/2],false);
+        this.part(g,this.gold,[2,3,2],[width*0.35,-height/2-35,depth/2]);
       }
-      if(i%5===0) {
-        const ad=new T.Mesh(new T.PlaneGeometry(width*0.72,19),this.sign(i%2?'NOVA':'夜 / 07',i%2?'#35e9f4':'#fd46bb'));
-        ad.position.set(0,height*0.18,depth/2+0.2); g.add(ad);
+      if(i%7===0) {
+        const ad=new T.Mesh(new T.PlaneGeometry(width*0.5,12),this.sign(i%2?'POST / 09':'↑  CAIRN','#ffcc8c'));
+        ad.position.set(width*0.58,height*0.14,depth/2+0.3); g.add(ad);
       }
+      g.traverse(object => { object.castShadow=false; });
       this.city.add(g); this.towers.push(g);
     }
-    // A broken orbital transit ring silhouettes the skyline, well behind the play plane.
-    const orbit=new T.Mesh(new T.TorusGeometry(155,0.6,6,96),this.pink);
-    orbit.position.set(COLUMN/2,145,-420); orbit.rotation.y=0.45; this.city.add(orbit);
-    const moon=new T.Mesh(new T.SphereGeometry(19,24,16),new T.MeshBasicMaterial({color:0x90b9d0}));
-    moon.position.set(COLUMN/2+120,235,-680); this.city.add(moon);
+    // The city's defining landmark: a fractured copper transit wheel.
+    // Camera-relative background anchoring keeps it visible throughout an ascent.
+    this.transit=new T.Group(); this.scene.add(this.transit);
+    for(let i=0;i<3;i++) {
+      const rail=new T.Mesh(new T.TorusGeometry(105+i*7,0.65,6,64,Math.PI*1.42),i===1?this.gold:copper);
+      rail.rotation.z=0.35+i*0.12; rail.rotation.y=0.32; this.transit.add(rail);
+    }
+    for(let i=0;i<9;i++) {
+      const angle=0.35+i*0.48;
+      const pod=this.part(this.transit,ceramic,[9,4,5],[Math.cos(angle)*112,Math.sin(angle)*112,0]);
+      pod.rotation.z=angle;
+    }
+    this.part(this.transit,this.gold,[0.7,150,0.7],[-40,-20,-3],false);
+    this.moon=new T.Mesh(new T.SphereGeometry(25,24,16),new T.MeshBasicMaterial({color:0xc2b897}));
+    this.scene.add(this.moon);
   }
 
   /** @param {string} label @param {string} color */
@@ -238,6 +303,14 @@ export class CityRenderer {
     this.skyColor.lerp(this.color,B.blend);
     this.background.copy(this.skyColor); this.fog.color.copy(this.skyColor);
     this.city.position.y=cy*C.parallax;
+    if(this.transit) {
+      this.transit.position.set(COLUMN/2-28,cy*0.94+58,-260);
+      this.transit.visible=cam.mon<0.85;
+    }
+    if(this.moon) {
+      this.moon.position.set(COLUMN/2+80,cy+140,-580);
+      this.moon.visible=cam.mon<0.85;
+    }
     for(const tower of this.towers) {
       const localY=cy*(1-C.parallax);
       tower.position.y=tower.userData.baseY+Math.floor((localY-tower.userData.baseY+C.skylineSpan/2)/C.skylineSpan)*C.skylineSpan;
@@ -270,11 +343,16 @@ export class CityRenderer {
         this.put(this.seams,si,s.x,top,0,hw*2,stage===EROSION.FRESH?0.45:0.18,0.15);
         this.color.setScalar(stage===EROSION.FRESH?1:stage===EROSION.THIN?0.45:0.2);
         this.seams.setColorAt(si,this.color);
+        const lens=Math.min(hw*0.34,s.hh*0.48);
+        this.put(this.lanterns,si,s.x,s.y,0.1,lens,lens,1);
+        this.lanterns.setColorAt(si,this.color);
         si++;
       }
     }
     this.finish(this.updrafts,wi);
     this.finish(this.platforms,pi); this.finish(this.lips,pi); this.finish(this.struts,pi);
+    this.finish(this.lanterns,si);
+    if(this.lanterns.instanceColor)this.lanterns.instanceColor.needsUpdate=true;
     this.finish(this.stones,si); this.finish(this.seams,si); this.finish(this.memories,mi);
     if(this.lips.instanceColor)this.lips.instanceColor.needsUpdate=true;
     if(this.seams.instanceColor)this.seams.instanceColor.needsUpdate=true;
@@ -296,6 +374,14 @@ export class CityRenderer {
       this.legs[i].rotation.x=!b.grounded?side*0.2:0;
     }
     if(this.scarf) this.scarf.rotation.z=reduced?0:0.10*Math.sin(this.time*6)+Math.min(0.5,Math.abs(b.vx)*0.01);
+    if(this.eye) {
+      const blink=reduced?1:(Math.sin(this.time*C.blinkRate)>0.995?0.12:1);
+      this.eye.scale.y=blink;
+      this.eye.position.x=T.MathUtils.clamp((input.aiming?input.vx:b.vx)*0.006,-0.22,0.22);
+    }
+    for(let i=0;i<this.ribbon.length;i++) {
+      this.ribbon[i].rotation.z=reduced?-0.08:Math.sin(this.time*C.ribbonSpeed-i*0.65)*C.ribbonWave-b.vx*0.001;
+    }
     let ai=0;
     if(input.aiming) for(let i=0;i<input.arc.length-1&&ai<C.maxArcPoints;i+=2) {
       this.put(this.arc,ai++,input.arc[i],input.arc[i+1],0.2,0.28,0.28,0.28);
