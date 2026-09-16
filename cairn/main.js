@@ -372,7 +372,16 @@ function showTitle() {
   const go = document.createElement('p');
   go.className = 'go';
   go.textContent = t('title.begin');
-  el.card.append(h, tag, go);
+  const era = document.createElement('p');
+  era.className = 'era';
+  era.textContent = t('title.era');
+  const sigil = document.createElement('div');
+  sigil.className = 'lantern-sigil';
+  sigil.setAttribute('aria-hidden', 'true');
+  const story = document.createElement('p');
+  story.className = 'story';
+  story.textContent = t('title.story');
+  el.card.append(era, sigil, h, tag, story, go);
 }
 function hideCard() { el.card.className = ''; }
 

@@ -42,6 +42,8 @@ const EN = {
   "challenge.close": "CLOSE",
 
   'lang.name': 'English',
+  'title.era': '2050 / THE SUSPENDED CITY',
+  'title.story': 'Carry the last light. Leave a way up.',
   'title.tagline': 'EVERY DEATH LEAVES A STONE',
   'title.begin': 'TOUCH TO BEGIN',
 
@@ -126,6 +128,8 @@ const HE = {
   "challenge.close": "סגירה",
 
   'lang.name': 'עברית',
+  'title.era': '2050 / העיר התלויה',
+  'title.story': 'שא את האור האחרון. השאר דרך למעלה.',
   'title.tagline': 'כל מוות משאיר אבן',
   'title.begin': 'גע כדי להתחיל',
 

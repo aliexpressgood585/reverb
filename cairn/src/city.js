@@ -66,6 +66,7 @@ export class CityRenderer {
     this.platforms = this.instances(this.box, this.metal, C.maxPlatforms);
     this.lips = this.instances(this.box, this.cyan, C.maxPlatforms);
     this.struts = this.instances(this.box, this.dark, C.maxPlatforms);
+    this.dockLights = this.instances(this.box, this.cyan, C.maxPlatforms * 2);
     this.updrafts = this.instances(this.box, new T.MeshBasicMaterial({color:C.cyan,transparent:true,opacity:0.12,depthWrite:false}), C.maxPlatforms);
     this.stones = this.instances(this.round, this.gold, C.maxStones);
     this.lanterns = this.instances(new T.CircleGeometry(1,16), new T.MeshBasicMaterial({color:C.gold,toneMapped:false}), C.maxStones);
@@ -329,6 +330,9 @@ export class CityRenderer {
         this.put(this.platforms,pi,s.x,s.y,-C.platformDepth/2,hw*2,s.hh*2,C.platformDepth);
         this.put(this.lips,pi,s.x,top,0,hw*2,0.27,0.15);
         this.put(this.struts,pi,s.x,s.y-s.hh-1,-4,hw*1.5,2,C.platformDepth*0.65);
+        // Recessed docking lights sit inside the slab; the top remains the landing edge.
+        for(let side=0;side<2;side++)
+          this.put(this.dockLights,pi*2+side,s.x+(side?1:-1)*hw*0.72,s.y,0.12,Math.min(hw*0.16,1.4),Math.min(s.hh*0.45,0.7),0.1);
         let tint=C.cyan;
         if(s.crumble) tint=s.crumbleAt>0?C.pink:C.gold;
         else if(s.drift>0) tint=C.pink;
@@ -350,6 +354,7 @@ export class CityRenderer {
       }
     }
     this.finish(this.updrafts,wi);
+    this.finish(this.dockLights,pi*2);
     this.finish(this.platforms,pi); this.finish(this.lips,pi); this.finish(this.struts,pi);
     this.finish(this.lanterns,si);
     if(this.lanterns.instanceColor)this.lanterns.instanceColor.needsUpdate=true;
