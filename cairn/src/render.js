@@ -747,8 +747,8 @@ function hash1(i) {
 // ----------------------------------------------------------------- renderer
 
 export class Renderer {
-  /** @param {HTMLCanvasElement} canvas */
-  constructor(canvas) {
+  /** @param {HTMLCanvasElement} canvas @param {boolean} [loadPlates] */
+  constructor(canvas, loadPlates = true) {
     this.canvas = canvas;
     const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     if (!ctx) throw new Error('CAIRN: no 2D context for the scene canvas');
@@ -841,7 +841,7 @@ export class Renderer {
     try {
       const files = ['floor-ash', 'floor-signal', 'floor-bloom',
         'floor-void', 'floor-cinder', 'floor-glacier'];
-      for (let i = 0; i < files.length; i++) {
+      for (let i = 0; loadPlates && i < files.length; i++) {
         const im = new Image();
         im.decoding = 'async';
         im.src = new URL(`./bg/${files[i]}.webp`, import.meta.url).href;
