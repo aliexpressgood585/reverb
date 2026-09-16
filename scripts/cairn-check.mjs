@@ -546,9 +546,57 @@ const page = await newPage();
 }
 
 // ── 13. the four erosion stages are distinguishable in one still ───────────
+//
+// WHAT CHANGED HERE, AND WHY IT IS NOT A WEAKENING.
+//
+// This test scored what a body ADDS to the frame — its mean luminance minus the
+// mean luminance of the same wall with the bodies taken out — and required that
+// to fall with decay. That was the correct model while a corpse was a lit amber
+// figure. DECISIONS §16 then moved the art the other way on purpose, measured
+// against the concept paintings: a stone is dark rock and the light lives in the
+// seam. A dark stone in front of a lit wall SUBTRACTS light, so the model
+// inverted underneath the test and it has been failing ever since, identically
+// at `ad4a4f9`, at `154b57f` and after the 3D renderer landed:
+//
+//   SIGNAL   body over ground 86.1 > 13.1 > -2.2 > -0.1   BACKWARDS at TOP
+//   VOID     body over ground 29.1 >  5.1 >  1.1 >  0.0   closest pair 2.3
+//
+// In SIGNAL the wall behind the sample sits at 23.5 and a TOP body brings it to
+// 21.3 — so the most legible thing a renderer can draw, a silhouette, scored
+// NEGATIVE, and satisfying the gate as written meant turning the stones back
+// into lit shapes. A test that can only be passed by undoing a deliberate,
+// measured art decision is testing the wrong property.
+//
+// So the question is asked properly now: not "is this body brighter" but "is
+// this body DIFFERENT, and is it different in the right direction". Three
+// features, all measured per pixel against the control frame, so the wall
+// cancels and the sign of the contrast stops mattering:
+//
+//   mass    mean |difference| in luminance over the box — how strongly the
+//           stone marks the frame at all, dark or bright.
+//   cover   the share of the box it marks by more than a hair — FORM. A full
+//           body, a narrowed one and a bare outline differ here by construction
+//           and no palette can flip it.
+//   seam    the same measure over the bar on top, which is drawn exactly as wide
+//           as the collision. DECISIONS §16 calls that bar the fastest read in
+//           the design; it used to be scored as a count of pixels over a fixed
+//           brightness of 120, which a dim seam over faded gold can never reach,
+//           so it contributed nothing for the two stages that needed it most.
+//
+// `mass` must fall monotonically — presence decays — and every adjacent pair has
+// to separate on the three features combined. This is a STRICTER test than the
+// one it replaces: the old one could be satisfied by brightness alone, and this
+// one also has to see the shape change and the shelf go away.
+//
+// AND IT PROVES IT CAN FAIL BEFORE IT IS ALLOWED TO PASS. A gate written in the
+// same pass as a change that benefits from the gate being weaker has to show its
+// teeth, so the first thing it does is measure a sabotaged frame in which all
+// four bodies are the SAME erosion stage. If that scores as legible, the gate is
+// reading something other than erosion and the suite stops there.
 {
-  const measureAt = (atY) => page.evaluate(async (atY2) => {
-    const atY = atY2;
+  /** @param {number} atY @param {boolean} flatten all four bodies the same stage */
+  const measureAt = (atY, flatten) => page.evaluate(async (args) => {
+    const atY = args[0], flat = args[1];
     const { sim, camera, renderer, FEEL } = window.CAIRN;
     sim.reset(true); sim.phase = 1;
     sim.deaths = 40;
@@ -580,13 +628,34 @@ const page = await newPage();
     const keepLit = FEEL.facade.litFrac, keepRefl = FEEL.facade.reflectA;
     FEEL.facade.litFrac = 0;
     FEEL.facade.reflectA = 0;
-    const ages = [0, 10, 20, 34];
+    // The sabotage run gives every body the SAME age, so erosion is switched off
+    // while everything else — the four positions, the cooling by creation order,
+    // the lighting — stays exactly as it is. Whatever the gate still sees then
+    // is not erosion, and the bar has to sit above it.
+    const ages = flat ? [0, 0, 0, 0] : [0, 10, 20, 34];
     const xs = [22, 40, 60, 78];
     const ROW = atY;
     for (let i = 3; i >= 0; i--) {
       const c = sim.world.corpse(xs[i], ROW, 0, 1, 0, 40 - ages[i]);
       c.glow = 0;
     }
+    // AND ALL FOUR AT THE SAME RECENCY, which is the confound this fixture was
+    // missing and which the sabotage run found immediately.
+    //
+    // The renderer cools a body toward memory-gold by its CREATION ORDER, and
+    // that dimming is large: four bodies of the SAME erosion stage, differing
+    // only in order, measured 87.4 / 67.5 / 45.9 / 32.5 — a clean monotone
+    // ladder produced by no erosion at all. So most of what this test has ever
+    // scored as "erosion is legible" was recency. The two travel together in
+    // play, which is why the tell works on a real tower, but they are not the
+    // same channel and a test named after one of them must measure that one.
+    //
+    // Holding `order` equal and `corpseCount` at 3 puts every body at age 0.5 —
+    // the same cooling, mid-way down, and clear of `order === total - 1`, which
+    // is what stamps the newest stone with its number and would have printed a
+    // label inside the sample box.
+    for (const c of sim.world.solids) if (c.corpse) c.order = 1;
+    sim.world.corpseCount = 3;
     // THE PLAYER IS PARKED FAR ABOVE, SO ALL FOUR ARE EQUALLY LIT.
     //
     // It used to stand at (50, 60), in the middle of the row — which put FRESH
@@ -625,43 +694,26 @@ const page = await newPage();
     // assertion, in the one suite that gates every push. Everything below runs
     // in the same task as the draw, so no frame can interleave.
 
-    // Sample a box around each corpse off the scene canvas and describe it.
     const cv = renderer.canvas;
     const c2 = cv.getContext('2d', { willReadFrequently: true });
-    const sample = (wx) => {
+    const R = Math.round(16 * renderer.dpr);
+    const SH = Math.max(2, Math.round(4 * renderer.dpr));
+    // THE PIXELS THEMSELVES ARE KEPT, not a mean of them.
+    //
+    // Everything below is a per-pixel comparison with the control, and a mean
+    // taken before the comparison throws away exactly the information that tells
+    // a filled body from an outline: two frames can have the same average and
+    // share almost no lit pixel.
+    const grab = (wx) => {
       const px = Math.round(renderer.X(wx) * renderer.dpr);
       const py = Math.round(renderer.Y(ROW) * renderer.dpr);
-      const R = Math.round(16 * renderer.dpr);
-      const d = c2.getImageData(px - R, py - R, R * 2, R * 2).data;
-      let lum = 0, chroma = 0, n = 0;
-      for (let i = 0; i < d.length; i += 4) {
-        const L = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
-        const ch = Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
-        lum += L; chroma += ch; n++;
-      }
-
-      // THE SHELF, WHICH IS THE HITBOX, WHICH IS THE WHOLE TELL.
-      //
-      // DECISIONS.md §16: "the bright bar on top of each corpse is drawn exactly
-      // as wide as the collision actually is, so a half-width shelf is not a
-      // stylistic choice, it is the hitbox." That is the fastest read in the
-      // design and this test could not see it — it measured mean brightness and
-      // a lit-pixel COUNT over a fixed box, and the count saturates at 100% for
-      // every stage, so it contributed nothing but noise. Measure the bar.
       const top = Math.round(renderer.Y(ROW + 3) * renderer.dpr);
-      const row = c2.getImageData(px - R, top - Math.round(2 * renderer.dpr),
-                                  R * 2, Math.round(4 * renderer.dpr)).data;
-      let bright = 0;
-      for (let i = 0; i < row.length; i += 4) {
-        const L = 0.2126 * row[i] + 0.7152 * row[i + 1] + 0.0722 * row[i + 2];
-        if (L > 120) bright++;
-      }
       return {
-        lum: +(lum / n).toFixed(1),
-        chroma: +(chroma / n).toFixed(1),
-        shelf: +((bright / (row.length / 4)) * 100).toFixed(1),
+        box: c2.getImageData(px - R, py - R, R * 2, R * 2).data,
+        strip: c2.getImageData(px - R, top - Math.round(SH / 2), R * 2, SH).data,
       };
     };
+    const shot = xs.map(grab);
     // THE GROUND EACH BODY STANDS ON, measured with the bodies switched off.
     //
     // Five rounds of this check chased the corpse colour while the number
@@ -679,74 +731,112 @@ const page = await newPage();
     // session being read as evidence that the sample boxes held no corpse.
     //
     // They do. Taking them out of `solids` is what leaves the ground behind.
-    const rows = xs.map(sample);
     sim.world.solids = sim.world.solids.filter((c) => !c.corpse);
     renderer.draw(sim, camera, null, { started: true, squash: 0, stretch: 0 }, 1 / 60, false);
-    const floor = xs.map(sample);
-    const out = { rows, floor, biome: renderer.biome.name };
+    const bare = xs.map(grab);
+
+    const L = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+    /** @param {Uint8ClampedArray} a @param {Uint8ClampedArray} b */
+    const diff = (a, b) => {
+      let sum = 0, marked = 0, n = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        const d = Math.abs(L(a, i) - L(b, i));
+        sum += d;
+        // Above the noise of a redrawn gradient, below the step a stone makes.
+        if (d > 3) marked++;
+        n++;
+      }
+      return { mean: sum / n, share: (marked / n) * 100 };
+    };
+    const rows = xs.map((_, i) => {
+      const body = diff(shot[i].box, bare[i].box);
+      const seam = diff(shot[i].strip, bare[i].strip);
+      return {
+        mass: +body.mean.toFixed(1),
+        cover: +body.share.toFixed(1),
+        seam: +seam.mean.toFixed(1),
+      };
+    });
+    const out = { rows, biome: renderer.biome.name };
     FEEL.facade.litFrac = keepLit;
     FEEL.facade.reflectA = keepRefl;
     return out;
-  }, atY);
+  }, [atY, flatten]);
 
-  // EVERY PALETTE, NOT THE ONE THIS SESSION HAPPENS TO BE STANDING IN.
-  //
-  // The accent rotates by altitude, and in VOID and CINDER it is GOLD — the same
-  // family as MEMORY_GOLD, the colour that means "this body will not hold you".
-  // On those two floors the age gradient is drawn in one colour and carries no
-  // information at all, so a check that reads only the current biome passes five
-  // of six by luck. Same lesson as landmark check 9.
   const names = ['FRESH', 'THIN', 'TOP', 'MEMORY'];
-  const bad = [];
-  let worstGap = Infinity, worstName = '';
-  for (let bi = 0; bi < 6; bi++) {
-    const atY = bi * 150 + 75;                      // the middle of each floor
-    const out = await measureAt(atY);
+  /** How far apart two neighbouring stages are, across all three features. */
+  const gapOf = (a, b) => Math.abs(a.mass - b.mass) + Math.abs(a.cover - b.cover)
+    + Math.abs(a.seam - b.seam);
+  /** @param {{rows: any[], biome: string}} out */
+  const judge = (out) => {
     const r = out.rows;
-    // WHAT THE BODY ADDS, NOT WHAT THE BOX CONTAINS.
-    //
-    // For five rounds this scored the raw box mean, and the control finally
-    // built above says why that never converged: with the corpses removed, the
-    // background under the four positions ran 8.9, 17.4, 39.1, 54.4 in BLOOM —
-    // it climbs by a factor of six across a row of four bodies, because a
-    // generated ledge and its light pool happen to fall behind the right-hand
-    // end of it. Against a 45-point swing in the ground, a TOP body contributing
-    // 1.7 and a MEMORY body contributing 0.0 cannot be told apart, and the
-    // "inversion" the gate kept reporting was a gradient in the WALL.
-    //
-    // Subtracting the control isolates the one thing under test. It is the same
-    // pair of frames, differing only by the bodies. Everything the fixture
-    // already does — silencing the lit panes, parking the light equidistant,
-    // creating oldest-first — was aimed at making the background equal; this
-    // stops requiring it to be.
-    const lums = r.map((v, i) => +(v.lum - out.floor[i].lum).toFixed(1));
-    let minGap = Infinity;
-    for (let i = 0; i < 3; i++) {
-      minGap = Math.min(minGap,
-        Math.abs(lums[i] - lums[i + 1])
-        + Math.abs(r[i].chroma - r[i + 1].chroma)
-        + Math.abs(r[i].shelf - r[i + 1].shelf));
-    }
-    // ORDER, not only distance. The margin above scores how far apart the stages
-    // are and never which way round they run, so a clean inversion reads as good
-    // separation — which is exactly what happened when MEMORY_GOLD (luminance
-    // 158.2) turned out to be brighter than the ember accent (144.8) and a fresh
-    // body measured darker than a decayed one.
     let inverted = -1;
-    for (let i = 0; i < 3; i++) if (lums[i] < lums[i + 1] - 1) { inverted = i; break; }
-    console.log(`      ${out.biome.padEnd(8)} body over ground ${lums.join(' > ')}` +
-      `   closest pair ${minGap.toFixed(1)}` +
-      (inverted >= 0 ? `   BACKWARDS at ${names[inverted]}` : ''));
-    console.log(`               box ${out.rows.map((f) => f.lum).join(' | ')}` +
-      `   ground ${out.floor.map((f) => f.lum).join(' | ')}`);
-    if (inverted >= 0) bad.push(`${out.biome}: ${names[inverted]} is dimmer than ${names[inverted + 1]}`);
-    else if (minGap <= 3) bad.push(`${out.biome}: two stages look the same (${minGap.toFixed(1)})`);
-    if (minGap < worstGap) { worstGap = minGap; worstName = out.biome; }
+    // Presence may not RISE with decay. A tenth of a unit is redraw noise.
+    for (let i = 0; i < 3; i++) if (r[i].mass < r[i + 1].mass - 0.3) { inverted = i; break; }
+    let closest = Infinity, at = 0;
+    for (let i = 0; i < 3; i++) {
+      const g = gapOf(r[i], r[i + 1]);
+      if (g < closest) { closest = g; at = i; }
+    }
+    return { inverted, closest, at };
+  };
+  const show = (out) => {
+    const r = out.rows;
+    console.log(`      ${out.biome.padEnd(8)} mass ${r.map((x) => String(x.mass).padStart(5)).join(' ')}` +
+      `   cover% ${r.map((x) => String(x.cover).padStart(5)).join(' ')}` +
+      `   seam ${r.map((x) => String(x.seam).padStart(5)).join(' ')}`);
+  };
+
+  // THE BAR, DERIVED FROM TWO MEASUREMENTS RATHER THAN CHOSEN.
+  //
+  // Below it sits the instrument's own noise: four IDENTICAL bodies score 1.8,
+  // which is the residual of standing at four x positions 140.4 to 142.8 units
+  // from the light. Above it sits the renderer as it is, whose worst adjacent
+  // pair over six palettes is 15.7.
+  //
+  // Between those two, a mutation says where the line belongs. Setting
+  // `FEEL.tower.topOf` to `thinOf` — making a stone that is only a ledge look
+  // exactly like one that still holds you, which is precisely the bug this test
+  // exists to catch — scored 3.3 in VOID, 4.7 in ASH and 6.6 in CINDER. A bar of
+  // 4 would have caught that in one palette out of six, by 0.7. At 8 it is
+  // caught in three, and the renderer as it stands still clears the bar by two
+  // times over. All three numbers are printed every run, so the day this drifts
+  // the log says so before the verdict does.
+  const BAR = 8;
+  const flatOut = await measureAt(150 * 3 + 75, true);
+  const flatJ = judge(flatOut);
+  console.log('      sabotage (all four bodies the SAME stage) — the gate must not call this legible');
+  show(flatOut);
+  if (flatJ.inverted < 0 && flatJ.closest > BAR) {
+    fail(13, `the instrument cannot fail: four identical bodies scored ${flatJ.closest.toFixed(1)}, ` +
+      `over the bar of ${BAR}. It is reading something that is not erosion.`);
+  } else {
+    // EVERY PALETTE, NOT THE ONE THIS SESSION HAPPENS TO BE STANDING IN.
+    //
+    // The accent rotates by altitude, and in VOID and CINDER it is GOLD — the same
+    // family as MEMORY_GOLD, the colour that means "this body will not hold you".
+    // On those two floors the age gradient is drawn in one colour and carries no
+    // information at all, so a check that reads only the current biome passes five
+    // of six by luck. Same lesson as landmark check 9.
+    const bad = [];
+    let worstGap = Infinity, worstName = '';
+    for (let bi = 0; bi < 6; bi++) {
+      const out = await measureAt(bi * 150 + 75, false);
+      const j = judge(out);
+      show(out);
+      if (j.inverted >= 0) {
+        bad.push(`${out.biome}: ${names[j.inverted]} marks the frame less than ${names[j.inverted + 1]}`);
+      } else if (j.closest <= BAR) {
+        bad.push(`${out.biome}: ${names[j.at]} and ${names[j.at + 1]} look the same (${j.closest.toFixed(1)})`);
+      }
+      if (j.closest < worstGap) { worstGap = j.closest; worstName = out.biome; }
+    }
+    bad.length
+      ? fail(13, `erosion does not read in every palette — ${bad.join('; ')}`)
+      : pass(13, `all four erosion stages separate and run the right way round in all ` +
+          `six palettes (worst is ${worstName} at ${worstGap.toFixed(1)}, bar ${BAR}, ` +
+          `four identical bodies score ${flatJ.closest.toFixed(1)})`);
   }
-  bad.length
-    ? fail(13, `erosion does not read in every palette — ${bad.join('; ')}`)
-    : pass(13, `all four erosion stages separate and run the right way round in all ` +
-        `six palettes (worst is ${worstName} at ${worstGap.toFixed(1)})`);
 }
 
 // ── 14. nothing interrupts a climb ─────────────────────────────────────────

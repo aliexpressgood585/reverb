@@ -1536,7 +1536,7 @@ than on a phone. Closing it properly means splitting Three.js out of the critica
 path, which is a real architectural change and is not being done on the strength
 of a number measured on swiftshader.
 
-### Acceptance 13 is red, it has been red for a long time, and this is why
+### Acceptance 13 was red for a long time, and this is why — and the fix
 
 ```
 SIGNAL   body over ground 86.1 > 13.1 > -2.2 > -0.1    BACKWARDS at TOP
@@ -1544,26 +1544,75 @@ VOID     body over ground 29.1 >  5.1 >  1.1 >  0.0    closest pair 2.3
 ```
 
 Identical to the digit at `ad4a4f9` (before the 3D fork), at `154b57f` (after it)
-and with everything in this section applied — so it is neither caused nor changed
-by any of it. It is older debt, and it is worth stating plainly rather than
-leaving as a failing line in a log.
+and with everything above applied — so it was neither caused nor changed by any
+of it. Older debt, and worth stating plainly rather than leaving as a failing
+line in a log.
 
-The test scores what a body ADDS to the frame over a control of the same wall
-without it, and requires that to fall monotonically with decay. That model was
+The test scored what a body ADDS to the frame over a control of the same wall
+without it, and required that to fall monotonically with decay. That model was
 correct when a corpse was a lit amber figure. §16 then moved the art the other
-way — "a stone is dark rock, the light lives in the seam" — and a dark stone in
-front of a lit wall SUBTRACTS light. In SIGNAL the wall behind the sample is at
-23.5 and a TOP body brings it to 21.3, so the most legible thing in the frame, a
-silhouette, scores negative; in VOID both TOP and MEMORY sit within about one
-luminance point of the wall and the box mean cannot separate them. The `shelf`
-term is the right one and counts pixels over 120, which a seam at 0.46 alpha over
-faded gold never reaches.
+way on purpose — "a stone is dark rock, the light lives in the seam" — and a dark
+stone in front of a lit wall SUBTRACTS light. In SIGNAL the wall behind the
+sample sits at 23.5 and a TOP body brings it to 21.3, so the most legible thing a
+renderer can draw, a silhouette, scored negative. A test that can only be passed
+by undoing a deliberate, measured art decision is testing the wrong property.
 
-So the gate's premise and the art direction now contradict each other, and
-satisfying the gate as written means turning the stones back into lit shapes —
-which was rejected against the concept paintings, on purpose. The fix is to score
-SEPARATION against the local background in either direction, plus the seam term
-at a weight that reflects how small a seam is, rather than "brighter means more
-alive". That is a redesign of the test, it must not be done in the same pass as a
-change that would benefit from it being weaker, and it is not done here. The 3D
-path — the one every WebGL device runs — now has its own gate and passes it.
+So the question is asked properly now — not "is this body brighter" but "is this
+body DIFFERENT, and different in the right direction" — on three features, all
+per-pixel against the control frame, so the wall cancels and the sign of the
+contrast stops mattering: `mass` (mean absolute luminance difference over the
+box), `cover` (the share of the box it marks at all, which is FORM, and which no
+palette can flip) and `seam` (the same measure over the bar drawn exactly as wide
+as the collision — it used to be a count of pixels over a fixed brightness of
+120, which a dim seam over faded gold can never reach, so it contributed nothing
+for the two stages that needed it most).
+
+### The sabotage run, and what it caught in its first minute
+
+A gate rewritten in the same pass as a change that benefits from the gate being
+weaker has to show its teeth first, so the test now begins by measuring a frame
+in which all four bodies are the SAME erosion stage. If that scores as legible,
+the suite stops there.
+
+It did score as legible, at 28.9 against a bar of 4, and the reason is a confound
+that had been in this fixture the whole time:
+
+```
+four bodies, SAME erosion stage, differing only in creation order
+   mass  87.4  67.5  45.9  32.5      seam  95.6  70.7  45.5  30.3
+```
+
+A clean monotone ladder produced by no erosion at all. The renderer cools a body
+toward memory-gold by its CREATION ORDER, and that dimming is far larger than the
+erosion step — so most of what this test has ever scored as "erosion is legible"
+was RECENCY. The two travel together on a real tower, which is why the tell works
+in play, but they are not the same channel, and a test named after one of them
+has to measure that one. Holding `order` equal across the four removes it.
+
+With the confound gone the renderer still passes, on erosion alone:
+
+```
+            mass                  cover%                 seam
+SIGNAL   51.9  10.1   2.6   0.2   84.9 43.3 35.7  2.9   57.8  16.0  7.4  0.2
+VOID     19.0   4.3   1.6   0.0   84.6 40.4 13.8  0.0   17.7   5.0  3.1  0.0
+CINDER   52.3  13.1   5.9   0.3   84.9 43.3 41.5  2.0   57.0  18.0 11.3  0.5
+```
+
+Worst adjacent pair over six palettes: 15.7. Instrument noise, from four bodies
+standing 140.4 to 142.8 units from the light: 1.8.
+
+### Where the bar came from
+
+Not from taste. A mutation says where the line belongs: setting
+`FEEL.tower.topOf` to `thinOf` — making a stone that is only a ledge look exactly
+like one that still holds you, precisely the bug this test exists to catch —
+scored 3.3 in VOID, 4.7 in ASH and 6.6 in CINDER. A bar of 4 would have caught
+that in one palette out of six, by 0.7. At 8 it is caught in three, and the
+renderer as it stands still clears it twice over. Noise 1.8, bar 8, worst honest
+pair 15.7; all three are printed on every run, so the day this drifts the log
+says so before the verdict does.
+
+The new test is stricter than the one it replaces, not kinder: the old one could
+be satisfied by brightness alone, this one also has to see the shape change and
+the shelf go away, it no longer gets the recency gradient for free, and it has to
+prove it can fail before it is allowed to pass.
